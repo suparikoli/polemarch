@@ -43,7 +43,16 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+# hooks.py
+
+# Attach custom JS to the "Know Your Customer" Doctype
+doctype_js = {
+    "Know Your Customer": [
+        "public/js/dp_details_client.js",
+        "public/js/bank_details_client.js"
+    ]
+}
+
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -137,13 +146,11 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+    "Know Your Customer": {
+        "validate": "polemarch.polemarch.doctype.know_your_customer.know_your_customer.KnowYourCustomer.validate"
+    }
+}
 
 # Scheduled Tasks
 # ---------------
