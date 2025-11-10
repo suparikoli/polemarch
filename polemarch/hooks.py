@@ -47,10 +47,7 @@ app_license = "mit"
 
 # Attach custom JS to the "Know Your Customer" Doctype
 doctype_js = {
-    "Know Your Customer": [
-        "public/js/dp_details_client.js",
-        "public/js/bank_details_client.js"
-    ]
+    "Customer": "public/js/customer.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
