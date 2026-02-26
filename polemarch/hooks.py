@@ -144,9 +144,6 @@ doctype_js = {
 # Hook on document methods and events
 
 doc_events = {
-    "Know Your Customer": {
-        "validate": "polemarch.polemarch.doctype.know_your_customer.know_your_customer.KnowYourCustomer.validate"
-    }
 }
 
 # Scheduled Tasks
