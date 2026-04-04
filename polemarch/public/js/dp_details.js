@@ -1,7 +1,7 @@
 // Validation Script for DP Details child table
 frappe.ui.form.on('DP Details', {
     primary_bo_pan: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
+        let row = frappe.get_doc(cdt, cdn);
         let pan_regex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
         if (row.primary_bo_pan && !pan_regex.test(row.primary_bo_pan)) {
@@ -11,7 +11,7 @@ frappe.ui.form.on('DP Details', {
     },
 
     bo_id: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
+        let row = frappe.get_doc(cdt, cdn);
 
         if (row.bo_id) {
             if (/^IN\d{14}$/.test(row.bo_id)) {
@@ -24,13 +24,13 @@ frappe.ui.form.on('DP Details', {
                 return;
             }
 
-            frappe.model.set_value(cdt, cdn, 'dp_id', row.bo_id.substr(0, 8));
-            frappe.model.set_value(cdt, cdn, 'client_id', row.bo_id.substr(8, 8));
+            frappe.model.set_value(cdt, cdn, 'dp_id', row.bo_id.slice(0, 8));
+            frappe.model.set_value(cdt, cdn, 'client_id', row.bo_id.slice(8));
         }
     },
 
     dp_id: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
+        let row = frappe.get_doc(cdt, cdn);
 
         if (row.dp_id) {
             if (/^IN\d{6}$/.test(row.dp_id)) {
@@ -50,7 +50,7 @@ frappe.ui.form.on('DP Details', {
     },
 
     client_id: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
+        let row = frappe.get_doc(cdt, cdn);
 
         if (row.client_id && !/^\d{8}$/.test(row.client_id)) {
             frappe.msgprint(__('Invalid Client ID. Must be exactly 8 digits.'));
@@ -64,7 +64,7 @@ frappe.ui.form.on('DP Details', {
     },
 
     is_primary: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
+        let row = frappe.get_doc(cdt, cdn);
         if (row.is_primary && frm.doc.custom_dp_details) {
             frm.doc.custom_dp_details.forEach(r => {
                 if (r.name !== row.name) {
