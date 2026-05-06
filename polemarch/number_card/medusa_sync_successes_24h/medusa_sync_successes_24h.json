@@ -1,0 +1,18 @@
+{
+ "color": "#39E4A5",
+ "creation": "2026-05-02 00:00:00",
+ "doctype": "Number Card",
+ "document_type": "Medusa Sync Log",
+ "filters_json": "[[\"Medusa Sync Log\",\"status\",\"=\",\"Success\"],[\"Medusa Sync Log\",\"creation\",\"Timespan\",\"last 24 hours\"]]",
+ "function": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Medusa Sync Successes 24h",
+ "modified": "2026-05-02 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Polemarch Customizations",
+ "name": "Medusa Sync Successes 24h",
+ "owner": "Administrator",
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}

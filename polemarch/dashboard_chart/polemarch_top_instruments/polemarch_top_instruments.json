@@ -1,0 +1,23 @@
+{
+ "chart_name": "Polemarch Top Instruments",
+ "chart_type": "Group By",
+ "creation": "2026-05-02 00:00:00",
+ "doctype": "Dashboard Chart",
+ "document_type": "Sales Invoice Item",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Sales Invoice\",\"custom_is_polemarch_invoice\",\"=\",1,false],[\"Sales Invoice\",\"docstatus\",\"=\",1,false]]",
+ "group_by_based_on": "item_name",
+ "group_by_type": "Sum",
+ "aggregate_function_based_on": "amount",
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Polemarch Customizations",
+ "name": "Polemarch Top Instruments",
+ "number_of_groups": 10,
+ "owner": "Administrator",
+ "modified": "2026-05-02 00:00:00",
+ "modified_by": "Administrator",
+ "type": "Bar",
+ "use_report_chart": 0,
+ "y_axis": []
+}

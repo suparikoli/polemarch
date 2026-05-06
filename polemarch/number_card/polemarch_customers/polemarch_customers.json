@@ -1,0 +1,18 @@
+{
+ "color": "#39E4A5",
+ "creation": "2026-05-02 00:00:00",
+ "doctype": "Number Card",
+ "document_type": "Customer",
+ "filters_json": "[[\"Customer\",\"custom_is_polemarch_customer\",\"=\",1],[\"Customer\",\"disabled\",\"=\",0]]",
+ "function": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Polemarch Customers",
+ "modified": "2026-05-02 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Polemarch Customizations",
+ "name": "Polemarch Customers",
+ "owner": "Administrator",
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}

@@ -1,0 +1,19 @@
+{
+ "aggregate_function_based_on": "grand_total",
+ "color": "#FFB179",
+ "creation": "2026-05-02 00:00:00",
+ "doctype": "Number Card",
+ "document_type": "Sales Invoice",
+ "filters_json": "[[\"Sales Invoice\",\"custom_is_polemarch_invoice\",\"=\",1],[\"Sales Invoice\",\"docstatus\",\"=\",1],[\"Sales Invoice\",\"posting_date\",\"Timespan\",\"this month\"]]",
+ "function": "Average",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Avg Ticket Size MTD",
+ "modified": "2026-05-02 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Polemarch Customizations",
+ "name": "Avg Ticket Size MTD",
+ "owner": "Administrator",
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}

@@ -1,0 +1,18 @@
+{
+ "color": "#FFB179",
+ "creation": "2026-05-02 00:00:00",
+ "doctype": "Number Card",
+ "document_type": "Sales Order",
+ "filters_json": "[[\"Sales Order\",\"custom_medusa_order_id\",\"is\",\"set\"],[\"Sales Order\",\"status\",\"in\",[\"To Bill\",\"To Deliver and Bill\"]],[\"Sales Order\",\"docstatus\",\"=\",1]]",
+ "function": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Medusa Orders Pending Invoice",
+ "modified": "2026-05-02 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Polemarch Customizations",
+ "name": "Medusa Orders Pending Invoice",
+ "owner": "Administrator",
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}
