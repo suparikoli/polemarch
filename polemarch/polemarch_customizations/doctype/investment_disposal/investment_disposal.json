@@ -1,0 +1,211 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-07 17:10:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Customizations",
+ "name": "Investment Disposal",
+ "field_order": [
+  "naming_series",
+  "disposal_date",
+  "item",
+  "item_name",
+  "column_break_1",
+  "company",
+  "sales_invoice",
+  "customer",
+  "section_qty",
+  "total_qty_sold",
+  "sale_price_per_unit",
+  "column_break_2",
+  "total_sale_value",
+  "total_cost_basis",
+  "section_gain",
+  "realized_gain",
+  "ltcg_amount",
+  "stcg_amount",
+  "section_lots",
+  "lots",
+  "section_meta",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "INV-DISP-.YYYY.-.#####",
+   "default": "INV-DISP-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "disposal_date",
+   "fieldtype": "Date",
+   "label": "Disposal Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item.item_name",
+   "read_only": 1
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The Sales Invoice that booked this disposal — auto-populated when the SI was the trigger."
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "in_standard_filter": 1
+  },
+  {"fieldname": "section_qty", "fieldtype": "Section Break", "label": "Quantity & Pricing"},
+  {
+   "fieldname": "total_qty_sold",
+   "fieldtype": "Float",
+   "label": "Total Qty Sold",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sale_price_per_unit",
+   "fieldtype": "Currency",
+   "label": "Sale Price / Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "fieldname": "total_sale_value",
+   "fieldtype": "Currency",
+   "label": "Total Sale Value",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_cost_basis",
+   "fieldtype": "Currency",
+   "label": "Total Cost Basis",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Sum of (qty_consumed × cost_basis_per_unit) across all FIFO lots in this disposal."
+  },
+  {"fieldname": "section_gain", "fieldtype": "Section Break", "label": "Realized Capital Gain"},
+  {
+   "fieldname": "realized_gain",
+   "fieldtype": "Currency",
+   "label": "Realized Gain (Total)",
+   "options": "INR",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "total_sale_value − total_cost_basis. Positive = gain, negative = loss."
+  },
+  {
+   "fieldname": "ltcg_amount",
+   "fieldtype": "Currency",
+   "label": "LTCG Portion",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Realized gain on lots held > 730 days (24 months). Taxed at the long-term capital gains rate."
+  },
+  {
+   "fieldname": "stcg_amount",
+   "fieldtype": "Currency",
+   "label": "STCG Portion",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Realized gain on lots held ≤ 730 days. Taxed at slab rate (or 20% with indexation, depending on regime)."
+  },
+  {"fieldname": "section_lots", "fieldtype": "Section Break", "label": "FIFO Lot Breakdown"},
+  {
+   "fieldname": "lots",
+   "fieldtype": "Table",
+   "label": "Lots Consumed",
+   "options": "Investment Disposal Lot",
+   "reqd": 1,
+   "description": "Per-holding breakdown — the FIFO matcher fills this in. Each row carries holding_period_days and is_long_term so the LTCG/STCG split is row-by-row."
+  },
+  {"fieldname": "section_meta", "fieldtype": "Section Break", "label": "Notes"},
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "is_submittable": 1,
+ "track_changes": 1,
+ "track_seen": 0,
+ "track_views": 0,
+ "modified": "2026-05-07 17:10:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "cancel": 1,
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "disposal_date",
+ "sort_order": "DESC",
+ "states": []
+}

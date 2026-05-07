@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-07 17:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Customizations",
+ "name": "Investment Holding",
+ "field_order": [
+  "naming_series",
+  "item",
+  "item_name",
+  "company",
+  "column_break_1",
+  "acquisition_date",
+  "status",
+  "section_qty",
+  "qty_acquired",
+  "cost_basis_per_unit",
+  "column_break_2",
+  "qty_disposed",
+  "qty_remaining",
+  "section_costs",
+  "total_cost",
+  "remaining_cost",
+  "section_meta",
+  "purchase_reference",
+  "purchase_reference_link",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "INV-HOLD-.YYYY.-.#####",
+   "default": "INV-HOLD-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Investment Item",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The security being held — typically a Polemarch-branded Item (Item Group: Polemarch Securities)."
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item.item_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "acquisition_date",
+   "fieldtype": "Date",
+   "label": "Acquisition Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Date Polemarch took ownership of this lot. Drives the holding-period clock for LTCG / STCG classification at disposal."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nPartially Disposed\nFully Disposed",
+   "default": "Open",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Set automatically based on qty_remaining vs qty_acquired. Open = nothing sold yet; Fully Disposed = qty_remaining is 0."
+  },
+  {"fieldname": "section_qty", "fieldtype": "Section Break", "label": "Quantity"},
+  {
+   "fieldname": "qty_acquired",
+   "fieldtype": "Float",
+   "label": "Qty Acquired",
+   "reqd": 1,
+   "non_negative": 1,
+   "description": "Number of units (shares) acquired in this lot."
+  },
+  {
+   "fieldname": "cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Cost Basis / Unit",
+   "reqd": 1,
+   "non_negative": 1,
+   "options": "INR",
+   "description": "Acquisition price per unit. Used as the cost basis when computing realised capital gain on disposal."
+  },
+  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "fieldname": "qty_disposed",
+   "fieldtype": "Float",
+   "label": "Qty Disposed",
+   "default": 0,
+   "read_only": 1,
+   "description": "Auto-incremented by `Investment Disposal` rows that consume this holding (FIFO)."
+  },
+  {
+   "fieldname": "qty_remaining",
+   "fieldtype": "Float",
+   "label": "Qty Remaining",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "qty_acquired − qty_disposed. When zero, status flips to Fully Disposed."
+  },
+  {"fieldname": "section_costs", "fieldtype": "Section Break", "label": "Costs"},
+  {
+   "fieldname": "total_cost",
+   "fieldtype": "Currency",
+   "label": "Total Cost (Acquired)",
+   "options": "INR",
+   "read_only": 1,
+   "description": "qty_acquired × cost_basis_per_unit — total amount Polemarch invested in this lot."
+  },
+  {
+   "fieldname": "remaining_cost",
+   "fieldtype": "Currency",
+   "label": "Remaining Cost (Unrealised)",
+   "options": "INR",
+   "read_only": 1,
+   "description": "qty_remaining × cost_basis_per_unit — book value of the still-held portion."
+  },
+  {"fieldname": "section_meta", "fieldtype": "Section Break", "label": "Reference"},
+  {
+   "fieldname": "purchase_reference",
+   "fieldtype": "Select",
+   "label": "Purchase Reference Type",
+   "options": "\nPurchase Invoice\nJournal Entry\nManual",
+   "description": "Where the acquisition was originally booked. Optional — for audit trail only."
+  },
+  {
+   "fieldname": "purchase_reference_link",
+   "fieldtype": "Dynamic Link",
+   "label": "Purchase Reference",
+   "options": "purchase_reference",
+   "depends_on": "purchase_reference"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "is_submittable": 0,
+ "track_changes": 1,
+ "track_seen": 0,
+ "track_views": 0,
+ "modified": "2026-05-07 17:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "acquisition_date",
+ "sort_order": "ASC",
+ "states": []
+}

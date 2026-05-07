@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-05-07 17:05:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Customizations",
+ "name": "Investment Disposal Lot",
+ "istable": 1,
+ "field_order": [
+  "holding",
+  "acquisition_date",
+  "qty_consumed",
+  "cost_basis_per_unit",
+  "sale_price_per_unit",
+  "holding_period_days",
+  "is_long_term",
+  "cost_basis_amount",
+  "sale_amount",
+  "realized_gain"
+ ],
+ "fields": [
+  {
+   "fieldname": "holding",
+   "fieldtype": "Link",
+   "label": "Holding",
+   "options": "Investment Holding",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "acquisition_date",
+   "fieldtype": "Date",
+   "label": "Acquired",
+   "fetch_from": "holding.acquisition_date",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty_consumed",
+   "fieldtype": "Float",
+   "label": "Qty Consumed",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1,
+   "description": "Units pulled from this holding for the current sale (FIFO oldest-first)."
+  },
+  {
+   "fieldname": "cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Cost / Unit",
+   "options": "INR",
+   "fetch_from": "holding.cost_basis_per_unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sale_price_per_unit",
+   "fieldtype": "Currency",
+   "label": "Sale / Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "holding_period_days",
+   "fieldtype": "Int",
+   "label": "Held (days)",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "(disposal_date − acquisition_date) in days. >730 days → LTCG for unlisted equity per Indian Income Tax Act."
+  },
+  {
+   "fieldname": "is_long_term",
+   "fieldtype": "Check",
+   "label": "LTCG?",
+   "read_only": 1,
+   "in_list_view": 1,
+   "default": "0",
+   "description": "True when holding_period_days > 730. Drives capital-gains tax classification (LTCG ~12.5% vs STCG ~slab/20%)."
+  },
+  {
+   "fieldname": "cost_basis_amount",
+   "fieldtype": "Currency",
+   "label": "Cost Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sale_amount",
+   "fieldtype": "Currency",
+   "label": "Sale Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "realized_gain",
+   "fieldtype": "Currency",
+   "label": "Realized Gain",
+   "options": "INR",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "modified": "2026-05-07 17:05:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
