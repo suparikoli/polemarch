@@ -211,13 +211,25 @@ def _create_no_gst_template(company: str):
 
 
 def _create_gst_18_template(company: str):
+    """Mithtech Services GST 18% template — INTRA-STATE only (CGST 9 +
+    SGST 9). India's GST machinery requires a separate template for
+    inter-state (IGST 18) transactions; mixing both rate types in one
+    template makes IC apply *all three* (36%) instead of letting it
+    pick the right pair based on place_of_supply, since IC's intra/
+    inter suppression is template-shape-aware.
+
+    Polemarch's facilitation business is overwhelmingly intra-state
+    (Maharashtra customers buying from MISPL, also in Maharashtra), so
+    we ship one template here. If/when out-of-state Mithtech billing
+    is needed, add a sibling `Mithtech Services - GST 18% Out-of-state`
+    template with the IGST 18 row.
+    """
     name = _template_name(company, MITHTECH_SERVICES_TAX_TEMPLATE)
     if frappe.db.exists("Sales Taxes and Charges Template", name):
         return
     output_cgst = _gst_account(company, "Output Tax CGST")
     output_sgst = _gst_account(company, "Output Tax SGST")
-    output_igst = _gst_account(company, "Output Tax IGST")
-    if not (output_cgst and output_sgst and output_igst):
+    if not (output_cgst and output_sgst):
         return
     frappe.get_doc(
         {
@@ -228,16 +240,39 @@ def _create_gst_18_template(company: str):
             "taxes": [
                 {"charge_type": "On Net Total", "account_head": output_cgst, "description": "CGST", "rate": 9},
                 {"charge_type": "On Net Total", "account_head": output_sgst, "description": "SGST", "rate": 9},
-                {"charge_type": "On Net Total", "account_head": output_igst, "description": "IGST", "rate": 18},
             ],
         }
     ).insert(ignore_permissions=True)
 
 
 def _gst_account(company: str, account_name_part: str):
+    """Resolve an Output GST account by name fragment.
+
+    Filters out Refund / RCM / Reverse-Charge accounts because they
+    share the same prefix (e.g. `Output Tax CGST` AND `Output Tax CGST
+    Refund` both match `LIKE '%Output Tax CGST%'`) — and ERPNext orders
+    them alphabetically, so the broken `Refund` variant tends to win.
+    Earlier templates created via the unfiltered query ended up with
+    `Output Tax CGST Refund - MISPL` as the account_head, which India
+    Compliance can't recognise as a regular GST account, so its
+    intra/inter-state suppression silently failed and 36% tax got
+    applied. The patch
+    `polemarch.patches.v0_0_1.recreate_mithtech_tax_template` cleans
+    up legacy rows that were created with this bug.
+    """
+    # Use the list-of-conditions form so we can chain TWO filters on
+    # `account_name` (the dict form would silently let the second key
+    # overwrite the first — a footgun that was the original cause of
+    # the Refund-account bug).
     return frappe.db.get_value(
         "Account",
-        {"company": company, "account_name": ["like", f"%{account_name_part}%"], "is_group": 0},
+        [
+            ["company", "=", company],
+            ["account_name", "like", f"{account_name_part}%"],
+            ["account_name", "not like", "%Refund%"],
+            ["account_name", "not like", "%RCM%"],
+            ["is_group", "=", 0],
+        ],
         "name",
     )
 
