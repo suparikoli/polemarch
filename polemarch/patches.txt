@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 polemarch.patches.v0_0_1.mark_polemarch_items_non_gst
 polemarch.patches.v0_0_1.recreate_mithtech_tax_template
+polemarch.patches.v0_0_1.link_polemarch_items_to_non_gst_template

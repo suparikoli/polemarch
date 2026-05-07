@@ -170,16 +170,14 @@ def _maybe_book_processing_fee(order: dict, so, medusa_order_id: str, event_id: 
     fee_si.custom_medusa_order_id = medusa_order_id
     fee_si.append("items", {"item_code": fee_item_code, "qty": 1, "rate": fee_amount})
 
-    company = so.company
-    company_abbr = frappe.db.get_value("Company", company, "abbr")
-    template = frappe.db.get_value(
-        "Sales Taxes and Charges Template",
-        {"company": company, "title": "Mithtech Services - GST 18%"},
-        "name",
-    )
-    if template:
-        fee_si.taxes_and_charges = template
-
+    # No explicit template needed — the processing-fee item carries
+    # HSN 997152 + brand=Mithtech Services. ERPNext + India Compliance
+    # apply the company's standard Output GST template based on the
+    # customer's place_of_supply (intra/inter-state) and compute 18%
+    # automatically. Earlier versions forced a polemarch-app-defined
+    # `Mithtech Services - GST 18%` template here; that was removed in
+    # favour of the Item-Tax-Template approach (see
+    # `polemarch.install._create_polemarch_non_gst_item_tax_template`).
     fee_si.flags.ignore_permissions = True
     fee_si.flags.from_medusa_sync = True
     fee_si.insert(ignore_permissions=True)

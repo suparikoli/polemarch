@@ -6,8 +6,11 @@ POLEMARCH_BRAND = "Polemarch"
 MITHTECH_SERVICES_BRAND = "Mithtech Services"
 POLEMARCH_CUSTOMER_GROUP = "Polemarch"
 POLEMARCH_ITEM_GROUP = "Polemarch Securities"
-POLEMARCH_TAX_TEMPLATE = "Polemarch - No GST"
-MITHTECH_SERVICES_TAX_TEMPLATE = "Mithtech Services - GST 18%"
+# Item Tax Template applied to every Polemarch-branded Item — drives
+# `gst_treatment = "Non-GST"` on Sales Invoice / Sales Order line
+# rows so India Compliance computes 0 tax for share-transfer trades
+# (securities are excluded from GST under Schedule III, CGST Act).
+POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE = "Polemarch - Non-GST"
 PROCESSING_FEE_ITEM_CODE = "POLEMARCH-PROC-FEE"
 PROCESSING_FEE_HSN = "997152"
 
@@ -28,7 +31,7 @@ def setup():
     _create_customer_group()
     _create_item_group()
     _create_custom_fields()
-    _create_tax_templates_for_all_companies()
+    _create_polemarch_non_gst_item_tax_template()
     _add_polemarch_naming_series()
     _create_processing_fee_item()
 
@@ -185,96 +188,75 @@ def _create_custom_fields():
     create_custom_fields(fields, ignore_validate=True, update=True)
 
 
-def _create_tax_templates_for_all_companies():
+def _create_polemarch_non_gst_item_tax_template():
+    """Create one `Polemarch - Non-GST` Item Tax Template per company.
+
+    `gst_treatment = "Non-GST"` is what India Compliance checks when
+    deciding whether to compute GST on a Sales Invoice / Sales Order
+    line. Linking this template to every Polemarch-branded Item (via
+    `polemarch.overrides.item.validate`) makes IC zero out tax for
+    those rows automatically — no document-level tax-template swap
+    needed.
+
+    Mithtech Services items intentionally have NO custom ITT — they
+    use ERPNext's standard chart-of-accounts GST treatment, which
+    handles intra- vs inter-state correctly via India Compliance's
+    state-aware logic. The fee item carries HSN 997152 and gets the
+    right 18% via the customer's place_of_supply.
+    """
     for company in frappe.get_all("Company", pluck="name"):
-        _create_no_gst_template(company)
-        _create_gst_18_template(company)
+        name = _itt_name(company, POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE)
+        if frappe.db.exists("Item Tax Template", name):
+            continue
+        rows = _zero_rate_tax_rows(company)
+        if not rows:
+            # Company has no GST output accounts yet — skip for now;
+            # next migrate after Chart of Accounts is set up will pick
+            # it up (idempotent).
+            continue
+        frappe.get_doc(
+            {
+                "doctype": "Item Tax Template",
+                "title": POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE,
+                "company": company,
+                "gst_treatment": "Non-GST",
+                # India Compliance reads `gst_treatment = "Non-GST"`
+                # to zero tax computation, but Frappe's `Item Tax
+                # Template` requires `taxes` to have at least one
+                # row (the `tax_type` field is mandatory). We supply
+                # rows pointing at the company's GST output accounts
+                # at rate 0 — same shape ERPNext's standard
+                # "Exempted" ITT uses.
+                "taxes": rows,
+            }
+        ).insert(ignore_permissions=True)
 
 
-def _template_name(company: str, suffix: str) -> str:
-    return f"{suffix} - {frappe.db.get_value('Company', company, 'abbr')}"
+def _itt_name(company: str, title: str) -> str:
+    return f"{title} - {frappe.db.get_value('Company', company, 'abbr')}"
 
 
-def _create_no_gst_template(company: str):
-    name = _template_name(company, POLEMARCH_TAX_TEMPLATE)
-    if frappe.db.exists("Sales Taxes and Charges Template", name):
-        return
-    frappe.get_doc(
-        {
-            "doctype": "Sales Taxes and Charges Template",
-            "title": POLEMARCH_TAX_TEMPLATE,
-            "company": company,
-            "is_default": 0,
-            "taxes": [],
-        }
-    ).insert(ignore_permissions=True)
-
-
-def _create_gst_18_template(company: str):
-    """Mithtech Services GST 18% template — INTRA-STATE only (CGST 9 +
-    SGST 9). India's GST machinery requires a separate template for
-    inter-state (IGST 18) transactions; mixing both rate types in one
-    template makes IC apply *all three* (36%) instead of letting it
-    pick the right pair based on place_of_supply, since IC's intra/
-    inter suppression is template-shape-aware.
-
-    Polemarch's facilitation business is overwhelmingly intra-state
-    (Maharashtra customers buying from MISPL, also in Maharashtra), so
-    we ship one template here. If/when out-of-state Mithtech billing
-    is needed, add a sibling `Mithtech Services - GST 18% Out-of-state`
-    template with the IGST 18 row.
-    """
-    name = _template_name(company, MITHTECH_SERVICES_TAX_TEMPLATE)
-    if frappe.db.exists("Sales Taxes and Charges Template", name):
-        return
-    output_cgst = _gst_account(company, "Output Tax CGST")
-    output_sgst = _gst_account(company, "Output Tax SGST")
-    if not (output_cgst and output_sgst):
-        return
-    frappe.get_doc(
-        {
-            "doctype": "Sales Taxes and Charges Template",
-            "title": MITHTECH_SERVICES_TAX_TEMPLATE,
-            "company": company,
-            "is_default": 0,
-            "taxes": [
-                {"charge_type": "On Net Total", "account_head": output_cgst, "description": "CGST", "rate": 9},
-                {"charge_type": "On Net Total", "account_head": output_sgst, "description": "SGST", "rate": 9},
+def _zero_rate_tax_rows(company: str) -> list:
+    """Return one row per GST output account at rate 0, suitable for
+    Item Tax Template Detail. The accounts are looked up by the
+    standard naming convention `Output Tax {CGST|SGST|IGST} - <abbr>`,
+    skipping Refund / RCM variants."""
+    rows = []
+    for keyword in ("Output Tax CGST", "Output Tax SGST", "Output Tax IGST"):
+        account = frappe.db.get_value(
+            "Account",
+            [
+                ["company", "=", company],
+                ["account_name", "like", f"{keyword}%"],
+                ["account_name", "not like", "%Refund%"],
+                ["account_name", "not like", "%RCM%"],
+                ["is_group", "=", 0],
             ],
-        }
-    ).insert(ignore_permissions=True)
-
-
-def _gst_account(company: str, account_name_part: str):
-    """Resolve an Output GST account by name fragment.
-
-    Filters out Refund / RCM / Reverse-Charge accounts because they
-    share the same prefix (e.g. `Output Tax CGST` AND `Output Tax CGST
-    Refund` both match `LIKE '%Output Tax CGST%'`) — and ERPNext orders
-    them alphabetically, so the broken `Refund` variant tends to win.
-    Earlier templates created via the unfiltered query ended up with
-    `Output Tax CGST Refund - MISPL` as the account_head, which India
-    Compliance can't recognise as a regular GST account, so its
-    intra/inter-state suppression silently failed and 36% tax got
-    applied. The patch
-    `polemarch.patches.v0_0_1.recreate_mithtech_tax_template` cleans
-    up legacy rows that were created with this bug.
-    """
-    # Use the list-of-conditions form so we can chain TWO filters on
-    # `account_name` (the dict form would silently let the second key
-    # overwrite the first — a footgun that was the original cause of
-    # the Refund-account bug).
-    return frappe.db.get_value(
-        "Account",
-        [
-            ["company", "=", company],
-            ["account_name", "like", f"{account_name_part}%"],
-            ["account_name", "not like", "%Refund%"],
-            ["account_name", "not like", "%RCM%"],
-            ["is_group", "=", 0],
-        ],
-        "name",
-    )
+            "name",
+        )
+        if account:
+            rows.append({"tax_type": account, "tax_rate": 0})
+    return rows
 
 
 def _create_processing_fee_item():
