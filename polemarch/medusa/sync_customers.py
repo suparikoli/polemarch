@@ -126,8 +126,20 @@ def upsert_from_medusa(data: dict, *, event: str, event_id: str = None):
 
         doc.flags.ignore_permissions = True
         doc.flags.from_medusa_sync = True
+        # `cheque_image` (Bank Details) and `cmr_copy` (DP Details)
+        # are mandatory Attach fields. Medusa carries these as URLs
+        # only when KYC documents have been uploaded on the
+        # storefront side — many flows (e.g. a new customer signing
+        # up via OTP, doing KYC later) hit this path with the URLs
+        # still null. The operator attaches the canonical PDFs
+        # later via the Frappe form. Skipping mandatory enforcement
+        # for the sync path lets the basic identity record land
+        # immediately; the polemarch dashboard's KYC checklist on
+        # the Customer form surfaces the missing-uploads state
+        # visually.
+        doc.flags.ignore_mandatory = True
         if doc.is_new():
-            doc.insert(ignore_permissions=True)
+            doc.insert(ignore_permissions=True, ignore_mandatory=True)
         else:
             doc.save(ignore_permissions=True)
     else:
