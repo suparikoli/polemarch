@@ -106,9 +106,25 @@ def handle_payment_captured(data: dict, event_id: str = None):
         return existing_invoice
 
     from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+    from polemarch.medusa import mapper
 
     invoice = make_sales_invoice(so.name)
     invoice.custom_medusa_order_id = medusa_order_id
+
+    # Apply order_mappings to the SI header — drives custom_platform_fee,
+    # custom_low_order_fee, custom_stamp_duty (Paise→Rupees transform),
+    # po_no, and any future Medusa metadata an admin adds to the
+    # mapping. Mapper returns None when globally disabled, in which
+    # case we keep make_sales_invoice's defaults.
+    mapped = mapper.apply_inbound(order, "order_mappings")
+    if mapped:
+        for fname, value in mapped.items():
+            invoice.set(fname, value)
+        # Re-stamp custom_medusa_order_id in case the mapping
+        # accidentally cleared it — it's our dedupe anchor.
+        if not invoice.custom_medusa_order_id:
+            invoice.custom_medusa_order_id = medusa_order_id
+
     invoice.flags.ignore_permissions = True
     invoice.flags.from_medusa_sync = True
     invoice.insert(ignore_permissions=True)
