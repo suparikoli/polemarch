@@ -58,7 +58,7 @@
    "fieldname": "cheque_image",
    "fieldtype": "Attach",
    "label": "Cheque Image",
-   "reqd": 1
+   "description": "Cancelled cheque PDF/image. Optional — KYC enforcement lives in the polemarch dashboard (Verified Bank Account flow), not on row-level mandatory."
   },
   {
    "fieldname": "micr",

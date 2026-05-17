@@ -78,7 +78,7 @@
    "fieldname": "cmr_copy",
    "fieldtype": "Attach",
    "label": "CMR Copy",
-   "reqd": 1
+   "description": "Client Master Report PDF. Optional — KYC can be completed later; document upload is enforced via the polemarch KYC dashboard, not at row level."
   }
  ],
  "istable": 1,
