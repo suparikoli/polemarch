@@ -59,6 +59,21 @@ def push_customer(customer_name: str):
 
 
 def upsert_from_medusa(data: dict, *, event: str, event_id: str = None):
+    """Upsert ERPNext `Customer` from a Medusa customer payload.
+
+    Two code paths share the same find / commit / log scaffolding:
+      - **Mapper path** (default when `Polemarch Sync Mapping.enabled = 1`):
+        walks the customer_mappings + bank_account_mappings +
+        demat_account_mappings rows configured via the admin UI and
+        applies transforms before writing. Editing the mapping doctype
+        changes which Medusa fields flow without a code deploy.
+      - **Legacy hardcoded path** (when mapper is off or the doctype
+        doesn't exist yet, e.g. first migrate): retains the original
+        Phase-1 behaviour exactly so disabling the mapper rolls back
+        cleanly.
+    """
+    from polemarch.medusa import mapper
+
     customer_data = data.get("customer") or data
     medusa_id = customer_data.get("id")
     email = customer_data.get("email")
@@ -78,33 +93,72 @@ def upsert_from_medusa(data: dict, *, event: str, event_id: str = None):
     if not existing and email:
         existing = frappe.db.get_value("Customer", {"email_id": email}, "name")
 
-    full_name = " ".join(filter(None, [customer_data.get("first_name"), customer_data.get("last_name")])) or email
+    mapped = mapper.apply_inbound(customer_data, "customer_mappings")
 
-    if existing:
-        doc = frappe.get_doc("Customer", existing)
-        doc.customer_name = full_name
-        doc.email_id = email
-        if customer_data.get("phone"):
-            doc.mobile_no = customer_data.get("phone")
-        if not doc.custom_medusa_customer_id and medusa_id:
+    if mapped is not None:
+        # Mapper path — let configuration drive which fields get
+        # written. We still guarantee the bookkeeping fields
+        # (customer_group / territory / custom_medusa_customer_id /
+        # custom_is_polemarch_customer) since they're invariants
+        # the rest of the polemarch app depends on.
+        doc = frappe.get_doc("Customer", existing) if existing else frappe.new_doc("Customer")
+        if doc.is_new():
+            doc.customer_type = "Individual"
+            doc.customer_group = POLEMARCH_CUSTOMER_GROUP
+            doc.territory = "India"
+        for fname, value in mapped.items():
+            doc.set(fname, value)
+        # Backstops if the mapper didn't include these (the seed rows
+        # do, but admins could disable them).
+        if not doc.get("customer_name"):
+            doc.customer_name = (
+                " ".join(filter(None, [customer_data.get("first_name"), customer_data.get("last_name")]))
+                or email
+            )
+        if not doc.email_id:
+            doc.email_id = email
+        if medusa_id and not doc.custom_medusa_customer_id:
             doc.custom_medusa_customer_id = medusa_id
         if doc.customer_group != POLEMARCH_CUSTOMER_GROUP:
             doc.customer_group = POLEMARCH_CUSTOMER_GROUP
+
+        _apply_multi_rows(doc, customer_data)
+
         doc.flags.ignore_permissions = True
         doc.flags.from_medusa_sync = True
-        doc.save(ignore_permissions=True)
+        if doc.is_new():
+            doc.insert(ignore_permissions=True)
+        else:
+            doc.save(ignore_permissions=True)
     else:
-        doc = frappe.new_doc("Customer")
-        doc.customer_name = full_name
-        doc.customer_type = "Individual"
-        doc.customer_group = POLEMARCH_CUSTOMER_GROUP
-        doc.territory = "India"
-        doc.email_id = email
-        doc.mobile_no = customer_data.get("phone")
-        doc.custom_medusa_customer_id = medusa_id
-        doc.flags.ignore_permissions = True
-        doc.flags.from_medusa_sync = True
-        doc.insert(ignore_permissions=True)
+        # Legacy hardcoded path — preserved as a fallback so toggling
+        # the kill-switch off restores Phase-1 behaviour.
+        full_name = " ".join(filter(None, [customer_data.get("first_name"), customer_data.get("last_name")])) or email
+        if existing:
+            doc = frappe.get_doc("Customer", existing)
+            doc.customer_name = full_name
+            doc.email_id = email
+            if customer_data.get("phone"):
+                doc.mobile_no = customer_data.get("phone")
+            if not doc.custom_medusa_customer_id and medusa_id:
+                doc.custom_medusa_customer_id = medusa_id
+            if doc.customer_group != POLEMARCH_CUSTOMER_GROUP:
+                doc.customer_group = POLEMARCH_CUSTOMER_GROUP
+            doc.flags.ignore_permissions = True
+            doc.flags.from_medusa_sync = True
+            doc.save(ignore_permissions=True)
+        else:
+            doc = frappe.new_doc("Customer")
+            doc.customer_name = full_name
+            doc.customer_type = "Individual"
+            doc.customer_group = POLEMARCH_CUSTOMER_GROUP
+            doc.territory = "India"
+            doc.email_id = email
+            doc.mobile_no = customer_data.get("phone")
+            doc.custom_medusa_customer_id = medusa_id
+            doc.flags.ignore_permissions = True
+            doc.flags.from_medusa_sync = True
+            doc.insert(ignore_permissions=True)
 
     frappe.db.commit()
 
@@ -120,6 +174,33 @@ def upsert_from_medusa(data: dict, *, event: str, event_id: str = None):
         payload=data,
     )
     return doc.name
+
+
+def _apply_multi_rows(doc, customer_data: dict):
+    """Apply bank_account_mappings and demat_account_mappings to the
+    Customer's child tables. Replaces existing rows so the Medusa
+    side is authoritative — if a row disappears from Medusa, it
+    disappears here too.
+
+    No-op when the multi-row mapping section has zero rows enabled
+    (operator preference is to keep the legacy child-table contents)."""
+    from polemarch.medusa import mapper
+
+    bank_rows = mapper.apply_inbound_each(customer_data, "bank_account_mappings")
+    if bank_rows is not None and bank_rows:
+        doc.set("custom_bank_details", [])
+        for row_dict in bank_rows:
+            if not row_dict:
+                continue
+            doc.append("custom_bank_details", row_dict)
+
+    demat_rows = mapper.apply_inbound_each(customer_data, "demat_account_mappings")
+    if demat_rows is not None and demat_rows:
+        doc.set("custom_dp_details", [])
+        for row_dict in demat_rows:
+            if not row_dict:
+                continue
+            doc.append("custom_dp_details", row_dict)
 
 
 def _customer_to_payload(customer) -> dict:
