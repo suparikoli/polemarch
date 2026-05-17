@@ -1,0 +1,160 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "Polemarch Sync Mapping",
+ "creation": "2026-05-07 21:05:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "issingle": 1,
+ "module": "Polemarch Customizations",
+ "name": "Polemarch Sync Mapping",
+ "field_order": [
+  "enabled",
+  "intro_html",
+
+  "section_customer",
+  "customer_target_doctype",
+  "customer_mappings",
+  "section_bank",
+  "bank_account_target_doctype",
+  "bank_account_mappings",
+  "section_demat",
+  "demat_account_target_doctype",
+  "demat_account_mappings",
+
+  "section_item",
+  "item_target_doctype",
+  "item_mappings",
+
+  "section_order",
+  "order_target_doctype",
+  "order_mappings",
+  "section_order_item",
+  "order_item_target_doctype",
+  "order_item_mappings"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Apply mappings during sync",
+   "default": "1",
+   "description": "Kill-switch for the entire mapper. Uncheck to disable all field mappings and fall back to hardcoded behaviour in the sync code."
+  },
+  {
+   "fieldname": "intro_html",
+   "fieldtype": "HTML",
+   "options": "<div style='padding:10px 14px;background:#f6f9f7;border-left:3px solid #224433;font-size:12px;color:#1a1f1c'><strong>Field mapper.</strong> Each row maps one Medusa source path (left) to one ERPNext field on the target DocType (right). The ERPNext-field column autocompletes against the selected target DocType's fields — start typing or focus the cell to see suggestions.</div>"
+  },
+
+  {"fieldname": "section_customer", "fieldtype": "Section Break", "label": "Customer"},
+  {
+   "fieldname": "customer_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "default": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer_mappings",
+   "fieldtype": "Table",
+   "label": "Customer Field Mappings",
+   "options": "Polemarch Field Map Row"
+  },
+
+  {"fieldname": "section_bank", "fieldtype": "Section Break", "label": "Bank Accounts (Multi)"},
+  {
+   "fieldname": "bank_account_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target Child DocType",
+   "options": "DocType",
+   "default": "Bank Details",
+   "description": "Each Medusa customer carries an array of bank accounts; rows in this mapping are applied per element of that array."
+  },
+  {
+   "fieldname": "bank_account_mappings",
+   "fieldtype": "Table",
+   "label": "Bank Account Field Mappings",
+   "options": "Polemarch Field Map Row"
+  },
+
+  {"fieldname": "section_demat", "fieldtype": "Section Break", "label": "Demat Accounts (Multi)"},
+  {
+   "fieldname": "demat_account_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target Child DocType",
+   "options": "DocType",
+   "default": "DP Details"
+  },
+  {
+   "fieldname": "demat_account_mappings",
+   "fieldtype": "Table",
+   "label": "Demat Account Field Mappings",
+   "options": "Polemarch Field Map Row"
+  },
+
+  {"fieldname": "section_item", "fieldtype": "Section Break", "label": "Item (Security)"},
+  {
+   "fieldname": "item_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "default": "Item"
+  },
+  {
+   "fieldname": "item_mappings",
+   "fieldtype": "Table",
+   "label": "Item Field Mappings",
+   "options": "Polemarch Field Map Row"
+  },
+
+  {"fieldname": "section_order", "fieldtype": "Section Break", "label": "Order Header"},
+  {
+   "fieldname": "order_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "default": "Sales Invoice"
+  },
+  {
+   "fieldname": "order_mappings",
+   "fieldtype": "Table",
+   "label": "Order Header Field Mappings",
+   "options": "Polemarch Field Map Row"
+  },
+
+  {"fieldname": "section_order_item", "fieldtype": "Section Break", "label": "Order Line Items"},
+  {
+   "fieldname": "order_item_target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "default": "Sales Invoice Item"
+  },
+  {
+   "fieldname": "order_item_mappings",
+   "fieldtype": "Table",
+   "label": "Order Item Field Mappings",
+   "options": "Polemarch Field Map Row"
+  }
+ ],
+ "modified": "2026-05-07 21:05:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1,
+   "report": 1, "role": "System Manager", "share": 1, "write": 1
+  },
+  {
+   "create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1,
+   "role": "Accounts Manager", "share": 1, "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -34,6 +34,7 @@ def setup():
     _create_polemarch_non_gst_item_tax_template()
     _add_polemarch_naming_series()
     _create_processing_fee_item()
+    _seed_default_sync_mappings()
 
 
 def _create_brands():
@@ -119,11 +120,84 @@ def _create_custom_fields():
                 "depends_on": "eval:doc.custom_kyc_status === 'Verified'",
                 "insert_after": "custom_kyc_status_reason",
             },
+            # Registered name (as per PAN) — split form so the
+            # Medusa-side mapper can write each part separately.
+            {
+                "fieldname": "custom_first_name",
+                "label": "First Name (PAN)",
+                "fieldtype": "Data",
+                "insert_after": "custom_kyc_verified_on",
+            },
+            {
+                "fieldname": "custom_middle_name",
+                "label": "Middle Name (PAN)",
+                "fieldtype": "Data",
+                "insert_after": "custom_first_name",
+            },
+            {
+                "fieldname": "custom_last_name",
+                "label": "Last Name (PAN)",
+                "fieldtype": "Data",
+                "insert_after": "custom_middle_name",
+            },
+            {
+                "fieldname": "custom_dob",
+                "label": "Date of Birth",
+                "fieldtype": "Date",
+                "insert_after": "custom_last_name",
+            },
+            # Aadhaar — store last-4 + SHA-256 hash, never the raw
+            # 12-digit number. Mapper transforms (`Mask Aadhaar`)
+            # handle the redaction at write time.
+            {
+                "fieldname": "custom_aadhaar_last4",
+                "label": "Aadhaar (last 4)",
+                "fieldtype": "Data",
+                "length": 4,
+                "no_copy": 1,
+                "insert_after": "custom_dob",
+                "description": "Last 4 digits only. UIDAI rules forbid storing the raw 12-digit Aadhaar in third-party systems.",
+            },
+            {
+                "fieldname": "custom_aadhaar_hash",
+                "label": "Aadhaar (hash)",
+                "fieldtype": "Data",
+                "length": 64,
+                "no_copy": 1,
+                "read_only": 1,
+                "hidden": 1,
+                "insert_after": "custom_aadhaar_last4",
+                "description": "SHA-256 of the full Aadhaar number for matching. Never displayed.",
+            },
+            {
+                "fieldname": "custom_address_as_per_pan",
+                "label": "Address (as per PAN)",
+                "fieldtype": "Small Text",
+                "insert_after": "custom_aadhaar_hash",
+            },
+            {
+                "fieldname": "custom_client_id",
+                "label": "Polemarch Client ID",
+                "fieldtype": "Data",
+                "unique": 1,
+                "no_copy": 1,
+                "in_standard_filter": 1,
+                "insert_after": "custom_address_as_per_pan",
+                "description": "Polemarch-issued client ID, format NNNNYYWW. Set when the Medusa customer record is created.",
+            },
+            {
+                "fieldname": "custom_vba_id",
+                "label": "Verified Bank Account (VBA)",
+                "fieldtype": "Data",
+                "no_copy": 1,
+                "insert_after": "custom_client_id",
+                "description": "Pointer to the customer's verified primary bank (penny-drop or NPCI verified). Format `bank_details:<rowname>`.",
+            },
             {
                 "fieldname": "custom_polemarch_dashboard_tab",
                 "label": "Polemarch",
                 "fieldtype": "Tab Break",
-                "insert_after": "custom_kyc_verified_on",
+                "insert_after": "custom_vba_id",
                 "depends_on": "eval:doc.custom_is_polemarch_customer",
             },
             {
@@ -163,6 +237,31 @@ def _create_custom_fields():
                 "read_only": 1,
                 "no_copy": 1,
                 "insert_after": "custom_is_polemarch_invoice",
+            },
+            # Fee breakdown — Medusa carries platform fee / low-order
+            # fee / stamp duty in `order.metadata`. The Polemarch app
+            # mirrors them onto the SI for GSTR-1 and customer-
+            # reporting visibility.
+            {
+                "fieldname": "custom_platform_fee",
+                "label": "Platform Fee",
+                "fieldtype": "Currency",
+                "options": "currency",
+                "insert_after": "custom_medusa_order_id",
+            },
+            {
+                "fieldname": "custom_low_order_fee",
+                "label": "Low Order Fee",
+                "fieldtype": "Currency",
+                "options": "currency",
+                "insert_after": "custom_platform_fee",
+            },
+            {
+                "fieldname": "custom_stamp_duty",
+                "label": "Stamp Duty",
+                "fieldtype": "Currency",
+                "options": "currency",
+                "insert_after": "custom_low_order_fee",
             },
         ],
         "Sales Order": [
@@ -319,3 +418,122 @@ def _add_polemarch_naming_series():
             "value": new_options,
         }).insert(ignore_permissions=True)
     frappe.clear_cache(doctype="Sales Invoice")
+
+
+# ────────────────────────────────────────────────────────────────────
+# Default Polemarch Sync Mapping
+# ────────────────────────────────────────────────────────────────────
+
+DEFAULT_CUSTOMER_MAPPINGS = [
+    # Identity (Medusa Customer.* → ERPNext Customer.*)
+    ("first_name",                          "custom_first_name",              None,                                "Registered first name (as per PAN)"),
+    ("metadata.middle_name",                "custom_middle_name",             None,                                "Registered middle name (as per PAN)"),
+    ("last_name",                           "custom_last_name",               None,                                "Registered last name (as per PAN)"),
+    ("metadata.full_name",                  "customer_name",                  "Concatenate First+Middle+Last",     "Combined customer name (used in invoices and shipping)"),
+    ("email",                               "email_id",                       None,                                "Primary email; used by Frappe's Communication API"),
+    ("phone",                               "mobile_no",                      None,                                "Primary phone; +91 prefix expected"),
+    # KYC + regulatory
+    ("metadata.pan",                        "pan",                            "Upper",                             "PAN — 10 alphanumeric chars"),
+    ("metadata.aadhaar_last4",              "custom_aadhaar_last4",           None,                                "Aadhaar last 4 digits — never the full number (UIDAI rule)"),
+    ("metadata.aadhaar_hash",               "custom_aadhaar_hash",            None,                                "SHA-256 of full Aadhaar for matching; written by Medusa side only"),
+    ("metadata.dob",                        "custom_dob",                     "ISO Date",                          "Date of birth (ISO format)"),
+    ("metadata.address_as_per_pan",         "custom_address_as_per_pan",      "Trim",                              "Address exactly as printed on PAN — for KYC records"),
+    # Polemarch-issued identifiers
+    ("metadata.client_id",                  "custom_client_id",               None,                                "Polemarch client ID (NNNNYYWW, weekly resetting)"),
+    ("metadata.kyc_status",                 "custom_kyc_status",              None,                                "Maps medusa kyc state → ERPNext select: Verified / In Review / Rejected / Not Started"),
+    ("metadata.kyc_rejection_reason",       "custom_kyc_status_reason",       None,                                "Free-text reason from KYC vendor (visible on Customer form)"),
+    # Audit identity
+    ("id",                                  "custom_medusa_customer_id",      None,                                "Medusa customer id (audit reference)"),
+]
+
+DEFAULT_BANK_MAPPINGS = [
+    # Each row is per element of `customer.metadata.bank_accounts[]`
+    ("bank_name",                           "bank_name",                      None,                                "Bank name (HDFC, ICICI, etc.)"),
+    ("ifsc",                                "bank_code",                      "Upper",                             "IFSC code — 11 chars, uppercase"),
+    ("ac_number",                           "ac_number",                      None,                                "Account number — digits only"),
+    ("account_holder",                      "account_holder",                 None,                                "Name on the bank account (PAN match required for VBA)"),
+    ("micr",                                "micr",                           None,                                "MICR code (9 digits)"),
+    ("branch",                              "bank_branch",                    None,                                "Branch name"),
+    ("cheque_image_url",                    "cheque_image",                   None,                                "Public URL of the cancelled cheque image"),
+    ("is_primary",                          "is_primary",                     None,                                "Mark primary bank — only one is_primary=1 per customer"),
+    ("is_verified",                         "custom_vba_status",              None,                                "Verified Bank Account status (after penny-drop / NPCI check)"),
+]
+
+DEFAULT_DEMAT_MAPPINGS = [
+    ("depository",                          "depository",                     "Upper",                             "NSDL or CDSL"),
+    ("dp_id",                               "dp_id",                          None,                                "DP ID — issued by the depository to the DP"),
+    ("client_id",                           "client_id",                      None,                                "Client ID at the DP (NOT the polemarch client_id)"),
+    ("bo_id",                               "bo_id",                          None,                                "Beneficial Owner ID (BOID) — full 16-digit demat account number"),
+    ("dp_name",                             "dp_name",                        None,                                "Friendly DP name (e.g. Zerodha, Groww)"),
+    ("broker_name",                         "broker_name",                    None,                                "Broker name if different from DP"),
+    ("primary_bo_name",                     "primary_bo_name",                None,                                "Name on the demat account (must match PAN)"),
+    ("primary_bo_pan",                      "primary_bo_pan",                 "Upper",                             "PAN of the primary BO holder"),
+    ("cmr_url",                             "cmr_copy",                       None,                                "CMR (Client Master Report) PDF URL — uploaded during KYC"),
+    ("is_primary",                          "is_primary",                     None,                                "Primary demat marker — only one per customer"),
+]
+
+DEFAULT_ITEM_MAPPINGS = [
+    ("metadata.isin",                       "custom_isin",                    "Upper",                             "ISIN — 12-char uppercase identifier (e.g. INE002A01018)"),
+    ("title",                               "item_name",                      None,                                "Share name — e.g. 'Reliance Industries Ltd'"),
+    ("handle",                              "item_code",                      None,                                "Slug — used as the ERPNext Item primary key"),
+    ("metadata.rta",                        "custom_rta",                     None,                                "Registrar and Transfer Agent (Link Intime, Karvy, etc.)"),
+    ("metadata.last_traded_price",          "custom_last_traded_price",       None,                                "LTP from market data — refreshed by the price-scraper job"),
+    # NO HSN/SAC — shares are excluded from GST under Schedule III.
+    # The non-GST treatment comes from the `Polemarch - Non-GST` ITT
+    # auto-linked by `polemarch.overrides.item.validate`.
+]
+
+DEFAULT_ORDER_MAPPINGS = [
+    ("id",                                  "custom_medusa_order_id",         None,                                "Medusa order id (audit reference)"),
+    ("display_id",                          "po_no",                          None,                                "Human-readable order number (shown to the buyer)"),
+    ("metadata.platform_fee_paise",         "custom_platform_fee",            "Paise to Rupees",                   "Platform fee from Medusa, stored in paise; converted to rupees"),
+    ("metadata.low_order_fee_paise",        "custom_low_order_fee",           "Paise to Rupees",                   "Low-order surcharge applied below the threshold (e.g. < ₹1L)"),
+    ("metadata.stamp_duty_paise",           "custom_stamp_duty",              "Paise to Rupees",                   "0.015% stamp duty as per state regulations"),
+]
+
+DEFAULT_ORDER_ITEM_MAPPINGS = [
+    # Each row is per element of `order.items[]`
+    ("variant.metadata.isin",               "custom_isin",                    "Upper",                             "ISIN — written onto the Sales Invoice Item row"),
+    ("variant.product.title",               "item_name",                      None,                                "Share name on the line item"),
+    ("variant.sku",                         "item_code",                      None,                                "SKU — resolves to ERPNext Item via item_code"),
+    ("quantity",                            "qty",                            None,                                "Number of shares"),
+    ("unit_price",                          "rate",                           "Paise to Rupees",                   "Per-share price; Medusa stores in paise"),
+]
+
+
+def _seed_default_sync_mappings():
+    """Insert default Polemarch Sync Mapping rows. Idempotent —
+    skips any (section, medusa_path) pair already present so admins
+    can edit the seed rows in place without them being overwritten on
+    the next migrate."""
+    settings_name = "Polemarch Sync Mapping"
+    if not frappe.db.exists("DocType", settings_name):
+        # First migrate before the doctype itself is synced — bail.
+        return
+    doc = frappe.get_single(settings_name)
+
+    _merge_rows(doc, "customer_mappings",      DEFAULT_CUSTOMER_MAPPINGS)
+    _merge_rows(doc, "bank_account_mappings",  DEFAULT_BANK_MAPPINGS)
+    _merge_rows(doc, "demat_account_mappings", DEFAULT_DEMAT_MAPPINGS)
+    _merge_rows(doc, "item_mappings",          DEFAULT_ITEM_MAPPINGS)
+    _merge_rows(doc, "order_mappings",         DEFAULT_ORDER_MAPPINGS)
+    _merge_rows(doc, "order_item_mappings",    DEFAULT_ORDER_ITEM_MAPPINGS)
+
+    doc.flags.ignore_permissions = True
+    doc.save(ignore_permissions=True)
+
+
+def _merge_rows(parent, table_field: str, defaults: list):
+    existing_paths = {r.medusa_path for r in parent.get(table_field) or []}
+    for medusa_path, erp_field, transform, description in defaults:
+        if medusa_path in existing_paths:
+            continue
+        parent.append(table_field, {
+            "is_enabled": 1,
+            "medusa_path": medusa_path,
+            "erpnext_field": erp_field,
+            "transform": transform or "",
+            "direction": "Bidirectional",
+            "is_required": 0,
+            "description": description,
+        })
