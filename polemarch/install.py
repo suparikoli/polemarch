@@ -13,6 +13,8 @@ POLEMARCH_ITEM_GROUP = "Polemarch Securities"
 POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE = "Polemarch - Non-GST"
 PROCESSING_FEE_ITEM_CODE = "POLEMARCH-PROC-FEE"
 PROCESSING_FEE_HSN = "997152"
+LOW_ORDER_FEE_ITEM_CODE = "POLEMARCH-LOW-ORDER-FEE"
+LOW_ORDER_FEE_HSN = "997152"  # same SAC as processing fee — both are facilitation services
 
 
 def after_install():
@@ -31,9 +33,11 @@ def setup():
     _create_customer_group()
     _create_item_group()
     _create_custom_fields()
+    _make_hsn_optional_on_item()
     _create_polemarch_non_gst_item_tax_template()
     _add_polemarch_naming_series()
     _create_processing_fee_item()
+    _create_low_order_fee_item()
     _seed_default_sync_mappings()
 
 
@@ -358,11 +362,64 @@ def _zero_rate_tax_rows(company: str) -> list:
     return rows
 
 
+def _make_hsn_optional_on_item():
+    """India Compliance installs `Item.gst_hsn_code` as a mandatory
+    Custom Field. Polemarch share items (brand=Polemarch) are
+    securities under Schedule III — out of GST scope — and carry no
+    HSN/SAC. Drop the `reqd` flag on the Custom Field so those rows
+    can save with the HSN field empty. India Compliance still
+    enforces HSN on Sales Invoice items via its own validate, but
+    only for items whose `gst_treatment` is "Taxable"; Polemarch
+    items get "Non-GST" treatment via the auto-linked
+    `Polemarch - Non-GST` ITT, so the SI-level check passes too.
+
+    Idempotent — flips the flag and updates `modified` so the
+    in-process Frappe meta cache invalidates."""
+    cf_name = frappe.db.get_value(
+        "Custom Field",
+        {"dt": "Item", "fieldname": "gst_hsn_code"},
+        "name",
+    )
+    if not cf_name:
+        return
+    current = frappe.db.get_value("Custom Field", cf_name, "reqd")
+    if current == 0:
+        return
+    frappe.db.set_value("Custom Field", cf_name, "reqd", 0)
+    frappe.clear_cache(doctype="Item")
+
+
 def _create_processing_fee_item():
     """Service item used when a Medusa order carries a processing fee
     (HSN 997152, GST 18%). Lives under Mithtech Services brand so the
     fee invoice is correctly classified for GSTR-1."""
-    if frappe.db.exists("Item", PROCESSING_FEE_ITEM_CODE):
+    _create_service_fee_item(
+        code=PROCESSING_FEE_ITEM_CODE,
+        name="Polemarch Processing Fee",
+        hsn=PROCESSING_FEE_HSN,
+        description="Processing / facilitation fee for Polemarch trades. HSN 997152, GST 18%.",
+    )
+
+
+def _create_low_order_fee_item():
+    """Low-order surcharge applied to small Polemarch trades (typically
+    below ₹1L) to recoup the fixed processing cost. Same HSN as the
+    processing fee — both are facilitation services from MISPL's
+    perspective — but a separate Item so accounting can break out the
+    two fee streams on GSTR-1 and the customer-facing invoice."""
+    _create_service_fee_item(
+        code=LOW_ORDER_FEE_ITEM_CODE,
+        name="Polemarch Low Order Fee",
+        hsn=LOW_ORDER_FEE_HSN,
+        description="Low-order surcharge for small Polemarch trades (typically <₹1L). HSN 997152, GST 18%.",
+    )
+
+
+def _create_service_fee_item(*, code: str, name: str, hsn: str, description: str):
+    """Shared scaffold for the two Mithtech-Services facilitation fee
+    Items. Identical schema, just differ in code/name/description and
+    HSN (currently same for both)."""
+    if frappe.db.exists("Item", code):
         return
     services_group = (
         frappe.db.exists("Item Group", "Services")
@@ -372,15 +429,15 @@ def _create_processing_fee_item():
     frappe.get_doc(
         {
             "doctype": "Item",
-            "item_code": PROCESSING_FEE_ITEM_CODE,
-            "item_name": "Polemarch Processing Fee",
+            "item_code": code,
+            "item_name": name,
             "item_group": services_group,
             "brand": MITHTECH_SERVICES_BRAND,
             "stock_uom": "Nos",
             "is_stock_item": 0,
             "include_item_in_manufacturing": 0,
-            "description": "Processing / facilitation fee for Polemarch trades. HSN 997152, GST 18%.",
-            "gst_hsn_code": PROCESSING_FEE_HSN if frappe.db.exists("GST HSN Code", PROCESSING_FEE_HSN) else None,
+            "description": description,
+            "gst_hsn_code": hsn if frappe.db.exists("GST HSN Code", hsn) else None,
         }
     ).insert(ignore_permissions=True)
 
@@ -442,6 +499,12 @@ DEFAULT_CUSTOMER_MAPPINGS = [
     ("metadata.client_id",                  "custom_client_id",               None,                                "Polemarch client ID (NNNNYYWW, weekly resetting)"),
     ("metadata.kyc_status",                 "custom_kyc_status",              None,                                "Maps medusa kyc state → ERPNext select: Verified / In Review / Rejected / Not Started"),
     ("metadata.kyc_rejection_reason",       "custom_kyc_status_reason",       None,                                "Free-text reason from KYC vendor (visible on Customer form)"),
+    # Classification — sync_customers.upsert_from_medusa enforces
+    # customer_group = "Polemarch" as an invariant regardless of
+    # whether Medusa sends a value, but this row makes it
+    # configurable from the admin UI if a future requirement needs
+    # different segmentation.
+    ("metadata.customer_group",             "customer_group",                 None,                                "Defaults to 'Polemarch' if Medusa doesn't send a value (enforced as invariant by the sync code)."),
     # Audit identity
     ("id",                                  "custom_medusa_customer_id",      None,                                "Medusa customer id (audit reference)"),
 ]
@@ -478,9 +541,15 @@ DEFAULT_ITEM_MAPPINGS = [
     ("handle",                              "item_code",                      None,                                "Slug — used as the ERPNext Item primary key"),
     ("metadata.rta",                        "custom_rta",                     None,                                "Registrar and Transfer Agent (Link Intime, Karvy, etc.)"),
     ("metadata.last_traded_price",          "custom_last_traded_price",       None,                                "LTP from market data — refreshed by the price-scraper job"),
-    # NO HSN/SAC — shares are excluded from GST under Schedule III.
-    # The non-GST treatment comes from the `Polemarch - Non-GST` ITT
-    # auto-linked by `polemarch.overrides.item.validate`.
+    # Classification — `polemarch.overrides.item.validate` enforces
+    # item_group = "Polemarch Securities" for brand=Polemarch items
+    # regardless of what Medusa sends. Mapping row is informational +
+    # provides a config override hook if a future requirement needs
+    # a different sub-group (e.g. "Polemarch Bonds").
+    ("metadata.item_group",                 "item_group",                     None,                                "Defaults to 'Polemarch Securities' (enforced by the Item validate hook for brand=Polemarch)."),
+    # NO HSN/SAC — Polemarch shares are excluded from GST under
+    # Schedule III. The Item validate hook clears any HSN that
+    # accidentally lands on a brand=Polemarch row.
 ]
 
 DEFAULT_ORDER_MAPPINGS = [

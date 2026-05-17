@@ -1,24 +1,40 @@
 import frappe
 
-from polemarch.install import POLEMARCH_BRAND, POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE
+from polemarch.install import (
+    POLEMARCH_BRAND,
+    POLEMARCH_ITEM_GROUP,
+    POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE,
+)
 
 
 def validate(doc, method=None):
-    """For every Polemarch-branded Item, ensure the
-    `Polemarch - Non-GST` Item Tax Template is linked in `Item.taxes`.
+    """Polemarch-side Item rules.
 
-    India Compliance reads the effective ITT for each Sales Invoice /
-    Sales Order line via `update_gst_treatment_map`, then stamps
-    `gst_treatment = "Non-GST"` on the row — which zeroes tax
-    computation automatically, regardless of the document-level
-    Sales Taxes and Charges Template. This is the idiomatic GST-free
-    setup IC was designed for; no invoice-level template swap needed.
+    For every brand=Polemarch Item:
+      1. Force `item_group = "Polemarch Securities"` (creates the
+         group if it doesn't exist yet — install hook normally seeds
+         this, but new sites and per-customer overrides may skip it).
+      2. Clear `gst_hsn_code` — Polemarch shares are securities under
+         CGST Act Schedule III and explicitly carry no HSN/SAC.
+      3. Auto-link the `Polemarch - Non-GST` Item Tax Template so
+         India Compliance stamps `gst_treatment = "Non-GST"` on
+         every Sales Invoice / Sales Order line that references the
+         item, zeroing GST computation regardless of the document-
+         level tax template.
 
-    Idempotent — appends only if not already present for this
-    company. Multi-company sites end up with one row per company.
+    Mithtech-branded Items (processing fee, low-order fee) keep their
+    HSN — the fee services ARE taxable supplies (SAC 997152, GST 18%)
+    and their HSN drives the SI's GST breakup table.
+
+    Idempotent — re-saving an already-correct item is a no-op.
     """
     if doc.brand != POLEMARCH_BRAND:
         return
+    # Force the security item_group and clear HSN
+    if doc.item_group != POLEMARCH_ITEM_GROUP and frappe.db.exists("Item Group", POLEMARCH_ITEM_GROUP):
+        doc.item_group = POLEMARCH_ITEM_GROUP
+    if doc.get("gst_hsn_code"):
+        doc.gst_hsn_code = None
     _ensure_non_gst_item_tax_template(doc)
 
 
