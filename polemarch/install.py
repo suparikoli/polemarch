@@ -29,22 +29,13 @@ POLEMARCH_NAMING_SERIES = "POL-.YYYY.-.#####"
 
 
 def setup():
-    _create_brands()
     _create_customer_group()
-    _create_item_group()
     _create_custom_fields()
     _make_hsn_optional_on_item()
-    _create_polemarch_non_gst_item_tax_template()
     _add_polemarch_naming_series()
     _create_processing_fee_item()
     _create_low_order_fee_item()
     _seed_default_sync_mappings()
-
-
-def _create_brands():
-    for brand in (POLEMARCH_BRAND, MITHTECH_SERVICES_BRAND):
-        if not frappe.db.exists("Brand", brand):
-            frappe.get_doc({"doctype": "Brand", "brand": brand}).insert(ignore_permissions=True)
 
 
 def _create_customer_group():
@@ -56,20 +47,6 @@ def _create_customer_group():
             "doctype": "Customer Group",
             "customer_group_name": POLEMARCH_CUSTOMER_GROUP,
             "parent_customer_group": parent,
-            "is_group": 0,
-        }
-    ).insert(ignore_permissions=True)
-
-
-def _create_item_group():
-    if frappe.db.exists("Item Group", POLEMARCH_ITEM_GROUP):
-        return
-    parent = frappe.db.get_value("Item Group", {"is_group": 1, "parent_item_group": ""}) or "All Item Groups"
-    frappe.get_doc(
-        {
-            "doctype": "Item Group",
-            "item_group_name": POLEMARCH_ITEM_GROUP,
-            "parent_item_group": parent,
             "is_group": 0,
         }
     ).insert(ignore_permissions=True)
@@ -220,7 +197,7 @@ def _create_custom_fields():
                 "read_only": 1,
                 "no_copy": 1,
                 "unique": 1,
-                "insert_after": "custom_rta",
+                "insert_after": "description",
             },
         ],
         "Sales Invoice": [
@@ -289,77 +266,6 @@ def _create_custom_fields():
         ],
     }
     create_custom_fields(fields, ignore_validate=True, update=True)
-
-
-def _create_polemarch_non_gst_item_tax_template():
-    """Create one `Polemarch - Non-GST` Item Tax Template per company.
-
-    `gst_treatment = "Non-GST"` is what India Compliance checks when
-    deciding whether to compute GST on a Sales Invoice / Sales Order
-    line. Linking this template to every Polemarch-branded Item (via
-    `polemarch.overrides.item.validate`) makes IC zero out tax for
-    those rows automatically — no document-level tax-template swap
-    needed.
-
-    Mithtech Services items intentionally have NO custom ITT — they
-    use ERPNext's standard chart-of-accounts GST treatment, which
-    handles intra- vs inter-state correctly via India Compliance's
-    state-aware logic. The fee item carries HSN 997152 and gets the
-    right 18% via the customer's place_of_supply.
-    """
-    for company in frappe.get_all("Company", pluck="name"):
-        name = _itt_name(company, POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE)
-        if frappe.db.exists("Item Tax Template", name):
-            continue
-        rows = _zero_rate_tax_rows(company)
-        if not rows:
-            # Company has no GST output accounts yet — skip for now;
-            # next migrate after Chart of Accounts is set up will pick
-            # it up (idempotent).
-            continue
-        frappe.get_doc(
-            {
-                "doctype": "Item Tax Template",
-                "title": POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE,
-                "company": company,
-                "gst_treatment": "Non-GST",
-                # India Compliance reads `gst_treatment = "Non-GST"`
-                # to zero tax computation, but Frappe's `Item Tax
-                # Template` requires `taxes` to have at least one
-                # row (the `tax_type` field is mandatory). We supply
-                # rows pointing at the company's GST output accounts
-                # at rate 0 — same shape ERPNext's standard
-                # "Exempted" ITT uses.
-                "taxes": rows,
-            }
-        ).insert(ignore_permissions=True)
-
-
-def _itt_name(company: str, title: str) -> str:
-    return f"{title} - {frappe.db.get_value('Company', company, 'abbr')}"
-
-
-def _zero_rate_tax_rows(company: str) -> list:
-    """Return one row per GST output account at rate 0, suitable for
-    Item Tax Template Detail. The accounts are looked up by the
-    standard naming convention `Output Tax {CGST|SGST|IGST} - <abbr>`,
-    skipping Refund / RCM variants."""
-    rows = []
-    for keyword in ("Output Tax CGST", "Output Tax SGST", "Output Tax IGST"):
-        account = frappe.db.get_value(
-            "Account",
-            [
-                ["company", "=", company],
-                ["account_name", "like", f"{keyword}%"],
-                ["account_name", "not like", "%Refund%"],
-                ["account_name", "not like", "%RCM%"],
-                ["is_group", "=", 0],
-            ],
-            "name",
-        )
-        if account:
-            rows.append({"tax_type": account, "tax_rate": 0})
-    return rows
 
 
 def _make_hsn_optional_on_item():
@@ -432,7 +338,6 @@ def _create_service_fee_item(*, code: str, name: str, hsn: str, description: str
             "item_code": code,
             "item_name": name,
             "item_group": services_group,
-            "brand": MITHTECH_SERVICES_BRAND,
             "stock_uom": "Nos",
             "is_stock_item": 0,
             "include_item_in_manufacturing": 0,

@@ -1,0 +1,289 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "module": "Polemarch Trading",
+ "name": "Wallet Transaction",
+ "title_field": "name",
+ "search_fields": "wallet,customer,txn_type",
+ "track_changes": 1,
+ "field_order": [
+  "naming_series",
+  "wallet",
+  "column_break_1",
+  "customer",
+  "company",
+  "currency",
+  "section_txn",
+  "posting_datetime",
+  "txn_type",
+  "column_break_2",
+  "direction",
+  "amount",
+  "section_balances_after",
+  "balance_available_after",
+  "balance_reserved_after",
+  "column_break_3",
+  "balance_total_after",
+  "section_refs",
+  "reference_doctype",
+  "reference_name",
+  "column_break_4",
+  "idempotency_key",
+  "journal_entry",
+  "section_reversal",
+  "is_cancelled",
+  "reverses",
+  "column_break_5",
+  "reversed_by",
+  "section_meta",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-WT-.YYYY.-.#####",
+   "default": "POL-WT-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "wallet",
+   "fieldtype": "Link",
+   "label": "Wallet",
+   "options": "Wallet",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "fetch_from": "wallet.customer",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "wallet.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "fetch_from": "wallet.currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_txn",
+   "fieldtype": "Section Break",
+   "label": "Transaction"
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Datetime",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "default": "now"
+  },
+  {
+   "fieldname": "txn_type",
+   "fieldtype": "Select",
+   "label": "Transaction Type",
+   "options": "Deposit\nWithdrawal\nReservation\nReservation Release\nBuy Settlement\nSell Payout\nFee\nFee Refund\nAdjustment\nReversal",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "Credit\nDebit",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "currency",
+   "reqd": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_balances_after",
+   "fieldtype": "Section Break",
+   "label": "Balances After Transaction",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "balance_available_after",
+   "fieldtype": "Currency",
+   "label": "Available After",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "balance_reserved_after",
+   "fieldtype": "Currency",
+   "label": "Reserved After",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "balance_total_after",
+   "fieldtype": "Currency",
+   "label": "Total After",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "References",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "length": 64,
+   "unique": 1,
+   "description": "Optional. If set, repeated submission of the same key + payload is short-circuited by the wallet engine."
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Paired Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_reversal",
+   "fieldtype": "Section Break",
+   "label": "Reversal",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "is_cancelled",
+   "fieldtype": "Check",
+   "label": "Is Cancelled",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reverses",
+   "fieldtype": "Link",
+   "label": "Reverses",
+   "options": "Wallet Transaction",
+   "read_only": 1,
+   "description": "Points to the Wallet Transaction that this row reverses."
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reversed_by",
+   "fieldtype": "Link",
+   "label": "Reversed By",
+   "options": "Wallet Transaction",
+   "read_only": 1,
+   "description": "Filled when this row gets reversed by a later WT."
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "create": 1,
+   "submit": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "posting_datetime",
+ "sort_order": "DESC",
+ "states": []
+}

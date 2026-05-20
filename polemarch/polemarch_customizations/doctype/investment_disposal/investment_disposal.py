@@ -43,8 +43,12 @@ class InvestmentDisposal(Document):
 
     def on_submit(self):
         self._apply_to_holdings(direction=+1)
+        self._mirror_write_slle(direction=+1)
+        self._post_journal_entry()
 
     def on_cancel(self):
+        self._cancel_journal_entry()
+        self._mirror_write_slle(direction=-1)
         self._apply_to_holdings(direction=-1)
 
     # ── derived-field math ────────────────────────────────────────────
@@ -123,6 +127,122 @@ class InvestmentDisposal(Document):
             holding.flags.ignore_permissions = True
             holding.save(ignore_permissions=True)
 
+    # ── Phase 1 mirror-write: emit SLLE rows alongside the legacy mutation ─
+
+    def _mirror_write_slle(self, direction: int):
+        """Phase 1 — additively write Security Lot Ledger Entry rows for
+        every consumed lot so the new append-only ledger stays in sync
+        with the legacy Investment Holding mutation. Gated by feature
+        flag `MIRROR_WRITE_SLLE`. Best-effort: failures here NEVER block
+        the legacy flow — the daily audit job will catch divergence and
+        flag it for manual reconciliation.
+        """
+        try:
+            from polemarch.trading.feature_flags import is_enabled
+
+            if not is_enabled("MIRROR_WRITE_SLLE"):
+                return
+            if not frappe.db.table_exists("Security Lot Ledger Entry"):
+                return
+
+            from polemarch.trading import fifo as fifo_engine
+
+            if direction == +1:
+                self._slle_write_consume_rows(fifo_engine)
+            else:
+                fifo_engine.reverse_consume_entries(
+                    reference_doctype=self.doctype, reference_name=self.name
+                )
+        except Exception:
+            frappe.log_error(
+                frappe.get_traceback(),
+                "Polemarch SLLE Mirror-Write",
+            )
+
+    def _slle_write_consume_rows(self, fifo_engine):
+        """Map each Investment Disposal Lot → a Consume SLLE row on the
+        Security Lot that mirrors the legacy Investment Holding (1:1 by
+        backfill convention)."""
+        for lot in self.lots or []:
+            if not lot.holding or not lot.qty_consumed:
+                continue
+
+            # Phase 0 backfill maps Investment Holding name → Security Lot
+            # of the same name once `backfill_security_lots_from_holdings`
+            # has run. Skip silently if the Security Lot is absent — the
+            # audit job will surface the gap.
+            if not frappe.db.exists("Security Lot", lot.holding):
+                continue
+
+            slle = frappe.get_doc(
+                {
+                    "doctype": "Security Lot Ledger Entry",
+                    "security_lot": lot.holding,
+                    "entry_type": "Consume",
+                    "qty": flt(lot.qty_consumed),
+                    "cost_basis_per_unit": flt(lot.cost_basis_per_unit),
+                    "sale_price_per_unit": flt(lot.sale_price_per_unit),
+                    "reference_doctype": self.doctype,
+                    "reference_name": self.name,
+                    "holding_period_days": lot.holding_period_days,
+                    "is_long_term": lot.is_long_term,
+                    "realized_gain": flt(lot.realized_gain),
+                }
+            )
+            slle.flags.ignore_permissions = True
+            slle.insert(ignore_permissions=True)
+            slle.submit()
+
+    # ── Phase 3 auto-JE: cost recognition ────────────────────────────────
+
+    def _post_journal_entry(self):
+        """Phase 3a — emit a cost-recognition Journal Entry:
+
+            DR  Trading COGS - Securities
+            CR  Securities Inventory - Trading   (Trading-portfolio lots)
+            CR  Long-Term Investments            (Investment-portfolio lots)
+
+        Gated by feature flag `AUTO_POST_CAPITAL_GAINS_JE`. Idempotent —
+        looks up an existing JE by (custom_source_doctype, custom_source_name).
+        Failures are logged but never block the Disposal submit; the daily
+        audit job will surface any missing JEs for manual reconciliation.
+        """
+        try:
+            from polemarch.trading.feature_flags import is_enabled
+
+            if not is_enabled("AUTO_POST_CAPITAL_GAINS_JE"):
+                return
+
+            from polemarch.trading import accounting as accounting_engine
+
+            je_name = accounting_engine.post_cost_recognition_je_for_disposal(self)
+            if je_name and hasattr(self, "journal_entry_ref"):
+                self.db_set("journal_entry_ref", je_name, update_modified=False)
+        except Exception:
+            frappe.log_error(
+                frappe.get_traceback(),
+                "Polemarch Capital Gains JE",
+            )
+
+    def _cancel_journal_entry(self):
+        """Cancel the paired cost-recognition JE on Disposal cancel.
+        ERPNext's JE.cancel() emits reverse GL entries natively.
+        """
+        try:
+            from polemarch.trading.feature_flags import is_enabled
+
+            if not is_enabled("AUTO_POST_CAPITAL_GAINS_JE"):
+                return
+
+            from polemarch.trading import accounting as accounting_engine
+
+            accounting_engine.cancel_journal_entry_for_source(self.doctype, self.name)
+        except Exception:
+            frappe.log_error(
+                frappe.get_traceback(),
+                "Polemarch Capital Gains JE Cancel",
+            )
+
 
 # ──────────────────────────────────────────────────────────────────────
 # FIFO matcher — used by `polemarch.overrides.sales_invoice.on_submit`
@@ -144,15 +264,21 @@ def fifo_consume(item_code: str, company: str, qty_to_sell: float):
     if qty_to_sell <= 0:
         return [], True
 
-    holdings = frappe.get_all(
-        "Investment Holding",
-        filters={
-            "item": item_code,
-            "company": company,
-            "status": ["in", ["Open", "Partially Disposed"]],
-        },
-        fields=["name", "qty_remaining", "acquisition_date"],
-        order_by="acquisition_date ASC, creation ASC",
+    # Concurrency: row-lock the candidate holdings so two concurrent SI
+    # submits for the same (item, company) can't both consume the oldest
+    # lot. The lock is released when the calling request commits.
+    holdings = frappe.db.sql(
+        """
+        SELECT name, qty_remaining, acquisition_date
+          FROM `tabInvestment Holding`
+         WHERE item = %s
+           AND company = %s
+           AND status IN ('Open', 'Partially Disposed')
+         ORDER BY acquisition_date ASC, creation ASC
+         FOR UPDATE
+        """,
+        (item_code, company),
+        as_dict=True,
     )
 
     consumed = []

@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "istable": 1,
+ "module": "Polemarch Trading",
+ "name": "Settlement Run Item",
+ "field_order": [
+  "settlement_instruction",
+  "trade_order",
+  "side",
+  "column_break_1",
+  "customer",
+  "net_amount",
+  "expected_settlement_date",
+  "section_outcome",
+  "status",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "settlement_instruction",
+   "fieldtype": "Link",
+   "label": "Settlement Instruction",
+   "options": "Settlement Instruction",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "trade_order",
+   "fieldtype": "Link",
+   "label": "Trade Order",
+   "options": "Trade Order",
+   "fetch_from": "settlement_instruction.trade_order",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "side",
+   "fieldtype": "Select",
+   "label": "Side",
+   "options": "Buy\nSell",
+   "fetch_from": "settlement_instruction.side",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "fetch_from": "settlement_instruction.customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "net_amount",
+   "fieldtype": "Currency",
+   "label": "Net Amount",
+   "options": "INR",
+   "fetch_from": "settlement_instruction.net_amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_settlement_date",
+   "fieldtype": "Date",
+   "label": "Expected Date",
+   "fetch_from": "settlement_instruction.expected_settlement_date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_outcome",
+   "fieldtype": "Section Break",
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Run Status",
+   "options": "Queued\nFunded\nCleared\nFailed\nSkipped",
+   "default": "Queued",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message"
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

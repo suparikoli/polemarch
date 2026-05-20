@@ -1,0 +1,214 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:isin",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Security",
+ "title_field": "security_name",
+ "search_fields": "isin,security_name,company_name",
+ "track_changes": 1,
+ "field_order": [
+  "isin",
+  "security_name",
+  "company_name",
+  "column_break_1",
+  "security_type",
+  "face_value",
+  "sector",
+  "rta",
+  "section_status",
+  "tradable",
+  "active",
+  "column_break_2",
+  "item",
+  "section_market",
+  "medusa_product_id",
+  "last_traded_price",
+  "price_updated_on",
+  "section_meta",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "isin",
+   "fieldtype": "Data",
+   "label": "ISIN",
+   "length": 12,
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "International Securities Identification Number. 12 chars, format: 2 letters + 9 alphanumeric + 1 digit."
+  },
+  {
+   "fieldname": "security_name",
+   "fieldtype": "Data",
+   "label": "Security Name",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "label": "Issuer Company Name",
+   "description": "Legal name of the issuer."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "security_type",
+   "fieldtype": "Select",
+   "label": "Security Type",
+   "options": "Equity\nPreference\nBond\nDebenture\nSGB\nWarrant",
+   "default": "Equity",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "face_value",
+   "fieldtype": "Currency",
+   "label": "Face Value",
+   "options": "INR",
+   "description": "Statutory face value (₹10 default for equity)."
+  },
+  {
+   "fieldname": "sector",
+   "fieldtype": "Link",
+   "label": "Sector",
+   "options": "Industry",
+   "description": "Reuses ERPNext Industry master."
+  },
+  {
+   "fieldname": "rta",
+   "fieldtype": "Link",
+   "label": "Registrar / RTA",
+   "options": "Brand",
+   "description": "Registrar & Transfer Agent. Reuses Brand master in Phase 0; dedicated RTA doctype is a Phase 2 candidate."
+  },
+  {
+   "fieldname": "section_status",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "tradable",
+   "fieldtype": "Check",
+   "label": "Tradable",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Toggle off to halt trading without deleting the security."
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active",
+   "default": "1",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Soft-delete flag. Inactive securities cannot back new lots."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Linked Item",
+   "options": "Item",
+   "read_only": 1,
+   "unique": 1,
+   "description": "Backreference to the GST/India-Compliance Item that owns the tax-template plumbing. 1:1."
+  },
+  {
+   "fieldname": "section_market",
+   "fieldtype": "Section Break",
+   "label": "Market Data"
+  },
+  {
+   "fieldname": "medusa_product_id",
+   "fieldtype": "Data",
+   "label": "Medusa Product ID",
+   "read_only": 1,
+   "unique": 1,
+   "description": "Mirror of Item.custom_medusa_product_id. Maintained for cross-system lookups."
+  },
+  {
+   "fieldname": "last_traded_price",
+   "fieldtype": "Currency",
+   "label": "Last Traded Price",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "price_updated_on",
+   "fieldtype": "Datetime",
+   "label": "Price Updated On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "import": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "Item Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "security_name",
+ "sort_order": "ASC",
+ "states": []
+}

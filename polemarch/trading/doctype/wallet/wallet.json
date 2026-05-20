@@ -1,0 +1,227 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:WAL-{customer}",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Wallet",
+ "title_field": "customer_name",
+ "search_fields": "customer,customer_name",
+ "track_changes": 1,
+ "field_order": [
+  "customer",
+  "customer_name",
+  "column_break_1",
+  "company",
+  "currency",
+  "section_balances",
+  "balance_total",
+  "balance_available",
+  "column_break_2",
+  "balance_reserved",
+  "balance_pending",
+  "section_gl_link",
+  "gl_liability_account",
+  "column_break_3",
+  "last_recon_at",
+  "last_recon_delta",
+  "section_meta",
+  "status",
+  "frozen_reason",
+  "column_break_4",
+  "version"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Unique per customer; set on insert and immutable thereafter."
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "fetch_from": "customer.customer_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "Anchors all GL postings for this wallet."
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1,
+   "default": "INR"
+  },
+  {
+   "fieldname": "section_balances",
+   "fieldtype": "Section Break",
+   "label": "Balances"
+  },
+  {
+   "fieldname": "balance_total",
+   "fieldtype": "Currency",
+   "label": "Total Balance",
+   "options": "currency",
+   "read_only": 1,
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Should equal balance_available + balance_reserved. Validated on every write."
+  },
+  {
+   "fieldname": "balance_available",
+   "fieldtype": "Currency",
+   "label": "Available Balance",
+   "options": "currency",
+   "read_only": 1,
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Free for new orders / withdrawals."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "balance_reserved",
+   "fieldtype": "Currency",
+   "label": "Reserved Balance",
+   "options": "currency",
+   "read_only": 1,
+   "default": "0",
+   "description": "Held against open Trade Order reservations."
+  },
+  {
+   "fieldname": "balance_pending",
+   "fieldtype": "Currency",
+   "label": "Pending Balance",
+   "options": "currency",
+   "read_only": 1,
+   "default": "0",
+   "description": "Deposits in flight (NEFT/RTGS not yet credited). Not spendable."
+  },
+  {
+   "fieldname": "section_gl_link",
+   "fieldtype": "Section Break",
+   "label": "GL Link & Reconciliation"
+  },
+  {
+   "fieldname": "gl_liability_account",
+   "fieldtype": "Link",
+   "label": "Customer Wallet Liability Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Per-company control account. Resolved by Customer.on_update at Wallet creation."
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_recon_at",
+   "fieldtype": "Datetime",
+   "label": "Last Reconciliation At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_recon_delta",
+   "fieldtype": "Currency",
+   "label": "Last Reconciliation Delta",
+   "options": "currency",
+   "read_only": 1,
+   "description": "Difference between Wallet vs GL liability balance at last audit run; should always be 0."
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nFrozen\nClosed",
+   "default": "Active",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "frozen_reason",
+   "fieldtype": "Small Text",
+   "label": "Frozen Reason",
+   "depends_on": "eval:doc.status === 'Frozen'"
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1,
+   "default": "0",
+   "description": "Optimistic-lock counter, incremented on every balance update by `wallet.apply_delta`."
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

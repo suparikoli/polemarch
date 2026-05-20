@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "istable": 1,
+ "module": "Polemarch Trading",
+ "name": "Portfolio Transfer Lot",
+ "field_order": [
+  "source_lot",
+  "qty_consumed",
+  "column_break_1",
+  "original_cost_basis_per_unit",
+  "transfer_fmv_per_unit",
+  "section_audit",
+  "holding_period_days_at_transfer",
+  "is_long_term_at_transfer",
+  "column_break_2",
+  "cost_basis_amount",
+  "fmv_amount",
+  "deemed_gain",
+  "section_destination",
+  "new_lot"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_lot",
+   "fieldtype": "Link",
+   "label": "Source Security Lot",
+   "options": "Security Lot",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty_consumed",
+   "fieldtype": "Float",
+   "label": "Qty Transferred",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "original_cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Original Cost Basis / Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transfer_fmv_per_unit",
+   "fieldtype": "Currency",
+   "label": "Transfer FMV / Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Holding-Period Audit"
+  },
+  {
+   "fieldname": "holding_period_days_at_transfer",
+   "fieldtype": "Int",
+   "label": "Holding Period (days) at Transfer",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_long_term_at_transfer",
+   "fieldtype": "Check",
+   "label": "Long-Term at Transfer",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_basis_amount",
+   "fieldtype": "Currency",
+   "label": "Cost Basis Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fmv_amount",
+   "fieldtype": "Currency",
+   "label": "FMV Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deemed_gain",
+   "fieldtype": "Currency",
+   "label": "Deemed Gain (FMV − Cost)",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Reportable only on cross-beneficial-owner transfers. At-cost intra-owner transfers carry the original cost basis; deemed_gain is informational."
+  },
+  {
+   "fieldname": "section_destination",
+   "fieldtype": "Section Break",
+   "label": "Destination"
+  },
+  {
+   "fieldname": "new_lot",
+   "fieldtype": "Link",
+   "label": "New Security Lot",
+   "options": "Security Lot",
+   "read_only": 1,
+   "description": "Populated when Portfolio Transfer is Posted — the lot created on the destination portfolio."
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

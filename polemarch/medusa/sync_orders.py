@@ -73,7 +73,61 @@ def handle_order_placed(data: dict, event_id: str = None):
         medusa_id=medusa_order_id,
         payload=data,
     )
+
+    # Phase 2 — additively spawn a Trade Order in parallel with the SO so the
+    # state machine starts tracking the lifecycle. Flag-gated; default OFF
+    # until the existing SI-driven Investment Disposal flow is replaced
+    # (Phase 6 cut-over). Failure here NEVER affects the SO flow.
+    _maybe_create_trade_orders_from_medusa(order, customer_name, items, medusa_order_id, event_id)
+
     return so.name
+
+
+def _maybe_create_trade_orders_from_medusa(order, customer_name, items, medusa_order_id, event_id):
+    try:
+        from polemarch.trading.feature_flags import is_enabled
+
+        if not is_enabled("CREATE_TRADE_ORDER_FROM_MEDUSA"):
+            return
+        if not frappe.db.table_exists("Trade Order"):
+            return
+
+        from polemarch.trading.api import trades as trades_api
+
+        for line in items:
+            security = frappe.db.get_value("Item", line["item_code"], "custom_security")
+            if not security:
+                continue
+
+            # Skip if a Trade Order already exists for this Medusa order + security.
+            if frappe.db.exists(
+                "Trade Order",
+                {"medusa_order_id": medusa_order_id, "security": security},
+            ):
+                continue
+
+            try:
+                trades_api.create_order(
+                    customer=customer_name,
+                    side="Buy",
+                    security=security,
+                    qty=line.get("qty"),
+                    price=line.get("rate"),
+                    book="Customer",
+                    medusa_order_id=medusa_order_id,
+                )
+            except Exception:
+                # Per-line failure — log and continue. The SO flow already
+                # succeeded; don't poison sibling lines.
+                frappe.log_error(
+                    frappe.get_traceback(),
+                    f"Polemarch Trade Order from Medusa ({medusa_order_id})",
+                )
+    except Exception:
+        frappe.log_error(
+            frappe.get_traceback(),
+            f"Polemarch Trade Order bridge ({medusa_order_id})",
+        )
 
 
 def handle_payment_captured(data: dict, event_id: str = None):

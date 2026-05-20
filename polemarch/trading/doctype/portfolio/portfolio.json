@@ -1,0 +1,163 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Portfolio",
+ "title_field": "portfolio_name",
+ "search_fields": "portfolio_name,customer",
+ "track_changes": 1,
+ "field_order": [
+  "naming_series",
+  "portfolio_name",
+  "column_break_1",
+  "portfolio_type",
+  "owner_kind",
+  "section_scope",
+  "company",
+  "customer",
+  "column_break_2",
+  "default_dp_id",
+  "status",
+  "section_meta",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-PF-.YYYY.-.#####",
+   "default": "POL-PF-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "portfolio_name",
+   "fieldtype": "Data",
+   "label": "Portfolio Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Human-readable, e.g. \"Prop — Trading — POL\" or \"Customer — Investment — Anita Sharma\"."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "portfolio_type",
+   "fieldtype": "Select",
+   "label": "Portfolio Type",
+   "options": "Trading\nInvestment",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Trading → STCG default + Stock-in-Trade. Investment → LTCG-eligible + Long-Term Investments."
+  },
+  {
+   "fieldname": "owner_kind",
+   "fieldtype": "Select",
+   "label": "Owner Kind",
+   "options": "Proprietary\nCustomer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Proprietary → company books. Customer → beneficial-owner downstream."
+  },
+  {
+   "fieldname": "section_scope",
+   "fieldtype": "Section Break",
+   "label": "Scope"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Required iff owner_kind = Customer. NULL for proprietary portfolios.",
+   "mandatory_depends_on": "eval:doc.owner_kind === 'Customer'"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_dp_id",
+   "fieldtype": "Data",
+   "label": "Default DP Reference",
+   "description": "Pointer to a DP Details child row, format `dp_details:<rowname>`. Used by Settlement to resolve the depository account. Phase 2 may promote DP Details to a top-level doctype and convert this to a Link."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nFrozen\nClosed",
+   "default": "Active",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Frozen → no new trades. Closed → terminal, read-only forever."
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "import": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

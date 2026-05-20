@@ -1,0 +1,342 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "module": "Polemarch Trading",
+ "name": "Portfolio Transfer",
+ "title_field": "name",
+ "search_fields": "security,from_portfolio,to_portfolio",
+ "track_changes": 1,
+ "field_order": [
+  "naming_series",
+  "transfer_state",
+  "column_break_1",
+  "transfer_date",
+  "company",
+  "section_route",
+  "from_portfolio",
+  "to_portfolio",
+  "column_break_2",
+  "security",
+  "isin",
+  "section_qty_pricing",
+  "qty",
+  "fmv_per_unit",
+  "column_break_3",
+  "fmv_source",
+  "valuation_reference",
+  "total_fmv",
+  "section_consumption",
+  "lots_consumed",
+  "section_approval",
+  "requested_by",
+  "approved_by",
+  "approved_on",
+  "column_break_4",
+  "rejected_by",
+  "rejection_reason",
+  "posted_on",
+  "section_reversal",
+  "reversal_of",
+  "column_break_5",
+  "reversed_by",
+  "section_accounting",
+  "journal_entry",
+  "section_meta",
+  "reason",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-PT-.YYYY.-.#####",
+   "default": "POL-PT-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "transfer_state",
+   "fieldtype": "Select",
+   "label": "Transfer State",
+   "options": "Draft\nPending Approval\nApproved\nPosted\nReversed\nRejected",
+   "default": "Draft",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "transfer_date",
+   "fieldtype": "Date",
+   "label": "Transfer Date",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "from_portfolio.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_route",
+   "fieldtype": "Section Break",
+   "label": "Route"
+  },
+  {
+   "fieldname": "from_portfolio",
+   "fieldtype": "Link",
+   "label": "From Portfolio",
+   "options": "Portfolio",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "to_portfolio",
+   "fieldtype": "Link",
+   "label": "To Portfolio",
+   "options": "Portfolio",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "security",
+   "fieldtype": "Link",
+   "label": "Security",
+   "options": "Security",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "isin",
+   "fieldtype": "Data",
+   "label": "ISIN",
+   "fetch_from": "security.isin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_qty_pricing",
+   "fieldtype": "Section Break",
+   "label": "Quantity & FMV"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Quantity",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "fmv_per_unit",
+   "fieldtype": "Currency",
+   "label": "FMV per Unit",
+   "options": "INR",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fmv_source",
+   "fieldtype": "Select",
+   "label": "FMV Source",
+   "options": "Last Traded Price\nManual\nValuation Report",
+   "default": "Last Traded Price",
+   "reqd": 1
+  },
+  {
+   "fieldname": "valuation_reference",
+   "fieldtype": "Data",
+   "label": "Valuation Reference",
+   "description": "URL / report ID when fmv_source != Last Traded Price.",
+   "depends_on": "eval:doc.fmv_source && doc.fmv_source !== 'Last Traded Price'"
+  },
+  {
+   "fieldname": "total_fmv",
+   "fieldtype": "Currency",
+   "label": "Total FMV",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_consumption",
+   "fieldtype": "Section Break",
+   "label": "FIFO Consumption"
+  },
+  {
+   "fieldname": "lots_consumed",
+   "fieldtype": "Table",
+   "label": "Lots Consumed",
+   "options": "Portfolio Transfer Lot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_approval",
+   "fieldtype": "Section Break",
+   "label": "Approval Trail"
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "label": "Requested By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approved By",
+   "options": "User",
+   "read_only": 1,
+   "description": "Must be a different user than `requested_by` (no self-approval)."
+  },
+  {
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Approved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_by",
+   "fieldtype": "Link",
+   "label": "Rejected By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rejection_reason",
+   "fieldtype": "Small Text",
+   "label": "Rejection Reason",
+   "depends_on": "eval:doc.transfer_state === 'Rejected'"
+  },
+  {
+   "fieldname": "posted_on",
+   "fieldtype": "Datetime",
+   "label": "Posted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_reversal",
+   "fieldtype": "Section Break",
+   "label": "Reversal",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "reversal_of",
+   "fieldtype": "Link",
+   "label": "Reversal Of",
+   "options": "Portfolio Transfer",
+   "read_only": 1,
+   "description": "If this is a reversing transfer, points at the original Posted transfer it reverses."
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reversed_by",
+   "fieldtype": "Link",
+   "label": "Reversed By",
+   "options": "Portfolio Transfer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_accounting",
+   "fieldtype": "Section Break",
+   "label": "Accounting",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Reason & Notes"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Transfer",
+   "reqd": 1,
+   "description": "Audit narrative — why was this reclassification needed?"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Polemarch Compliance Officer",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

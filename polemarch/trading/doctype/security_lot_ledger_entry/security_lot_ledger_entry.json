@@ -1,0 +1,252 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "module": "Polemarch Trading",
+ "name": "Security Lot Ledger Entry",
+ "title_field": "name",
+ "search_fields": "security_lot,security,portfolio",
+ "track_changes": 0,
+ "field_order": [
+  "posting_datetime",
+  "security_lot",
+  "column_break_1",
+  "security",
+  "portfolio",
+  "company",
+  "customer",
+  "section_entry",
+  "entry_type",
+  "qty",
+  "column_break_2",
+  "cost_basis_per_unit",
+  "sale_price_per_unit",
+  "section_refs",
+  "reference_doctype",
+  "reference_name",
+  "section_reversal",
+  "is_cancelled",
+  "reverses",
+  "column_break_3",
+  "reversed_by",
+  "section_audit",
+  "holding_period_days",
+  "is_long_term",
+  "column_break_4",
+  "realized_gain"
+ ],
+ "fields": [
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Datetime",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "default": "now"
+  },
+  {
+   "fieldname": "security_lot",
+   "fieldtype": "Link",
+   "label": "Security Lot",
+   "options": "Security Lot",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "security",
+   "fieldtype": "Link",
+   "label": "Security",
+   "options": "Security",
+   "fetch_from": "security_lot.security",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "portfolio",
+   "fieldtype": "Link",
+   "label": "Portfolio",
+   "options": "Portfolio",
+   "fetch_from": "security_lot.portfolio",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "security_lot.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "fetch_from": "security_lot.owning_customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_entry",
+   "fieldtype": "Section Break",
+   "label": "Entry"
+  },
+  {
+   "fieldname": "entry_type",
+   "fieldtype": "Select",
+   "label": "Entry Type",
+   "options": "Acquire\nReserve\nReserve Release\nConsume\nReversal",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1,
+   "description": "Always positive. entry_type encodes direction."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Cost Basis per Unit",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Snapshotted at write time from the source Security Lot."
+  },
+  {
+   "fieldname": "sale_price_per_unit",
+   "fieldtype": "Currency",
+   "label": "Sale Price per Unit",
+   "options": "INR",
+   "description": "Populated for Consume entries (sell-side)."
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "References"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_reversal",
+   "fieldtype": "Section Break",
+   "label": "Reversal",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "is_cancelled",
+   "fieldtype": "Check",
+   "label": "Is Cancelled",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reverses",
+   "fieldtype": "Link",
+   "label": "Reverses",
+   "options": "Security Lot Ledger Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reversed_by",
+   "fieldtype": "Link",
+   "label": "Reversed By",
+   "options": "Security Lot Ledger Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Audit (Consume entries)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "holding_period_days",
+   "fieldtype": "Int",
+   "label": "Holding Period (days)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_long_term",
+   "fieldtype": "Check",
+   "label": "Is Long Term (>730d)",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "realized_gain",
+   "fieldtype": "Currency",
+   "label": "Realized Gain",
+   "options": "INR",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "posting_datetime",
+ "sort_order": "DESC",
+ "states": []
+}

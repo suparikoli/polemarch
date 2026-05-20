@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "istable": 1,
+ "module": "Polemarch Trading",
+ "name": "Trade Order Lot Consumption",
+ "field_order": [
+  "security_lot",
+  "acquisition_date",
+  "qty_consumed",
+  "column_break_1",
+  "cost_basis_per_unit",
+  "sale_price_per_unit",
+  "section_audit",
+  "holding_period_days",
+  "is_long_term",
+  "column_break_2",
+  "cost_basis_amount",
+  "sale_amount",
+  "realized_gain"
+ ],
+ "fields": [
+  {
+   "fieldname": "security_lot",
+   "fieldtype": "Link",
+   "label": "Security Lot",
+   "options": "Security Lot",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "acquisition_date",
+   "fieldtype": "Date",
+   "label": "Acquisition Date",
+   "fetch_from": "security_lot.acquisition_date",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty_consumed",
+   "fieldtype": "Float",
+   "label": "Qty Consumed",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Cost Basis per Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sale_price_per_unit",
+   "fieldtype": "Currency",
+   "label": "Sale Price per Unit",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Holding-Period Audit"
+  },
+  {
+   "fieldname": "holding_period_days",
+   "fieldtype": "Int",
+   "label": "Holding Period (days)",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_long_term",
+   "fieldtype": "Check",
+   "label": "Is Long Term (>730d)",
+   "default": "0",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_basis_amount",
+   "fieldtype": "Currency",
+   "label": "Cost Basis Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sale_amount",
+   "fieldtype": "Currency",
+   "label": "Sale Amount",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "realized_gain",
+   "fieldtype": "Currency",
+   "label": "Realized Gain",
+   "options": "INR",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

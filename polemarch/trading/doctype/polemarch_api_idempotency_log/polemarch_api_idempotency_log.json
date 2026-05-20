@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:idempotency_key",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Polemarch API Idempotency Log",
+ "title_field": "idempotency_key",
+ "search_fields": "idempotency_key,endpoint,user",
+ "track_changes": 0,
+ "field_order": [
+  "idempotency_key",
+  "endpoint",
+  "column_break_1",
+  "user",
+  "request_hash",
+  "expires_at",
+  "section_response",
+  "response_payload",
+  "section_meta",
+  "first_seen_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "length": 64,
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "endpoint",
+   "fieldtype": "Data",
+   "label": "Endpoint",
+   "length": 200,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "request_hash",
+   "fieldtype": "Data",
+   "label": "Request Hash",
+   "length": 64,
+   "read_only": 1,
+   "description": "SHA-256 of canonicalised request payload. Replay with same key + different hash → 409."
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "24h TTL by default. The daily purge job clears expired rows."
+  },
+  {
+   "fieldname": "section_response",
+   "fieldtype": "Section Break",
+   "label": "Cached Response"
+  },
+  {
+   "fieldname": "response_payload",
+   "fieldtype": "Long Text",
+   "label": "Response Payload (JSON)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Metadata",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "first_seen_at",
+   "fieldtype": "Datetime",
+   "label": "First Seen At",
+   "default": "now",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "first_seen_at",
+ "sort_order": "DESC",
+ "states": []
+}

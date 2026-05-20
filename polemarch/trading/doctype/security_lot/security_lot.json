@@ -1,0 +1,282 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Security Lot",
+ "title_field": "name",
+ "search_fields": "security,portfolio,owning_customer",
+ "track_changes": 1,
+ "field_order": [
+  "naming_series",
+  "security",
+  "item",
+  "column_break_1",
+  "portfolio",
+  "owning_customer",
+  "company",
+  "section_acq",
+  "acquisition_date",
+  "qty_acquired",
+  "column_break_2",
+  "cost_basis_per_unit",
+  "total_cost",
+  "section_derived",
+  "qty_disposed",
+  "qty_remaining",
+  "column_break_3",
+  "qty_reserved",
+  "remaining_cost",
+  "section_state",
+  "status",
+  "lot_state",
+  "section_refs",
+  "purchase_reference",
+  "purchase_reference_link",
+  "column_break_4",
+  "acquired_via_trade_order",
+  "section_meta",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-LOT-.YYYY.-.#####",
+   "default": "POL-LOT-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "security",
+   "fieldtype": "Link",
+   "label": "Security",
+   "options": "Security",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "fetch_from": "security.item",
+   "read_only": 1,
+   "description": "Backreference into ERPNext Item for GST/India-Compliance plumbing."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "portfolio",
+   "fieldtype": "Link",
+   "label": "Portfolio",
+   "options": "Portfolio",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "owning_customer",
+   "fieldtype": "Link",
+   "label": "Owning Customer",
+   "options": "Customer",
+   "in_standard_filter": 1,
+   "description": "NULL for prop book. Set for customer-held lots; consistency-checked against portfolio.owner_kind."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "fetch_from": "portfolio.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_acq",
+   "fieldtype": "Section Break",
+   "label": "Acquisition"
+  },
+  {
+   "fieldname": "acquisition_date",
+   "fieldtype": "Date",
+   "label": "Acquisition Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Drives FIFO ordering and LTCG/STCG holding-period clock."
+  },
+  {
+   "fieldname": "qty_acquired",
+   "fieldtype": "Float",
+   "label": "Qty Acquired",
+   "reqd": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_basis_per_unit",
+   "fieldtype": "Currency",
+   "label": "Cost Basis per Unit",
+   "options": "INR",
+   "reqd": 1
+  },
+  {
+   "fieldname": "total_cost",
+   "fieldtype": "Currency",
+   "label": "Total Acquisition Cost",
+   "options": "INR",
+   "read_only": 1,
+   "description": "qty_acquired × cost_basis_per_unit. Computed in validate()."
+  },
+  {
+   "fieldname": "section_derived",
+   "fieldtype": "Section Break",
+   "label": "Derived from SLLE Rollup"
+  },
+  {
+   "fieldname": "qty_disposed",
+   "fieldtype": "Float",
+   "label": "Qty Disposed",
+   "read_only": 1,
+   "default": "0",
+   "description": "Derived: SUM(SLLE.qty WHERE entry_type=Consume AND is_cancelled=0)."
+  },
+  {
+   "fieldname": "qty_remaining",
+   "fieldtype": "Float",
+   "label": "Qty Remaining",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Derived: qty_acquired − qty_disposed."
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qty_reserved",
+   "fieldtype": "Float",
+   "label": "Qty Reserved",
+   "read_only": 1,
+   "default": "0",
+   "description": "Derived: SUM(SLLE.qty WHERE entry_type=Reserve AND is_cancelled=0) - matching Reserve Release."
+  },
+  {
+   "fieldname": "remaining_cost",
+   "fieldtype": "Currency",
+   "label": "Remaining Cost",
+   "options": "INR",
+   "read_only": 1,
+   "description": "qty_remaining × cost_basis_per_unit."
+  },
+  {
+   "fieldname": "section_state",
+   "fieldtype": "Section Break",
+   "label": "State"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nPartially Disposed\nFully Disposed",
+   "read_only": 1,
+   "default": "Open",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "lot_state",
+   "fieldtype": "Select",
+   "label": "Lot State",
+   "options": "Sealed\nOpen\nReserved\nClosed",
+   "default": "Open",
+   "read_only": 1,
+   "description": "Sealed=pending compliance. Open=consumable. Reserved=locked against a Trade Order. Closed=fully consumed."
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "Source Document",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "purchase_reference",
+   "fieldtype": "Select",
+   "label": "Acquisition Source",
+   "options": "Purchase Invoice\nJournal Entry\nTrade Order\nPortfolio Transfer\nManual"
+  },
+  {
+   "fieldname": "purchase_reference_link",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Document Name",
+   "options": "purchase_reference"
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "acquired_via_trade_order",
+   "fieldtype": "Link",
+   "label": "Acquired via Trade Order",
+   "options": "Trade Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Customer",
+   "read": 1
+  }
+ ],
+ "sort_field": "acquisition_date",
+ "sort_order": "ASC",
+ "states": []
+}

@@ -1,0 +1,100 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:PAL-{job}-{#####}",
+ "creation": "2026-05-18 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Polemarch Audit Log",
+ "title_field": "job",
+ "search_fields": "job",
+ "track_changes": 0,
+ "field_order": [
+  "job",
+  "ran_at",
+  "column_break_1",
+  "checked_count",
+  "mismatch_count",
+  "section_details",
+  "details",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "job",
+   "fieldtype": "Data",
+   "label": "Job",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "length": 140,
+   "description": "Name of the audit function that produced this row."
+  },
+  {
+   "fieldname": "ran_at",
+   "fieldtype": "Datetime",
+   "label": "Ran At",
+   "default": "now",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "checked_count",
+   "fieldtype": "Int",
+   "label": "Checked Count",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "mismatch_count",
+   "fieldtype": "Int",
+   "label": "Mismatch Count",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Long Text",
+   "label": "Details (JSON)",
+   "read_only": 1,
+   "description": "First 50 mismatches as JSON."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Operator Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "ran_at",
+ "sort_order": "DESC",
+ "states": []
+}
