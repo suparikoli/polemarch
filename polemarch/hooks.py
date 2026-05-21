@@ -51,41 +51,41 @@ doc_events = {
     # Inventory / Long-Term Investments and mint Security Lots + Acquire
     # SLLE rows. Validates the expense account BEFORE GL posting.
     "Purchase Invoice": {
-        "validate": "polemarch.trading.hooks.purchase_invoice_validate",
-        "on_submit": "polemarch.trading.hooks.purchase_invoice_on_submit",
-        "on_cancel": "polemarch.trading.hooks.purchase_invoice_on_cancel",
+        "validate": "polemarch.polemarch_trading.hooks.purchase_invoice_validate",
+        "on_submit": "polemarch.polemarch_trading.hooks.purchase_invoice_on_submit",
+        "on_cancel": "polemarch.polemarch_trading.hooks.purchase_invoice_on_cancel",
     },
     # Phase 2 stub; Phase 5 will wire wallet credit on bank-recon.
     "Bank Transaction": {
-        "on_submit": "polemarch.trading.hooks.bank_transaction_on_submit",
+        "on_submit": "polemarch.polemarch_trading.hooks.bank_transaction_on_submit",
     },
     "Journal Entry": {
-        "validate": "polemarch.trading.hooks.journal_entry_validate",
+        "validate": "polemarch.polemarch_trading.hooks.journal_entry_validate",
     },
 }
 
 scheduler_events = {
     "hourly": [
         "polemarch.medusa.reconcile.run_hourly",
-        "polemarch.trading.settlement.run_pending",
+        "polemarch.polemarch_trading.settlement.run_pending",
         # Phase 6 — auto-spawn a Fund-Only Settlement Run if Pending due exist
         # and no live run is executing. Defensive; safe on every tick.
-        "polemarch.trading.doctype.settlement_run.settlement_run.run_daily_batch",
+        "polemarch.polemarch_trading.doctype.settlement_run.settlement_run.run_daily_batch",
     ],
     "daily": [
         # Phase 1+ reconciliation. Each job detects mismatches and logs them;
         # none of them auto-heal.
-        "polemarch.trading.audit.verify_wallet_balance_matches_ledger",
-        "polemarch.trading.audit.verify_security_position_matches_lots",
-        "polemarch.trading.audit.verify_holding_lot_ledger_mirror",
-        "polemarch.trading.audit.verify_holding_disposal_chain",
+        "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
+        "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
+        "polemarch.polemarch_trading.audit.verify_holding_lot_ledger_mirror",
+        "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         # Phase 5 — purge expired idempotency cache rows.
-        "polemarch.trading.api._idempotency.purge_expired",
+        "polemarch.polemarch_trading.api._idempotency.purge_expired",
     ],
     "cron": {
         # Phase 6 — mark-to-market at 06:00 IST (00:30 UTC).
         "30 0 * * *": [
-            "polemarch.trading.positions.mark_to_market_unrealized_pnl",
+            "polemarch.polemarch_trading.positions.mark_to_market_unrealized_pnl",
         ],
     },
 }
@@ -97,25 +97,25 @@ scheduler_events = {
 # the standard role permissions take over. Flip the flag in site_config.json
 # once mappings between Users and Customers are verified.
 permission_query_conditions = {
-    "Wallet":                "polemarch.trading.permissions.wallet_perm_query",
-    "Wallet Transaction":    "polemarch.trading.permissions.wallet_transaction_perm_query",
-    "Trade Order":           "polemarch.trading.permissions.trade_order_perm_query",
-    "Settlement Instruction": "polemarch.trading.permissions.settlement_perm_query",
-    "Security Position":     "polemarch.trading.permissions.security_position_perm_query",
-    "Security Lot":          "polemarch.trading.permissions.security_lot_perm_query",
-    "Investment Disposal":   "polemarch.trading.permissions.investment_disposal_perm_query",
-    "Portfolio Transfer":    "polemarch.trading.permissions.portfolio_transfer_perm_query",
+    "Wallet":                "polemarch.polemarch_trading.permissions.wallet_perm_query",
+    "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_perm_query",
+    "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_perm_query",
+    "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_perm_query",
+    "Security Position":     "polemarch.polemarch_trading.permissions.security_position_perm_query",
+    "Security Lot":          "polemarch.polemarch_trading.permissions.security_lot_perm_query",
+    "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_perm_query",
+    "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_perm_query",
 }
 
 has_permission = {
-    "Wallet":                "polemarch.trading.permissions.wallet_has_permission",
-    "Wallet Transaction":    "polemarch.trading.permissions.wallet_transaction_has_permission",
-    "Trade Order":           "polemarch.trading.permissions.trade_order_has_permission",
-    "Settlement Instruction": "polemarch.trading.permissions.settlement_has_permission",
-    "Security Position":     "polemarch.trading.permissions.security_position_has_permission",
-    "Security Lot":          "polemarch.trading.permissions.security_lot_has_permission",
-    "Investment Disposal":   "polemarch.trading.permissions.investment_disposal_has_permission",
-    "Portfolio Transfer":    "polemarch.trading.permissions.portfolio_transfer_has_permission",
+    "Wallet":                "polemarch.polemarch_trading.permissions.wallet_has_permission",
+    "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_has_permission",
+    "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_has_permission",
+    "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_has_permission",
+    "Security Position":     "polemarch.polemarch_trading.permissions.security_position_has_permission",
+    "Security Lot":          "polemarch.polemarch_trading.permissions.security_lot_has_permission",
+    "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_has_permission",
+    "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_has_permission",
 }
 
 fixtures = [

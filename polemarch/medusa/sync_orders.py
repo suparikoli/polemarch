@@ -85,14 +85,14 @@ def handle_order_placed(data: dict, event_id: str = None):
 
 def _maybe_create_trade_orders_from_medusa(order, customer_name, items, medusa_order_id, event_id):
     try:
-        from polemarch.trading.feature_flags import is_enabled
+        from polemarch.polemarch_trading.feature_flags import is_enabled
 
         if not is_enabled("CREATE_TRADE_ORDER_FROM_MEDUSA"):
             return
         if not frappe.db.table_exists("Trade Order"):
             return
 
-        from polemarch.trading.api import trades as trades_api
+        from polemarch.polemarch_trading.api import trades as trades_api
 
         for line in items:
             security = frappe.db.get_value("Item", line["item_code"], "custom_security")

@@ -138,14 +138,14 @@ class InvestmentDisposal(Document):
         flag it for manual reconciliation.
         """
         try:
-            from polemarch.trading.feature_flags import is_enabled
+            from polemarch.polemarch_trading.feature_flags import is_enabled
 
             if not is_enabled("MIRROR_WRITE_SLLE"):
                 return
             if not frappe.db.table_exists("Security Lot Ledger Entry"):
                 return
 
-            from polemarch.trading import fifo as fifo_engine
+            from polemarch.polemarch_trading import fifo as fifo_engine
 
             if direction == +1:
                 self._slle_write_consume_rows(fifo_engine)
@@ -208,12 +208,12 @@ class InvestmentDisposal(Document):
         audit job will surface any missing JEs for manual reconciliation.
         """
         try:
-            from polemarch.trading.feature_flags import is_enabled
+            from polemarch.polemarch_trading.feature_flags import is_enabled
 
             if not is_enabled("AUTO_POST_CAPITAL_GAINS_JE"):
                 return
 
-            from polemarch.trading import accounting as accounting_engine
+            from polemarch.polemarch_trading import accounting as accounting_engine
 
             je_name = accounting_engine.post_cost_recognition_je_for_disposal(self)
             if je_name and hasattr(self, "journal_entry_ref"):
@@ -229,12 +229,12 @@ class InvestmentDisposal(Document):
         ERPNext's JE.cancel() emits reverse GL entries natively.
         """
         try:
-            from polemarch.trading.feature_flags import is_enabled
+            from polemarch.polemarch_trading.feature_flags import is_enabled
 
             if not is_enabled("AUTO_POST_CAPITAL_GAINS_JE"):
                 return
 
-            from polemarch.trading import accounting as accounting_engine
+            from polemarch.polemarch_trading import accounting as accounting_engine
 
             accounting_engine.cancel_journal_entry_for_source(self.doctype, self.name)
         except Exception:

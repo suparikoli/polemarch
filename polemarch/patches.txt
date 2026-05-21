@@ -10,21 +10,21 @@ polemarch.patches.v0_0_1.link_polemarch_items_to_non_gst_template
 polemarch.patches.v0_0_1.strip_hsn_from_polemarch_items
 # v0_2_0 — Polemarch Trading: Phase 0 (Prep)
 # Order matters: CoA → Portfolios → custom fields → backfills.
-polemarch.trading.patches.v0_2_0.seed_coa
-polemarch.trading.patches.v0_2_0.seed_portfolios
-polemarch.trading.patches.v0_2_0.add_custom_security_field_to_item
-polemarch.trading.patches.v0_2_0.add_custom_portfolio_field_to_investment_holding
-polemarch.trading.patches.v0_2_0.backfill_security_from_polemarch_items
-polemarch.trading.patches.v0_2_0.backfill_portfolio_on_holdings
+polemarch.polemarch_trading.patches.v0_2_0.seed_coa
+polemarch.polemarch_trading.patches.v0_2_0.seed_portfolios
+polemarch.polemarch_trading.patches.v0_2_0.add_custom_security_field_to_item
+polemarch.polemarch_trading.patches.v0_2_0.add_custom_portfolio_field_to_investment_holding
+polemarch.polemarch_trading.patches.v0_2_0.backfill_security_from_polemarch_items
+polemarch.polemarch_trading.patches.v0_2_0.backfill_portfolio_on_holdings
 # Phase 1 — Core ledgers (Wallet / SLLE / Position) and mirror-seed.
 # Order: wallets → lots (needs Security + Portfolio) → SLLE (needs lots) → positions (needs lots).
-polemarch.trading.patches.v0_2_0.seed_wallets_for_polemarch_customers
-polemarch.trading.patches.v0_2_0.backfill_security_lots_from_holdings
-polemarch.trading.patches.v0_2_0.mirror_seed_slle_from_holdings
-polemarch.trading.patches.v0_2_0.seed_position_from_holdings
+polemarch.polemarch_trading.patches.v0_2_0.seed_wallets_for_polemarch_customers
+polemarch.polemarch_trading.patches.v0_2_0.backfill_security_lots_from_holdings
+polemarch.polemarch_trading.patches.v0_2_0.mirror_seed_slle_from_holdings
+polemarch.polemarch_trading.patches.v0_2_0.seed_position_from_holdings
 # Phase 3 — Capital Gains auto-JE plumbing.
 # `add_custom_fields_to_je` is the only auto-run Phase 3 patch.
 # `backfill_capital_gains_je` is OPT-IN — run manually via `bench execute`.
-polemarch.trading.patches.v0_3_0.add_custom_fields_to_je
+polemarch.polemarch_trading.patches.v0_3_0.add_custom_fields_to_je
 # Phase 4 — Portfolio Transfer + roles.
-polemarch.trading.patches.v0_4_0.seed_polemarch_roles
+polemarch.polemarch_trading.patches.v0_4_0.seed_polemarch_roles

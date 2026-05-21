@@ -25,7 +25,7 @@ def _maybe_ensure_wallet(doc):
     a Wallet exists. Gated by feature flag and skipped silently if Wallet
     doctype is not yet migrated (pre-Phase-1 deployments)."""
     try:
-        from polemarch.trading.feature_flags import is_enabled
+        from polemarch.polemarch_trading.feature_flags import is_enabled
 
         if not is_enabled("AUTO_CREATE_WALLET_ON_POLEMARCH_FLAG"):
             return
