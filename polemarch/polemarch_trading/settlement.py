@@ -91,6 +91,15 @@ def fund(settlement_name: str) -> str:
         si.seller_wallet_txn = wallet_txn
 
     si.transition_to("Funded")
+
+    # The Trade Order state machine requires Matched → Settling → Settled.
+    # When the API layer drives settlement via `settle_order`, the Settling
+    # transition happens explicitly. But back-office / scheduler / runner-
+    # driven callers go straight to fund() + clear(), so we advance here so
+    # the engine is self-consistent without relying on the API layer.
+    if order.order_state == "Matched":
+        order.reload()
+        order.transition_to("Settling")
     return si.name
 
 
