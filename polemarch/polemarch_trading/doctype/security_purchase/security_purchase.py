@@ -160,7 +160,16 @@ class SecurityPurchase(Document):
         if existing:
             return existing
 
-        holding = frappe.get_doc({
+        # Carry the operator's classification choice through to the new
+        # Holding. Default is Unallocated (the InvestmentHolding.before_insert
+        # hook starts the 2-working-day timer in that case). If the operator
+        # picked Stock in Trade or Investment, stamp classified_by /
+        # classified_on so audits show this was a deliberate at-purchase
+        # decision, not the auto-classifier.
+        classification = (
+            getattr(self, "intended_classification", None) or "Unallocated"
+        )
+        holding_fields = {
             "doctype": "Investment Holding",
             "security": self.security,
             # `item` stays on the JSON until the v0_9_0 drop patch ships;
@@ -171,7 +180,13 @@ class SecurityPurchase(Document):
             "cost_basis_per_unit": flt(self.rate),
             "purchase_reference": "Security Purchase",
             "purchase_reference_link": self.name,
-        })
+            "classification": classification,
+        }
+        if classification != "Unallocated":
+            holding_fields["classified_by"] = frappe.session.user
+            holding_fields["classified_on"] = frappe.utils.now_datetime()
+
+        holding = frappe.get_doc(holding_fields)
         holding.flags.ignore_permissions = True
         holding.insert(ignore_permissions=True)
         return holding.name

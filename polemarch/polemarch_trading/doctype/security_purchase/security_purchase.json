@@ -21,6 +21,7 @@
   "column_break_1",
   "posting_date",
   "supplier",
+  "intended_classification",
   "section_amounts",
   "qty",
   "rate",
@@ -92,6 +93,17 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "description": "Counterparty selling the shares to Polemarch."
+  },
+  {
+   "fieldname": "intended_classification",
+   "fieldtype": "Select",
+   "label": "Classification",
+   "options": "Unallocated\nStock in Trade\nInvestment",
+   "default": "Unallocated",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Where the new Holding lands. Leave on Unallocated to keep the 2-working-day classification window. Pick Stock in Trade or Investment to skip the window and lock the classification at submit."
   },
   {
    "fieldname": "section_amounts",
