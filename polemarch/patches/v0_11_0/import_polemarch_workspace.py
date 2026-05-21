@@ -21,10 +21,13 @@ import os
 import frappe
 
 
-_WORKSPACE_PATH = "polemarch/workspace/polemarch/polemarch.json"
+_WORKSPACE_PATH = "workspace/polemarch/polemarch.json"
 
 
 def execute():
+    # frappe.get_app_path("polemarch") returns the inner package directory
+    # (`<bench>/apps/polemarch/polemarch`), not the repo root — joining the
+    # path relative to that.
     app_path = frappe.get_app_path("polemarch")
     full_path = os.path.join(app_path, _WORKSPACE_PATH)
 
