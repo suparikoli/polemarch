@@ -90,13 +90,14 @@ class SecurityPurchase(Document):
         """If the operator leaves accounts blank, pick sensible defaults.
         Both are still `reqd=1` in the JSON, so this only ever runs when the
         user explicitly cleared a fetched default — useful for the API path
-        where we construct the doc programmatically."""
+        where we construct the doc programmatically. Account-name lookup
+        goes through `account_name` (not `name`) because ERPNext composes
+        Account.name as `<account_number> - <account_name> - <abbr>` when
+        an account_number is set, so the literal string won't match."""
         if not self.cost_to_account:
-            abbr = frappe.db.get_value("Company", self.company, "abbr")
-            if abbr:
-                candidate = f"Securities Inventory - Trading - {abbr}"
-                if frappe.db.exists("Account", candidate):
-                    self.cost_to_account = candidate
+            self.cost_to_account = _resolve_account_by_name(
+                self.company, "Securities Inventory - Trading"
+            )
         if not self.paid_from_account and self.supplier:
             default_payable = frappe.db.get_value(
                 "Company", self.company, "default_payable_account"
@@ -228,3 +229,19 @@ def _company_default_cost_center(company: str):
 
 def _is_payable_account(account: str) -> bool:
     return frappe.db.get_value("Account", account, "account_type") == "Payable"
+
+
+def _resolve_account_by_name(company: str, account_name: str):
+    """Look up an Account by its `account_name` field (not the composite
+    `name`). Returns the canonical Account.name suitable for storing in a
+    Link field, or None if not found.
+    """
+    return frappe.db.get_value(
+        "Account",
+        {
+            "company": company,
+            "account_name": account_name,
+            "disabled": 0,
+        },
+        "name",
+    )

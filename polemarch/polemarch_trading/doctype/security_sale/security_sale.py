@@ -102,11 +102,13 @@ class SecuritySale(Document):
             )
 
     def _default_accounts(self):
-        abbr = frappe.db.get_value("Company", self.company, "abbr")
-        if abbr and not self.revenue_account:
-            candidate = f"Trading Revenue - Securities - {abbr}"
-            if frappe.db.exists("Account", candidate):
-                self.revenue_account = candidate
+        """ERPNext composes Account.name as `<account_number> - <account_name>
+        - <abbr>` when account_number is set, so the literal-string compose
+        won't match a populated CoA. Resolve via `account_name` instead."""
+        if not self.revenue_account:
+            self.revenue_account = _resolve_account_by_name(
+                self.company, "Trading Revenue - Securities"
+            )
         if not self.paid_to_account:
             default_receivable = frappe.db.get_value(
                 "Company", self.company, "default_receivable_account"
@@ -242,3 +244,19 @@ def _company_default_cost_center(company: str):
 
 def _is_receivable_account(account: str) -> bool:
     return frappe.db.get_value("Account", account, "account_type") == "Receivable"
+
+
+def _resolve_account_by_name(company: str, account_name: str):
+    """Look up an Account by its `account_name` field. ERPNext composes
+    Account.name as `<account_number> - <account_name> - <abbr>` when
+    account_number is set, so a literal compose by abbr suffix won't
+    match. Returns the canonical Account.name or None."""
+    return frappe.db.get_value(
+        "Account",
+        {
+            "company": company,
+            "account_name": account_name,
+            "disabled": 0,
+        },
+        "name",
+    )

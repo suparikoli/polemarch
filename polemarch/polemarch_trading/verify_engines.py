@@ -265,6 +265,15 @@ def _ensure_security() -> str:
     return doc.name
 
 
+def _lookup_account(company: str, account_name: str):
+    """Resolve an Account by account_name (not the composite `name`)."""
+    return frappe.db.get_value(
+        "Account",
+        {"company": company, "account_name": account_name, "disabled": 0},
+        "name",
+    )
+
+
 def _ensure_supplier() -> str:
     """Security Purchase requires a Supplier counterparty. Reuse a seeded
     test supplier if present, else mint one keyed off the fixture prefix.
@@ -329,8 +338,11 @@ def _create_security_purchase(security: str, company: str, supplier: str,
                               qty: float, rate: float) -> str:
     """Submit a Security Purchase. Returns the submitted SP name. Its
     on_submit handler mints the linked Investment Holding + posts the JE."""
-    abbr = frappe.db.get_value("Company", company, "abbr")
-    cost_to = f"Securities Inventory - Trading - {abbr}"
+    cost_to = _lookup_account(company, "Securities Inventory - Trading")
+    if not cost_to:
+        raise RuntimeError(
+            f"Securities Inventory - Trading account not found for {company}"
+        )
     paid_from = frappe.db.get_value("Company", company, "default_payable_account")
     if not paid_from:
         raise RuntimeError(f"Company {company} has no default_payable_account")
@@ -355,8 +367,11 @@ def _create_security_purchase(security: str, company: str, supplier: str,
 
 def _create_security_sale(security: str, company: str, customer: str,
                           qty: float, rate: float, from_classification: str) -> str:
-    abbr = frappe.db.get_value("Company", company, "abbr")
-    revenue = f"Trading Revenue - Securities - {abbr}"
+    revenue = _lookup_account(company, "Trading Revenue - Securities")
+    if not revenue:
+        raise RuntimeError(
+            f"Trading Revenue - Securities account not found for {company}"
+        )
     paid_to = frappe.db.get_value("Company", company, "default_receivable_account")
     if not paid_to:
         raise RuntimeError(f"Company {company} has no default_receivable_account")
