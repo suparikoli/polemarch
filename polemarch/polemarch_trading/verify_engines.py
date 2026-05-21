@@ -126,7 +126,51 @@ def execute(verbose: bool = False) -> dict:
         ))
         step("17_assert_fifo_walked_oldest_first", lambda: _assert_fifo_plan(plan, lot_a, lot_b))
 
-        # 5) Final cleanup.
+        # 5) Trade Order lifecycle — Customer Sell against own portfolio.
+        customer_portfolio = step(
+            "18_create_customer_investment_portfolio",
+            lambda: _ensure_portfolio(company, "Investment", "Customer", customer),
+        )
+        cust_lot_a = step("19_customer_lot_A_60units_at_400", lambda: _create_lot(
+            security=security, portfolio=customer_portfolio, company=company,
+            acq_date="2023-01-15", qty=60, cost=400, owning_customer=customer,
+        ))
+        cust_lot_b = step("20_customer_lot_B_40units_at_450", lambda: _create_lot(
+            security=security, portfolio=customer_portfolio, company=company,
+            acq_date="2024-08-01", qty=40, cost=450, owning_customer=customer,
+        ))
+
+        # Submit a Sell + Customer-book order for 80 units at ₹600
+        # (expected proceeds: 80 × 600 = 48,000; cost basis: 60×400 + 20×450 = 33,000).
+        trade_order = step("21_create_sell_trade_order", lambda: _create_trade_order(
+            customer=customer, portfolio=customer_portfolio, security=security,
+            company=company, side="Sell", qty=80, price=600,
+        ))
+        step("22_submit_trade_order", lambda: _submit_trade_order(trade_order))
+        step("23_assert_reserve_slles_written",
+             lambda: _assert_slle_count(trade_order, entry_type="Reserve", expected=2))
+
+        step("24_match_trade_order", lambda: _match_trade_order(trade_order))
+        step("25_assert_order_state_matched",
+             lambda: _assert_trade_order_state(trade_order, expected="Matched"))
+        step("26_assert_settlement_instruction_created",
+             lambda: _assert_settlement_instruction(trade_order, expected_state="Pending"))
+
+        step("27_fund_settlement", lambda: _fund_via_engine(trade_order))
+        step("28_assert_settlement_funded",
+             lambda: _assert_settlement_instruction(trade_order, expected_state="Funded"))
+        step("29_assert_wallet_credited_payout",
+             lambda: _assert_balance(wallet, available=148000, reserved=0, total=148000))
+
+        step("30_clear_settlement", lambda: _clear_via_engine(trade_order))
+        step("31_assert_consume_slles_written",
+             lambda: _assert_slle_count(trade_order, entry_type="Consume", expected=2))
+        step("32_assert_order_state_settled",
+             lambda: _assert_trade_order_state(trade_order, expected="Settled"))
+        step("33_assert_settlement_cleared",
+             lambda: _assert_settlement_instruction(trade_order, expected_state="Cleared"))
+
+        # 6) Final cleanup.
         step("99_post_cleanup", _cleanup)
 
         summary["ok"] = True
@@ -261,12 +305,13 @@ def _ensure_wallet(customer: str, company: str) -> str:
     return doc.name
 
 
-def _create_lot(security: str, portfolio: str, company: str, acq_date: str, qty: float, cost: float) -> str:
+def _create_lot(security: str, portfolio: str, company: str, acq_date: str, qty: float, cost: float, owning_customer: str | None = None) -> str:
     doc = frappe.get_doc({
         "doctype": "Security Lot",
         "security": security,
         "portfolio": portfolio,
         "company": company,
+        "owning_customer": owning_customer,
         "acquisition_date": acq_date,
         "qty_acquired": qty,
         "cost_basis_per_unit": cost,
@@ -331,6 +376,97 @@ def _find_wt(wallet: str, txn_type: str) -> str:
     return name
 
 
+def _create_trade_order(
+    customer: str, portfolio: str, security: str, company: str,
+    side: str, qty: float, price: float,
+) -> str:
+    doc = frappe.get_doc({
+        "doctype": "Trade Order",
+        "side": side,
+        "book": "Customer",
+        "portfolio": portfolio,
+        "security": security,
+        "customer": customer,
+        "company": company,
+        "posting_date": now_datetime(),
+        "qty": qty,
+        "price": price,
+        "notes": "Smoke test trade order",
+    })
+    doc.flags.ignore_permissions = True
+    doc.insert(ignore_permissions=True)
+    return doc.name
+
+
+def _submit_trade_order(name: str):
+    doc = frappe.get_doc("Trade Order", name)
+    doc.flags.ignore_permissions = True
+    doc.submit()
+    return {"order_state": doc.order_state, "reservation_id": doc.reservation_id}
+
+
+def _match_trade_order(name: str):
+    from polemarch.polemarch_trading import matching as matching_engine
+    matching_engine.match(name)
+    doc = frappe.get_doc("Trade Order", name)
+    return {"order_state": doc.order_state, "lots_consumed_count": len(doc.lots_consumed or [])}
+
+
+def _fund_via_engine(trade_order_name: str):
+    from polemarch.polemarch_trading import settlement as settlement_engine
+    si_name = frappe.db.get_value("Trade Order", trade_order_name, "settlement_instruction")
+    if not si_name:
+        raise AssertionError(f"Trade Order {trade_order_name} has no Settlement Instruction")
+    settlement_engine.fund(si_name)
+    return {"settlement_instruction": si_name}
+
+
+def _clear_via_engine(trade_order_name: str):
+    from polemarch.polemarch_trading import settlement as settlement_engine
+    si_name = frappe.db.get_value("Trade Order", trade_order_name, "settlement_instruction")
+    settlement_engine.clear(si_name)
+    return {"settlement_instruction": si_name}
+
+
+def _assert_slle_count(trade_order: str, entry_type: str, expected: int) -> dict:
+    count = frappe.db.count(
+        "Security Lot Ledger Entry",
+        {
+            "reference_doctype": "Trade Order",
+            "reference_name": trade_order,
+            "entry_type": entry_type,
+            "is_cancelled": 0,
+            "docstatus": 1,
+        },
+    )
+    if count != expected:
+        raise AssertionError(
+            f"Expected {expected} {entry_type} SLLE rows for {trade_order}, got {count}"
+        )
+    return {"entry_type": entry_type, "count": count}
+
+
+def _assert_trade_order_state(name: str, expected: str) -> dict:
+    actual = frappe.db.get_value("Trade Order", name, "order_state")
+    if actual != expected:
+        raise AssertionError(
+            f"Trade Order {name}: expected order_state={expected}, got {actual}"
+        )
+    return {"order_state": actual}
+
+
+def _assert_settlement_instruction(trade_order: str, expected_state: str) -> dict:
+    si_name = frappe.db.get_value("Trade Order", trade_order, "settlement_instruction")
+    if not si_name:
+        raise AssertionError(f"Trade Order {trade_order} has no Settlement Instruction")
+    actual = frappe.db.get_value("Settlement Instruction", si_name, "settlement_state")
+    if actual != expected_state:
+        raise AssertionError(
+            f"Settlement {si_name}: expected state={expected_state}, got {actual}"
+        )
+    return {"settlement_instruction": si_name, "state": actual}
+
+
 def _assert_fifo_plan(plan, lot_a: str, lot_b: str) -> dict:
     if not plan:
         raise AssertionError("FIFO consume returned empty plan")
@@ -354,7 +490,41 @@ def _assert_fifo_plan(plan, lot_a: str, lot_b: str) -> dict:
 
 
 def _cleanup():
-    """Drop all SMOKE- fixtures + their dependents. Order matters."""
+    """Drop all SMOKE- fixtures + their dependents. Order matters.
+
+    Submittable docs (Trade Order, Settlement Instruction, Wallet Transaction,
+    Security Lot Ledger Entry) are deleted directly via SQL — bypasses the
+    cancel-then-delete cycle that the ORM would impose. Safe here because the
+    smoke fixture has no audit-trail constraint to honour.
+    """
+    test_customer = _TEST_CUSTOMER
+
+    # Trade Order Lot Consumption (child of Trade Order).
+    frappe.db.sql(
+        """
+        DELETE FROM `tabTrade Order Lot Consumption`
+         WHERE parent IN (SELECT name FROM `tabTrade Order` WHERE customer = %s)
+        """,
+        (test_customer,),
+    )
+    # Settlement Instructions linked to the smoke customer's Trade Orders.
+    frappe.db.sql(
+        """
+        DELETE FROM `tabSettlement Instruction`
+         WHERE trade_order IN (SELECT name FROM `tabTrade Order` WHERE customer = %s)
+        """,
+        (test_customer,),
+    )
+    # Trade Orders for the smoke customer.
+    frappe.db.sql(
+        "DELETE FROM `tabTrade Order` WHERE customer = %s",
+        (test_customer,),
+    )
+    # Security Position rows for the smoke customer.
+    frappe.db.sql(
+        "DELETE FROM `tabSecurity Position` WHERE customer = %s",
+        (test_customer,),
+    )
     # SLLE rows referencing smoke lots/transfers.
     frappe.db.sql("""
         DELETE FROM `tabSecurity Lot Ledger Entry`
@@ -364,17 +534,18 @@ def _cleanup():
     frappe.db.sql("DELETE FROM `tabSecurity Lot` WHERE notes = 'Smoke test lot'")
     # Wallet Transactions referencing the smoke wallet.
     frappe.db.sql(
-        f"DELETE FROM `tabWallet Transaction` WHERE wallet = %s",
-        (f"WAL-{_TEST_CUSTOMER}",),
+        "DELETE FROM `tabWallet Transaction` WHERE wallet = %s",
+        (f"WAL-{test_customer}",),
     )
     # Wallet.
-    frappe.db.sql("DELETE FROM `tabWallet` WHERE customer = %s", (_TEST_CUSTOMER,))
+    frappe.db.sql("DELETE FROM `tabWallet` WHERE customer = %s", (test_customer,))
     # Customer.
-    frappe.db.sql("DELETE FROM `tabCustomer` WHERE name = %s", (_TEST_CUSTOMER,))
-    # Portfolios prefixed SMOKE-.
+    frappe.db.sql("DELETE FROM `tabCustomer` WHERE name = %s", (test_customer,))
+    # Portfolios prefixed SMOKE-, plus customer-owned portfolios for the
+    # smoke customer (which carry a normal name, no SMOKE- prefix).
     frappe.db.sql(
-        "DELETE FROM `tabPortfolio` WHERE portfolio_name LIKE %s",
-        (f"{_FIXTURE_PREFIX}%",),
+        "DELETE FROM `tabPortfolio` WHERE portfolio_name LIKE %s OR customer = %s",
+        (f"{_FIXTURE_PREFIX}%", test_customer),
     )
     # Security (only if no Items reference it).
     has_items = frappe.db.exists("Item", {"custom_security": _TEST_ISIN})
