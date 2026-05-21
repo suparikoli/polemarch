@@ -29,6 +29,8 @@ _REQUIRED_DOCTYPES = [
     # Phase 9 — standalone Security purchase + sale doctypes
     "Security Purchase",
     "Security Sale",
+    # Phase 11 — Security Type master (Lead Source pattern)
+    "Security Type",
 ]
 
 _REQUIRED_JE_CUSTOM_FIELDS = ["custom_source_doctype", "custom_source_name"]

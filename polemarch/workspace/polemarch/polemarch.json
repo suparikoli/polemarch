@@ -1,11 +1,8 @@
 {
  "app": "polemarch",
- "charts": [
-  {"chart_name": "Polemarch Trade Volume - Last 6 Months", "label": "Polemarch Trade Volume - Last 6 Months"},
-  {"chart_name": "Polemarch Top Instruments", "label": "Polemarch Top Instruments"}
- ],
- "content": "[{\"id\":\"hdrA\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Polemarch Overview</b></span>\",\"col\":12}},{\"id\":\"ncMTDInv\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Invoices MTD\",\"col\":3}},{\"id\":\"ncMTDValue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Trade Value MTD\",\"col\":3}},{\"id\":\"ncAvgTicket\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Avg Ticket Size MTD\",\"col\":3}},{\"id\":\"ncCustomers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"chTrade\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Trade Volume - Last 6 Months\",\"col\":8}},{\"id\":\"chTop\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Top Instruments\",\"col\":4}},{\"id\":\"hdrC\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Invoices\",\"col\":3}},{\"id\":\"sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Items\",\"col\":3}},{\"id\":\"sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}}]",
- "creation": "2026-05-02 00:00:00",
+ "charts": [],
+ "content": "[{\"id\":\"hdrTrading\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Trading Desk</b></span>\",\"col\":12}},{\"id\":\"scPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Purchase\",\"col\":3}},{\"id\":\"scSale\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Sale\",\"col\":3}},{\"id\":\"scTradeOrder\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trade Order\",\"col\":3}},{\"id\":\"scSettlement\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Pending Settlements\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"scHoldings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open Holdings\",\"col\":3}},{\"id\":\"scDisposals\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Investment Disposal\",\"col\":3}},{\"id\":\"scSecurity\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security\",\"col\":3}},{\"id\":\"scCustomers\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"hdrSec\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Sections</b></span>\",\"col\":12}},{\"id\":\"cdTrading\",\"type\":\"card\",\"data\":{\"card_name\":\"Trading\",\"col\":4}},{\"id\":\"cdInventory\",\"type\":\"card\",\"data\":{\"card_name\":\"Inventory & Holdings\",\"col\":4}},{\"id\":\"cdSecurities\",\"type\":\"card\",\"data\":{\"card_name\":\"Securities\",\"col\":4}},{\"id\":\"cdCustomers\",\"type\":\"card\",\"data\":{\"card_name\":\"Customers & Wallets\",\"col\":4}},{\"id\":\"cdSettlement\",\"type\":\"card\",\"data\":{\"card_name\":\"Settlement\",\"col\":4}},{\"id\":\"cdAudit\",\"type\":\"card\",\"data\":{\"card_name\":\"Audit\",\"col\":4}}]",
+ "creation": "2026-05-22 00:00:00",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -16,32 +13,40 @@
  "is_hidden": 0,
  "label": "Polemarch",
  "links": [
-  {"hidden": 0, "is_query_report": 0, "label": "Sell", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 0, "label": "Sales Invoice", "link_to": "Sales Invoice", "link_type": "DocType", "onboard": 1, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Sales Order", "link_to": "Sales Order", "link_type": "DocType", "onboard": 1, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Customer", "link_to": "Customer", "link_type": "DocType", "onboard": 1, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Item", "link_to": "Item", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Brand", "link_to": "Brand", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Payment Entry", "link_to": "Payment Entry", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Trading",                "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Security Purchase",      "link_to": "Security Purchase",      "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Security Sale",          "link_to": "Security Sale",          "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Trade Order",            "link_to": "Trade Order",            "link_type": "DocType", "onboard": 1, "type": "Link"},
 
-  {"hidden": 0, "is_query_report": 0, "label": "Polemarch Reference", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 0, "label": "DP Details", "link_to": "DP Details", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Bank Details", "link_to": "Bank Details", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Inventory & Holdings",   "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Investment Holding",     "link_to": "Investment Holding",     "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Investment Disposal",    "link_to": "Investment Disposal",    "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Security Position",      "link_to": "Security Position",      "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Portfolio Transfer",     "link_to": "Portfolio Transfer",     "link_type": "DocType", "onboard": 0, "type": "Link"},
 
-  {"hidden": 0, "is_query_report": 0, "label": "Reports", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 1, "label": "Sales Register", "link_to": "Sales Register", "link_type": "Report", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 1, "label": "Accounts Receivable Summary", "link_to": "Accounts Receivable Summary", "link_type": "Report", "onboard": 0, "type": "Link"}
+  {"hidden": 0, "is_query_report": 0, "label": "Securities",             "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Security",               "link_to": "Security",               "link_type": "DocType", "onboard": 1, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Security Type",          "link_to": "Security Type",          "link_type": "DocType", "onboard": 0, "type": "Link"},
+
+  {"hidden": 0, "is_query_report": 0, "label": "Customers & Wallets",    "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Customer",               "link_to": "Customer",               "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Wallet",                 "link_to": "Wallet",                 "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Wallet Transaction",     "link_to": "Wallet Transaction",     "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Portfolio",              "link_to": "Portfolio",              "link_type": "DocType", "onboard": 0, "type": "Link"},
+
+  {"hidden": 0, "is_query_report": 0, "label": "Settlement",             "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Settlement Instruction", "link_to": "Settlement Instruction", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Settlement Run",         "link_to": "Settlement Run",         "link_type": "DocType", "onboard": 0, "type": "Link"},
+
+  {"hidden": 0, "is_query_report": 0, "label": "Audit",                  "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Polemarch Audit Log",    "link_to": "Polemarch Audit Log",    "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Journal Entry",          "link_to": "Journal Entry",          "link_type": "DocType", "onboard": 0, "type": "Link"}
  ],
- "modified": "2026-05-02 00:00:00",
+ "modified": "2026-05-22 00:00:00",
  "modified_by": "Administrator",
  "module": "Polemarch Customizations",
  "name": "Polemarch",
- "number_cards": [
-  {"number_card_name": "Polemarch Invoices MTD", "label": "Polemarch Invoices MTD"},
-  {"number_card_name": "Polemarch Trade Value MTD", "label": "Polemarch Trade Value MTD"},
-  {"number_card_name": "Avg Ticket Size MTD", "label": "Avg Ticket Size MTD"},
-  {"number_card_name": "Polemarch Customers", "label": "Polemarch Customers"}
- ],
+ "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
@@ -50,9 +55,14 @@
  "roles": [],
  "sequence_id": 100,
  "shortcuts": [
-  {"color": "Blue", "doc_view": "List", "format": "{} Open", "label": "Polemarch Invoices", "link_to": "Sales Invoice", "stats_filter": "{\"custom_is_polemarch_invoice\":1}", "type": "DocType"},
-  {"color": "Yellow", "doc_view": "List", "label": "Polemarch Items", "link_to": "Item", "stats_filter": "{\"brand\":\"Polemarch\"}", "type": "DocType"},
-  {"color": "Green", "doc_view": "List", "label": "Polemarch Customers", "link_to": "Customer", "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"}
+  {"color": "Blue",   "doc_view": "List", "format": "{} Draft+",  "label": "Security Purchase",     "link_to": "Security Purchase",     "stats_filter": "{\"docstatus\":[\"<\",2]}", "type": "DocType"},
+  {"color": "Green",  "doc_view": "List", "format": "{} Draft+",  "label": "Security Sale",         "link_to": "Security Sale",         "stats_filter": "{\"docstatus\":[\"<\",2]}", "type": "DocType"},
+  {"color": "Yellow", "doc_view": "List", "format": "{} Open",    "label": "Trade Order",           "link_to": "Trade Order",           "stats_filter": "{\"order_state\":[\"in\",[\"Submitted\",\"Matched\",\"Settling\"]]}", "type": "DocType"},
+  {"color": "Red",    "doc_view": "List", "format": "{} Pending", "label": "Pending Settlements",   "link_to": "Settlement Instruction","stats_filter": "{\"settlement_state\":\"Pending\"}", "type": "DocType"},
+  {"color": "Cyan",   "doc_view": "List", "format": "{} Open",    "label": "Open Holdings",         "link_to": "Investment Holding",    "stats_filter": "{\"status\":[\"in\",[\"Open\",\"Partially Disposed\"]]}", "type": "DocType"},
+  {"color": "Purple", "doc_view": "List",                          "label": "Investment Disposal",   "link_to": "Investment Disposal",                                                                                  "type": "DocType"},
+  {"color": "Gray",   "doc_view": "List",                          "label": "Security",              "link_to": "Security",                                                                                            "type": "DocType"},
+  {"color": "Pink",   "doc_view": "List", "format": "{} Polemarch", "label": "Polemarch Customers",  "link_to": "Customer",              "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"}
  ],
  "title": "Polemarch"
 }

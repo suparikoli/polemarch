@@ -9,23 +9,27 @@
  "module": "Polemarch Trading",
  "name": "Security",
  "title_field": "security_name",
- "search_fields": "isin,security_name,company_name",
+ "search_fields": "isin,security_name",
  "track_changes": 1,
  "field_order": [
   "isin",
   "security_name",
-  "company_name",
   "column_break_1",
   "security_type",
   "face_value",
-  "sector",
-  "rta",
-  "section_status",
-  "tradable",
-  "active",
   "section_market",
   "last_traded_price",
   "price_updated_on",
+  "section_links",
+  "polemarch_page_url",
+  "calcula_page_url",
+  "section_advanced",
+  "company_name",
+  "sector",
+  "rta",
+  "column_break_2",
+  "tradable",
+  "active",
   "section_meta",
   "notes"
  ],
@@ -49,24 +53,19 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "company_name",
-   "fieldtype": "Data",
-   "label": "Issuer Company Name",
-   "description": "Legal name of the issuer."
-  },
-  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "security_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Security Type",
-   "options": "Equity\nPreference\nBond\nDebenture\nSGB\nWarrant",
-   "default": "Equity",
+   "options": "Security Type",
+   "default": "Unlisted Shares",
    "reqd": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "description": "Type of instrument. Adding a new type? Open Security Type from the workspace and create one."
   },
   {
    "fieldname": "face_value",
@@ -74,6 +73,57 @@
    "label": "Face Value",
    "options": "INR",
    "description": "Statutory face value (₹10 default for equity)."
+  },
+  {
+   "fieldname": "section_market",
+   "fieldtype": "Section Break",
+   "label": "Market Data"
+  },
+  {
+   "fieldname": "last_traded_price",
+   "fieldtype": "Currency",
+   "label": "Latest Price",
+   "options": "INR",
+   "in_list_view": 1,
+   "description": "Most recent traded / marked price. Updated by the mark-to-market scheduler at 06:00 IST daily, or manually."
+  },
+  {
+   "fieldname": "price_updated_on",
+   "fieldtype": "Datetime",
+   "label": "Price Updated On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_links",
+   "fieldtype": "Section Break",
+   "label": "External Links"
+  },
+  {
+   "fieldname": "polemarch_page_url",
+   "fieldtype": "Data",
+   "options": "URL",
+   "label": "Polemarch Page",
+   "description": "Public Polemarch page for this security (storefront)."
+  },
+  {
+   "fieldname": "calcula_page_url",
+   "fieldtype": "Data",
+   "options": "URL",
+   "label": "Calcula Page",
+   "description": "Valuation / financials page on Calcula."
+  },
+  {
+   "fieldname": "section_advanced",
+   "fieldtype": "Section Break",
+   "label": "Issuer & Operational Flags",
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.company_name || doc.sector || doc.rta || !doc.tradable || !doc.active"
+  },
+  {
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "label": "Issuer Company Name",
+   "description": "Legal name of the issuer (optional)."
   },
   {
    "fieldname": "sector",
@@ -87,20 +137,17 @@
    "fieldtype": "Link",
    "label": "Registrar / RTA",
    "options": "Brand",
-   "description": "Registrar & Transfer Agent. Reuses Brand master in Phase 0; dedicated RTA doctype is a Phase 2 candidate."
+   "description": "Registrar & Transfer Agent. Reuses Brand master in Phase 0."
   },
   {
-   "fieldname": "section_status",
-   "fieldtype": "Section Break",
-   "label": "Status"
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "tradable",
    "fieldtype": "Check",
    "label": "Tradable",
    "default": "1",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
    "description": "Toggle off to halt trading without deleting the security."
   },
   {
@@ -108,32 +155,13 @@
    "fieldtype": "Check",
    "label": "Active",
    "default": "1",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
    "description": "Soft-delete flag. Inactive securities cannot back new lots."
-  },
-  {
-   "fieldname": "section_market",
-   "fieldtype": "Section Break",
-   "label": "Market Data"
-  },
-  {
-   "fieldname": "last_traded_price",
-   "fieldtype": "Currency",
-   "label": "Last Traded Price",
-   "options": "INR",
-   "read_only": 1
-  },
-  {
-   "fieldname": "price_updated_on",
-   "fieldtype": "Datetime",
-   "label": "Price Updated On",
-   "read_only": 1
   },
   {
    "fieldname": "section_meta",
    "fieldtype": "Section Break",
-   "label": "Notes"
+   "label": "Notes",
+   "collapsible": 1
   },
   {
    "fieldname": "notes",
@@ -144,35 +172,23 @@
  "permissions": [
   {
    "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "report": 1,
-   "export": 1,
-   "import": 1,
-   "share": 1,
-   "print": 1,
-   "email": 1
+   "read": 1, "write": 1, "create": 1, "delete": 1,
+   "report": 1, "export": 1, "import": 1, "share": 1, "print": 1, "email": 1
   },
   {
    "role": "Accounts Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "report": 1,
-   "export": 1,
-   "share": 1,
-   "print": 1,
-   "email": 1
+   "read": 1, "write": 1, "create": 1,
+   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
   },
   {
-   "role": "Item Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "report": 1,
-   "export": 1
+   "role": "Polemarch Compliance Officer",
+   "read": 1, "write": 1, "create": 1,
+   "report": 1, "export": 1
+  },
+  {
+   "role": "Polemarch Trader",
+   "read": 1, "write": 1, "create": 1,
+   "report": 1, "export": 1
   },
   {
    "role": "Accounts User",

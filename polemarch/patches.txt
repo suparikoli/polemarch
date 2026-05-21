@@ -67,3 +67,10 @@ polemarch.patches.v0_9_0.clear_stock_account_type
 # on customer-Sell).
 polemarch.patches.v0_10_0.add_customer_field_to_investment_holding
 polemarch.patches.v0_10_0.make_trade_order_portfolio_optional
+# v0_11_0 — Workspace + Security UX. Security gains Polemarch + Calcula
+# URL fields, the security_type Select becomes a Link to the new
+# Security Type doctype (Lead Source pattern). Sector / RTA / Tradable
+# / Active move into a collapsible "Issuer & Operational Flags" section.
+# The Polemarch workspace gets rebuilt with categorized sections
+# matching the Phase 9 + 10 doctypes.
+polemarch.patches.v0_11_0.seed_security_types
