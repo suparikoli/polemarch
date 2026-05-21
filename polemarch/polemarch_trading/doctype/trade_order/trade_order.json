@@ -93,10 +93,11 @@
    "fieldname": "book",
    "fieldtype": "Select",
    "label": "Book",
-   "options": "Proprietary\nCustomer",
+   "options": "Customer",
+   "default": "Customer",
    "reqd": 1,
    "in_standard_filter": 1,
-   "description": "Proprietary: company trades its own portfolio. Customer: Polemarch acts as agent/facilitator."
+   "description": "Trade Order is the customer-mediated trade lifecycle (wallet reservation → match → settle → mint Holding). Polemarch's own purchases / sales flow through Security Purchase + Security Sale directly, not Trade Order."
   },
   {
    "fieldname": "posting_date",
