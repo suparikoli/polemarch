@@ -31,7 +31,6 @@ def create_order(
     low_order_fee: float = 0,
     stamp_duty: float = 0,
     idempotency_key: Optional[str] = None,
-    medusa_order_id: Optional[str] = None,
 ):
     """Create + submit a Trade Order. Returns the new doc (as dict)."""
     frappe.only_for(
@@ -55,7 +54,6 @@ def create_order(
             "platform_fee": platform_fee,
             "low_order_fee": low_order_fee,
             "stamp_duty": stamp_duty,
-            "medusa_order_id": medusa_order_id,
         }
     )
     doc.flags.ignore_permissions = True

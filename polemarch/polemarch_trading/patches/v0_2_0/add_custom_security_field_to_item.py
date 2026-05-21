@@ -19,7 +19,7 @@ def execute():
                     "label": "Polemarch Security",
                     "fieldtype": "Link",
                     "options": "Security",
-                    "insert_after": "custom_medusa_product_id",
+                    "insert_after": "item_group",
                     "read_only": 0,
                     "no_copy": 1,
                     "description": (

@@ -39,14 +39,6 @@ function render_polemarch_indicators(frm) {
         const kyc = frm.doc.custom_kyc_status || "Not Started";
         const kyc_color = { "Verified": "green", "Rejected": "red", "In Review": "orange", "Not Started": "grey" }[kyc] || "grey";
         frm.dashboard.add_indicator(__("KYC: {0}", [kyc]), kyc_color);
-        if (frm.doc.custom_medusa_customer_id) {
-            // Indicator only — Medusa-side plugin owns the sync direction
-            // (it reads from Frappe REST). No re-sync button on Frappe side.
-            frm.dashboard.add_indicator(
-                __("Medusa: {0}", [frm.doc.custom_medusa_customer_id]),
-                "blue"
-            );
-        }
 
         if (kyc !== "Verified") {
             frm.add_custom_button(__("Verify KYC"), () => {

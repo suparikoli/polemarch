@@ -10,7 +10,7 @@
  "module": "Polemarch Trading",
  "name": "Trade Order",
  "title_field": "name",
- "search_fields": "security,security_name,isin,customer,medusa_order_id",
+ "search_fields": "security,security_name,isin,customer",
  "track_changes": 1,
  "field_order": [
   "naming_series",
@@ -51,7 +51,6 @@
   "sales_invoice",
   "column_break_6",
   "purchase_invoice",
-  "medusa_order_id",
   "section_fifo",
   "lots_consumed",
   "section_meta",
@@ -319,13 +318,6 @@
    "label": "Purchase Invoice",
    "options": "Purchase Invoice",
    "read_only": 1
-  },
-  {
-   "fieldname": "medusa_order_id",
-   "fieldtype": "Data",
-   "label": "Medusa Order ID",
-   "read_only": 1,
-   "in_standard_filter": 1
   },
   {
    "fieldname": "section_fifo",

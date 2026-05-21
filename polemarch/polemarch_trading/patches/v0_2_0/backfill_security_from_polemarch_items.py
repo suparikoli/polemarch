@@ -28,7 +28,7 @@ def execute():
     items = frappe.get_all(
         "Item",
         filters={"brand": POLEMARCH_BRAND, "disabled": 0},
-        fields=["name", "item_code", "item_name", "custom_medusa_product_id"],
+        fields=["name", "item_code", "item_name"],
     )
 
     has_custom_isin = bool(
@@ -58,7 +58,6 @@ def execute():
             isin=isin,
             security_name=item.item_name or isin,
             item=item.name,
-            medusa_product_id=item.custom_medusa_product_id,
             extras=extras,
         )
 
@@ -111,16 +110,13 @@ def _resolve_isin_and_extras(item, has_custom_isin, has_custom_rta, has_custom_l
     return None, extras
 
 
-def _ensure_security(isin, security_name, item, medusa_product_id, extras):
+def _ensure_security(isin, security_name, item, extras):
     if frappe.db.exists("Security", isin):
-        # Backfill missing item/medusa_product_id on existing row.
+        # Backfill missing item on existing row.
         sec = frappe.get_doc("Security", isin)
         dirty = False
         if not sec.item and item:
             sec.item = item
-            dirty = True
-        if not sec.medusa_product_id and medusa_product_id:
-            sec.medusa_product_id = medusa_product_id
             dirty = True
         if not sec.rta and extras.get("rta"):
             sec.rta = extras["rta"]
@@ -141,7 +137,6 @@ def _ensure_security(isin, security_name, item, medusa_product_id, extras):
             "tradable": 1,
             "active": 1,
             "item": item,
-            "medusa_product_id": medusa_product_id,
             **extras,
         })
         doc.insert(ignore_permissions=True)

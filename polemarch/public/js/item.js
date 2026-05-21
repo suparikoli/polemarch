@@ -2,13 +2,6 @@ frappe.ui.form.on("Item", {
 	refresh(frm) {
 		if (frm.doc.brand === "Polemarch") {
 			frm.dashboard.add_indicator(__("Polemarch"), "green");
-			if (frm.doc.custom_medusa_product_id) {
-				// Indicator only — Medusa plugin owns the sync direction.
-				frm.dashboard.add_indicator(
-					__("Medusa: {0}", [frm.doc.custom_medusa_product_id]),
-					"blue"
-				);
-			}
 		}
 		_apply_isin_requirement(frm);
 	},

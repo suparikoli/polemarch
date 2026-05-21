@@ -35,15 +35,10 @@ def validate(doc, method=None):
 
 def on_submit(doc, method=None):
     _create_investment_disposals(doc)
-    # Medusa-side plugin owns the SI-status mirror. It reads SI docstatus +
-    # custom_medusa_order_id from Frappe via REST and reflects state changes
-    # into Medusa on its own schedule.
 
 
 def on_cancel(doc, method=None):
     _cancel_investment_disposals(doc)
-    # Same as on_submit — Medusa plugin handles its side via REST polling
-    # or its own event subscription.
 
 
 def _create_investment_disposals(doc):

@@ -14,19 +14,9 @@ frappe.ui.form.on("Sales Invoice", {
 		if (frm.doc.custom_is_polemarch_invoice) {
 			frm.meta.default_print_format = "Polemarch Sale Transfer Order";
 			frm.dashboard.add_indicator(__("Polemarch"), "green");
-			if (frm.doc.custom_medusa_order_id) {
-				frm.dashboard.add_indicator(
-					__("Medusa: {0}", [frm.doc.custom_medusa_order_id]),
-					"blue"
-				);
-			}
 		} else {
 			frm.meta.default_print_format = "Standard";
 		}
-
-		// Medusa-side plugin owns sync direction now — no manual mirror
-		// buttons on Frappe side. The custom_medusa_order_id indicator above
-		// is informational only.
 	},
 	before_print(frm) {
 		// Belt-and-braces: even if the user manually selected another

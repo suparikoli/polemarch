@@ -26,7 +26,6 @@
   "column_break_2",
   "item",
   "section_market",
-  "medusa_product_id",
   "last_traded_price",
   "price_updated_on",
   "section_meta",
@@ -132,14 +131,6 @@
    "fieldname": "section_market",
    "fieldtype": "Section Break",
    "label": "Market Data"
-  },
-  {
-   "fieldname": "medusa_product_id",
-   "fieldtype": "Data",
-   "label": "Medusa Product ID",
-   "read_only": 1,
-   "unique": 1,
-   "description": "Mirror of Item.custom_medusa_product_id. Maintained for cross-system lookups."
   },
   {
    "fieldname": "last_traded_price",

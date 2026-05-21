@@ -21,9 +21,6 @@ class Security(Document):
         self._validate_isin_format()
         self._sync_to_item()
 
-    def before_insert(self):
-        self._auto_link_item_by_medusa_product_id()
-
     def on_update(self):
         # Invalidate cached LTP / lookup queries.
         frappe.cache().hdel("polemarch_security_by_isin", self.isin)
@@ -45,14 +42,3 @@ class Security(Document):
         existing_item_name = frappe.db.get_value("Item", self.item, "item_name")
         if existing_item_name and existing_item_name != self.security_name:
             frappe.db.set_value("Item", self.item, "item_name", self.security_name)
-
-    def _auto_link_item_by_medusa_product_id(self):
-        if self.item or not self.medusa_product_id:
-            return
-        item = frappe.db.get_value(
-            "Item",
-            {"custom_medusa_product_id": self.medusa_product_id},
-            "name",
-        )
-        if item:
-            self.item = item

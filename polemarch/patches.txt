@@ -30,3 +30,5 @@ polemarch.polemarch_trading.patches.v0_3_0.add_custom_fields_to_je
 polemarch.polemarch_trading.patches.v0_4_0.seed_polemarch_roles
 # v0_5_0 — Medusa-owned-sync refactor: remove the 4 sync doctypes.
 polemarch.patches.v0_5_0.remove_medusa_sync_doctypes
+# v0_6_0 — Full Medusa decoupling: drop the 7 Medusa-related Custom Fields.
+polemarch.patches.v0_6_0.remove_medusa_custom_fields

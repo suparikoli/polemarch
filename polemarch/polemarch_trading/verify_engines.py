@@ -275,7 +275,6 @@ def _ensure_customer(company: str) -> str:
         "territory": frappe.db.get_value("Territory", {"is_group": 0}, "name", order_by="lft ASC"),
     })
     doc.flags.ignore_permissions = True
-    doc.flags.from_medusa_sync = True  # bypass the on_update Medusa push
     doc.insert(ignore_permissions=True)
     return doc.name
 

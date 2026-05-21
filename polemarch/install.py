@@ -102,15 +102,6 @@ def _create_custom_fields():
                 "description": "Auto-set when a DP Details row is added or when the customer is in the Polemarch group.",
             },
             {
-                "fieldname": "custom_medusa_customer_id",
-                "label": "Medusa Customer ID",
-                "fieldtype": "Data",
-                "read_only": 1,
-                "no_copy": 1,
-                "unique": 1,
-                "insert_after": "custom_is_polemarch_customer",
-            },
-            {
                 "fieldname": "custom_kyc_status",
                 "label": "KYC Status",
                 "fieldtype": "Select",
@@ -118,7 +109,7 @@ def _create_custom_fields():
                 "default": "Not Started",
                 "in_standard_filter": 1,
                 "no_copy": 1,
-                "insert_after": "custom_medusa_customer_id",
+                "insert_after": "custom_is_polemarch_customer",
             },
             {
                 "fieldname": "custom_kyc_status_reason",
@@ -225,17 +216,6 @@ def _create_custom_fields():
                 "depends_on": "eval:doc.custom_is_polemarch_customer",
             },
         ],
-        "Item": [
-            {
-                "fieldname": "custom_medusa_product_id",
-                "label": "Medusa Product ID",
-                "fieldtype": "Data",
-                "read_only": 1,
-                "no_copy": 1,
-                "unique": 1,
-                "insert_after": "description",
-            },
-        ],
         "Sales Invoice": [
             {
                 "fieldname": "custom_is_polemarch_invoice",
@@ -247,39 +227,6 @@ def _create_custom_fields():
                 "insert_after": "is_return",
                 "description": "Set automatically when all line items are Polemarch-branded.",
             },
-            {
-                "fieldname": "custom_medusa_order_id",
-                "label": "Medusa Order ID",
-                "fieldtype": "Data",
-                "read_only": 1,
-                "no_copy": 1,
-                "insert_after": "custom_is_polemarch_invoice",
-            },
-            # Fee breakdown — Medusa carries platform fee / low-order
-            # fee / stamp duty in `order.metadata`. The Polemarch app
-            # mirrors them onto the SI for GSTR-1 and customer-
-            # reporting visibility.
-            {
-                "fieldname": "custom_platform_fee",
-                "label": "Platform Fee",
-                "fieldtype": "Currency",
-                "options": "currency",
-                "insert_after": "custom_medusa_order_id",
-            },
-            {
-                "fieldname": "custom_low_order_fee",
-                "label": "Low Order Fee",
-                "fieldtype": "Currency",
-                "options": "currency",
-                "insert_after": "custom_platform_fee",
-            },
-            {
-                "fieldname": "custom_stamp_duty",
-                "label": "Stamp Duty",
-                "fieldtype": "Currency",
-                "options": "currency",
-                "insert_after": "custom_low_order_fee",
-            },
         ],
         "Sales Order": [
             {
@@ -290,14 +237,6 @@ def _create_custom_fields():
                 "no_copy": 1,
                 "in_standard_filter": 1,
                 "insert_after": "order_type",
-            },
-            {
-                "fieldname": "custom_medusa_order_id",
-                "label": "Medusa Order ID",
-                "fieldtype": "Data",
-                "read_only": 1,
-                "no_copy": 1,
-                "insert_after": "custom_is_polemarch_order",
             },
         ],
     }
@@ -422,9 +361,6 @@ def _add_polemarch_naming_series():
 # Frappe→Medusa sync removed
 # ────────────────────────────────────────────────────────────────────
 #
-# As of the Medusa-owned-sync refactor, all field-mapping logic lives in
-# the Medusa-side plugin (TypeScript). Medusa calls Frappe's standard REST
-# API (`/api/resource/Customer`, `/api/resource/Sales Order`, etc.) and
-# stamps `custom_medusa_*_id` audit fields directly. The previously-seeded
-# Polemarch Sync Mapping rows are no longer relevant and the doctype is
-# scheduled for removal via the v0_5_0 patch.
+# Frappe-side Medusa sync code has been fully removed. The Frappe app is
+# now an internal-only ERPNext customization; any external integration is
+# the responsibility of whatever upstream system calls Frappe's REST API.
