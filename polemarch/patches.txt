@@ -66,3 +66,4 @@ polemarch.patches.v0_9_0.clear_stock_account_type
 # acquiring side (customer Holding on customer-Buy, proprietary Holding
 # on customer-Sell).
 polemarch.patches.v0_10_0.add_customer_field_to_investment_holding
+polemarch.patches.v0_10_0.make_trade_order_portfolio_optional
