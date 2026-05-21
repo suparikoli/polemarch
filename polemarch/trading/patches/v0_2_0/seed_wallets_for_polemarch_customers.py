@@ -66,9 +66,10 @@ def execute():
 
 
 def _default_company():
+    # `Company` has no `disabled` column on Frappe v16 — fetch first by name.
     return (
         frappe.defaults.get_global_default("company")
-        or frappe.db.get_value("Company", {"disabled": 0}, "name")
+        or frappe.db.get_value("Company", {}, "name")
     )
 
 

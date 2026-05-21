@@ -12,9 +12,9 @@ import frappe
 
 
 def execute():
+    # `Company` doctype has no `disabled` column on Frappe v16; omit filter.
     companies = frappe.get_all(
         "Company",
-        filters={"disabled": 0},
         fields=["name", "abbr"],
     )
 

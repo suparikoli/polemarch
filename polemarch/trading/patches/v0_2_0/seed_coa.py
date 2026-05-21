@@ -65,9 +65,10 @@ ACCOUNTS = [
 
 
 def execute():
+    # `Company` doctype has no `disabled` column on Frappe v16 / ERPNext v16 —
+    # confirmed via information_schema on test.polemarch.in. Filter without it.
     companies = frappe.get_all(
         "Company",
-        filters={"disabled": 0},
         fields=["name", "abbr", "default_currency"],
     )
     if not companies:

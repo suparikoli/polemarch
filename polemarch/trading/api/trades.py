@@ -199,9 +199,10 @@ def _default_customer_portfolio(customer: str) -> str:
         return portfolio
 
     # Bootstrap a customer-owned Investment portfolio on first trade.
+    # `Company` has no `disabled` column on Frappe v16; query by name only.
     company = frappe.db.get_value("Customer", customer, "default_company") or (
         frappe.defaults.get_global_default("company")
-        or frappe.db.get_value("Company", {"disabled": 0}, "name")
+        or frappe.db.get_value("Company", {}, "name")
     )
     doc = frappe.get_doc(
         {

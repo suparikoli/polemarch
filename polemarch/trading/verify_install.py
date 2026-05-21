@@ -91,10 +91,8 @@ def execute(verbose: bool = False) -> dict:
         else:
             errors.append(f"Role MISSING: {role}")
 
-    # 5) Per-company CoA accounts.
-    companies = frappe.get_all(
-        "Company", filters={"disabled": 0}, fields=["name", "abbr"]
-    )
+    # 5) Per-company CoA accounts. (Company has no `disabled` column on v16.)
+    companies = frappe.get_all("Company", fields=["name", "abbr"])
     for company in companies:
         if not company.abbr:
             warnings.append(f"Company {company.name} has no abbr — CoA check skipped")
