@@ -74,3 +74,4 @@ polemarch.patches.v0_10_0.make_trade_order_portfolio_optional
 # The Polemarch workspace gets rebuilt with categorized sections
 # matching the Phase 9 + 10 doctypes.
 polemarch.patches.v0_11_0.seed_security_types
+polemarch.patches.v0_11_0.import_polemarch_workspace
