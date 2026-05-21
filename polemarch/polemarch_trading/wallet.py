@@ -34,7 +34,11 @@ _DELTA_MAP = {
     # Debits
     ("Debit",  "Withdrawal"):           (-1,  0, -1),
     ("Debit",  "Reservation"):          (-1, +1,  0),
-    ("Debit",  "Buy Settlement"):       ( 0, -1, -1),
+    # Buy Settlement = customer-Buy clear. settlement._convert_reservation_to_
+    # final_debit posts a Reservation Release (Credit, moves reserved →
+    # available) FIRST, then Buy Settlement against the now-available
+    # balance. So Buy Settlement debits available + total, not reserved.
+    ("Debit",  "Buy Settlement"):       (-1,  0, -1),
     ("Debit",  "Fee"):                  (-1,  0, -1),
     ("Debit",  "Adjustment"):           (-1,  0, -1),
     ("Debit",  "Reversal"):             (-1,  0, -1),
