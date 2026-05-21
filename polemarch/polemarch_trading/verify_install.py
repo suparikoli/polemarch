@@ -149,7 +149,6 @@ def execute(verbose: bool = False) -> dict:
     try:
         from polemarch import hooks as polemarch_hooks  # noqa: F401
         required_hourly = [
-            "polemarch.medusa.reconcile.run_hourly",
             "polemarch.polemarch_trading.settlement.run_pending",
         ]
         required_daily = [

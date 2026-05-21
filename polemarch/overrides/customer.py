@@ -11,12 +11,11 @@ def validate(doc, method=None):
 
 def on_update(doc, method=None):
     if doc.custom_is_polemarch_customer:
-        frappe.enqueue(
-            "polemarch.medusa.sync_customers.push_customer",
-            queue="short",
-            customer_name=doc.name,
-            enqueue_after_commit=True,
-        )
+        # Medusa-side plugin owns Frappe→Medusa sync via REST API. Frappe no
+        # longer pushes customer updates outbound; if Medusa needs to know
+        # about a KYC status change, it'll either re-fetch on its own
+        # schedule or rely on a Frappe-API-key-protected webhook on the
+        # Medusa side (out of scope for this app).
         _maybe_ensure_wallet(doc)
 
 

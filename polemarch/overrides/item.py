@@ -39,23 +39,18 @@ def validate(doc, method=None):
 
 
 def on_update(doc, method=None):
-    if doc.brand == POLEMARCH_BRAND:
-        frappe.enqueue(
-            "polemarch.medusa.sync_items.push_item",
-            queue="short",
-            item_name=doc.name,
-            enqueue_after_commit=True,
-        )
+    # Frappe→Medusa sync removed. The Medusa plugin owns the integration
+    # surface: it reads Items from Frappe via the standard REST API on its
+    # own schedule (or watches Medusa-side product events and reflects them
+    # back). Frappe stays passive.
+    return
 
 
 def on_trash(doc, method=None):
-    if doc.brand == POLEMARCH_BRAND and doc.get("custom_medusa_product_id"):
-        frappe.enqueue(
-            "polemarch.medusa.sync_items.delete_item",
-            queue="short",
-            medusa_product_id=doc.custom_medusa_product_id,
-            enqueue_after_commit=True,
-        )
+    # Frappe→Medusa sync removed. If you need to also tombstone the Medusa
+    # product when a Frappe Item is deleted, do it in the Medusa plugin by
+    # polling for tombstoned Items via the Frappe REST API.
+    return
 
 
 def _ensure_non_gst_item_tax_template(doc):

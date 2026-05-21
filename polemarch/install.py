@@ -36,7 +36,6 @@ def setup():
     _add_polemarch_naming_series()
     _create_processing_fee_item()
     _create_low_order_fee_item()
-    _seed_default_sync_mappings()
 
 
 def _ensure_polemarch_trading_module():
@@ -420,131 +419,12 @@ def _add_polemarch_naming_series():
 
 
 # ────────────────────────────────────────────────────────────────────
-# Default Polemarch Sync Mapping
+# Frappe→Medusa sync removed
 # ────────────────────────────────────────────────────────────────────
-
-DEFAULT_CUSTOMER_MAPPINGS = [
-    # Identity (Medusa Customer.* → ERPNext Customer.*)
-    ("first_name",                          "custom_first_name",              None,                                "Registered first name (as per PAN)"),
-    ("metadata.middle_name",                "custom_middle_name",             None,                                "Registered middle name (as per PAN)"),
-    ("last_name",                           "custom_last_name",               None,                                "Registered last name (as per PAN)"),
-    ("metadata.full_name",                  "customer_name",                  "Concatenate First+Middle+Last",     "Combined customer name (used in invoices and shipping)"),
-    ("email",                               "email_id",                       None,                                "Primary email; used by Frappe's Communication API"),
-    ("phone",                               "mobile_no",                      None,                                "Primary phone; +91 prefix expected"),
-    # KYC + regulatory
-    ("metadata.pan",                        "pan",                            "Upper",                             "PAN — 10 alphanumeric chars"),
-    ("metadata.aadhaar_last4",              "custom_aadhaar_last4",           None,                                "Aadhaar last 4 digits — never the full number (UIDAI rule)"),
-    ("metadata.aadhaar_hash",               "custom_aadhaar_hash",            None,                                "SHA-256 of full Aadhaar for matching; written by Medusa side only"),
-    ("metadata.dob",                        "custom_dob",                     "ISO Date",                          "Date of birth (ISO format)"),
-    ("metadata.address_as_per_pan",         "custom_address_as_per_pan",      "Trim",                              "Address exactly as printed on PAN — for KYC records"),
-    # Polemarch-issued identifiers
-    ("metadata.client_id",                  "custom_client_id",               None,                                "Polemarch client ID (NNNNYYWW, weekly resetting)"),
-    ("metadata.kyc_status",                 "custom_kyc_status",              None,                                "Maps medusa kyc state → ERPNext select: Verified / In Review / Rejected / Not Started"),
-    ("metadata.kyc_rejection_reason",       "custom_kyc_status_reason",       None,                                "Free-text reason from KYC vendor (visible on Customer form)"),
-    # Classification — sync_customers.upsert_from_medusa enforces
-    # customer_group = "Polemarch" as an invariant regardless of
-    # whether Medusa sends a value, but this row makes it
-    # configurable from the admin UI if a future requirement needs
-    # different segmentation.
-    ("metadata.customer_group",             "customer_group",                 None,                                "Defaults to 'Polemarch' if Medusa doesn't send a value (enforced as invariant by the sync code)."),
-    # Audit identity
-    ("id",                                  "custom_medusa_customer_id",      None,                                "Medusa customer id (audit reference)"),
-]
-
-DEFAULT_BANK_MAPPINGS = [
-    # Each row is per element of `customer.metadata.bank_accounts[]`
-    ("bank_name",                           "bank_name",                      None,                                "Bank name (HDFC, ICICI, etc.)"),
-    ("ifsc",                                "bank_code",                      "Upper",                             "IFSC code — 11 chars, uppercase"),
-    ("ac_number",                           "ac_number",                      None,                                "Account number — digits only"),
-    ("account_holder",                      "account_holder",                 None,                                "Name on the bank account (PAN match required for VBA)"),
-    ("micr",                                "micr",                           None,                                "MICR code (9 digits)"),
-    ("branch",                              "bank_branch",                    None,                                "Branch name"),
-    ("cheque_image_url",                    "cheque_image",                   None,                                "Public URL of the cancelled cheque image"),
-    ("is_primary",                          "is_primary",                     None,                                "Mark primary bank — only one is_primary=1 per customer"),
-    ("is_verified",                         "custom_vba_status",              None,                                "Verified Bank Account status (after penny-drop / NPCI check)"),
-]
-
-DEFAULT_DEMAT_MAPPINGS = [
-    ("depository",                          "depository",                     "Upper",                             "NSDL or CDSL"),
-    ("dp_id",                               "dp_id",                          None,                                "DP ID — issued by the depository to the DP"),
-    ("client_id",                           "client_id",                      None,                                "Client ID at the DP (NOT the polemarch client_id)"),
-    ("bo_id",                               "bo_id",                          None,                                "Beneficial Owner ID (BOID) — full 16-digit demat account number"),
-    ("dp_name",                             "dp_name",                        None,                                "Friendly DP name (e.g. Zerodha, Groww)"),
-    ("broker_name",                         "broker_name",                    None,                                "Broker name if different from DP"),
-    ("primary_bo_name",                     "primary_bo_name",                None,                                "Name on the demat account (must match PAN)"),
-    ("primary_bo_pan",                      "primary_bo_pan",                 "Upper",                             "PAN of the primary BO holder"),
-    ("cmr_url",                             "cmr_copy",                       None,                                "CMR (Client Master Report) PDF URL — uploaded during KYC"),
-    ("is_primary",                          "is_primary",                     None,                                "Primary demat marker — only one per customer"),
-]
-
-DEFAULT_ITEM_MAPPINGS = [
-    ("metadata.isin",                       "custom_isin",                    "Upper",                             "ISIN — 12-char uppercase identifier (e.g. INE002A01018)"),
-    ("title",                               "item_name",                      None,                                "Share name — e.g. 'Reliance Industries Ltd'"),
-    ("handle",                              "item_code",                      None,                                "Slug — used as the ERPNext Item primary key"),
-    ("metadata.rta",                        "custom_rta",                     None,                                "Registrar and Transfer Agent (Link Intime, Karvy, etc.)"),
-    ("metadata.last_traded_price",          "custom_last_traded_price",       None,                                "LTP from market data — refreshed by the price-scraper job"),
-    # Classification — `polemarch.overrides.item.validate` enforces
-    # item_group = "Polemarch Securities" for brand=Polemarch items
-    # regardless of what Medusa sends. Mapping row is informational +
-    # provides a config override hook if a future requirement needs
-    # a different sub-group (e.g. "Polemarch Bonds").
-    ("metadata.item_group",                 "item_group",                     None,                                "Defaults to 'Polemarch Securities' (enforced by the Item validate hook for brand=Polemarch)."),
-    # NO HSN/SAC — Polemarch shares are excluded from GST under
-    # Schedule III. The Item validate hook clears any HSN that
-    # accidentally lands on a brand=Polemarch row.
-]
-
-DEFAULT_ORDER_MAPPINGS = [
-    ("id",                                  "custom_medusa_order_id",         None,                                "Medusa order id (audit reference)"),
-    ("display_id",                          "po_no",                          None,                                "Human-readable order number (shown to the buyer)"),
-    ("metadata.platform_fee_paise",         "custom_platform_fee",            "Paise to Rupees",                   "Platform fee from Medusa, stored in paise; converted to rupees"),
-    ("metadata.low_order_fee_paise",        "custom_low_order_fee",           "Paise to Rupees",                   "Low-order surcharge applied below the threshold (e.g. < ₹1L)"),
-    ("metadata.stamp_duty_paise",           "custom_stamp_duty",              "Paise to Rupees",                   "0.015% stamp duty as per state regulations"),
-]
-
-DEFAULT_ORDER_ITEM_MAPPINGS = [
-    # Each row is per element of `order.items[]`
-    ("variant.metadata.isin",               "custom_isin",                    "Upper",                             "ISIN — written onto the Sales Invoice Item row"),
-    ("variant.product.title",               "item_name",                      None,                                "Share name on the line item"),
-    ("variant.sku",                         "item_code",                      None,                                "SKU — resolves to ERPNext Item via item_code"),
-    ("quantity",                            "qty",                            None,                                "Number of shares"),
-    ("unit_price",                          "rate",                           "Paise to Rupees",                   "Per-share price; Medusa stores in paise"),
-]
-
-
-def _seed_default_sync_mappings():
-    """Insert default Polemarch Sync Mapping rows. Idempotent —
-    skips any (section, medusa_path) pair already present so admins
-    can edit the seed rows in place without them being overwritten on
-    the next migrate."""
-    settings_name = "Polemarch Sync Mapping"
-    if not frappe.db.exists("DocType", settings_name):
-        # First migrate before the doctype itself is synced — bail.
-        return
-    doc = frappe.get_single(settings_name)
-
-    _merge_rows(doc, "customer_mappings",      DEFAULT_CUSTOMER_MAPPINGS)
-    _merge_rows(doc, "bank_account_mappings",  DEFAULT_BANK_MAPPINGS)
-    _merge_rows(doc, "demat_account_mappings", DEFAULT_DEMAT_MAPPINGS)
-    _merge_rows(doc, "item_mappings",          DEFAULT_ITEM_MAPPINGS)
-    _merge_rows(doc, "order_mappings",         DEFAULT_ORDER_MAPPINGS)
-    _merge_rows(doc, "order_item_mappings",    DEFAULT_ORDER_ITEM_MAPPINGS)
-
-    doc.flags.ignore_permissions = True
-    doc.save(ignore_permissions=True)
-
-
-def _merge_rows(parent, table_field: str, defaults: list):
-    existing_paths = {r.medusa_path for r in parent.get(table_field) or []}
-    for medusa_path, erp_field, transform, description in defaults:
-        if medusa_path in existing_paths:
-            continue
-        parent.append(table_field, {
-            "is_enabled": 1,
-            "medusa_path": medusa_path,
-            "erpnext_field": erp_field,
-            "transform": transform or "",
-            "direction": "Bidirectional",
-            "is_required": 0,
-            "description": description,
-        })
+#
+# As of the Medusa-owned-sync refactor, all field-mapping logic lives in
+# the Medusa-side plugin (TypeScript). Medusa calls Frappe's standard REST
+# API (`/api/resource/Customer`, `/api/resource/Sales Order`, etc.) and
+# stamps `custom_medusa_*_id` audit fields directly. The previously-seeded
+# Polemarch Sync Mapping rows are no longer relevant and the doctype is
+# scheduled for removal via the v0_5_0 patch.

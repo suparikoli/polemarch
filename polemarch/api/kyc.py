@@ -1,8 +1,10 @@
 """KYC verification actions on Polemarch customers.
 
-Verify / reject the KYC submission, write an audit comment, optionally
-push status back to Medusa metadata so the storefront UI reflects it.
-The Medusa storefront's KYC tab reads `customer.metadata.kyc_status`.
+Verify / reject the KYC submission, write an audit comment, email the
+customer. The Frappe→Medusa push was removed in the Medusa-owned-sync
+refactor — the Medusa storefront should poll Frappe's
+`Customer.custom_kyc_status` field via standard REST on its own schedule
+to surface state changes in the storefront UI.
 """
 
 import frappe
@@ -53,7 +55,9 @@ def _set_status(customer: str, status: str, reason: str = ""):
     frappe.db.commit()
 
     _send_email(doc, status, reason)
-    _push_to_medusa(doc, status, reason)
+    # Frappe→Medusa push removed. The Medusa-side plugin reads
+    # `Customer.custom_kyc_status` from Frappe via REST and reflects it
+    # into Medusa customer metadata on its own schedule.
 
     return {"ok": True, "status": status}
 
@@ -81,53 +85,3 @@ def _send_email(customer_doc, status: str, reason: str):
         frappe.log_error(title="Polemarch KYC email failed", message=frappe.get_traceback())
 
 
-def _push_to_medusa(customer_doc, status: str, reason: str):
-    if not customer_doc.get("custom_medusa_customer_id"):
-        return
-    settings = frappe.get_cached_doc("Medusa Settings")
-    if not settings.enable_sync:
-        return
-
-    from polemarch.medusa.client import MedusaError, get_client
-    from polemarch.medusa.log import write_log
-
-    medusa_status = {"Verified": "verified", "Rejected": "rejected", "In Review": "submitted"}.get(status)
-    if not medusa_status:
-        return
-
-    payload = {"metadata": {"kyc_status": medusa_status}}
-    if status == "Rejected" and reason:
-        payload["metadata"]["kyc_rejection_reason"] = reason
-
-    client = get_client()
-    if not client:
-        return
-    try:
-        response = client.post(
-            f"/admin/customers/{customer_doc.custom_medusa_customer_id}",
-            json_body=payload,
-            idempotency_key=f"kyc-status:{customer_doc.name}:{status}:{customer_doc.modified}",
-        )
-        write_log(
-            direction="ERPNext to Medusa",
-            entity_type="Customer",
-            event=f"customer.kyc:{medusa_status}",
-            status="Success",
-            erpnext_doctype="Customer",
-            erpnext_ref=customer_doc.name,
-            medusa_id=customer_doc.custom_medusa_customer_id,
-            payload=payload,
-            response=response,
-        )
-    except MedusaError as exc:
-        write_log(
-            direction="ERPNext to Medusa",
-            entity_type="Customer",
-            event=f"customer.kyc:{medusa_status}",
-            status="Failed",
-            erpnext_doctype="Customer",
-            erpnext_ref=customer_doc.name,
-            medusa_id=customer_doc.custom_medusa_customer_id,
-            payload=payload,
-            error=str(exc),
-        )

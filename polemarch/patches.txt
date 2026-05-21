@@ -28,3 +28,5 @@ polemarch.polemarch_trading.patches.v0_2_0.seed_position_from_holdings
 polemarch.polemarch_trading.patches.v0_3_0.add_custom_fields_to_je
 # Phase 4 — Portfolio Transfer + roles.
 polemarch.polemarch_trading.patches.v0_4_0.seed_polemarch_roles
+# v0_5_0 — Medusa-owned-sync refactor: remove the 4 sync doctypes.
+polemarch.patches.v0_5_0.remove_medusa_sync_doctypes

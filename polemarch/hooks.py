@@ -66,7 +66,6 @@ doc_events = {
 
 scheduler_events = {
     "hourly": [
-        "polemarch.medusa.reconcile.run_hourly",
         "polemarch.polemarch_trading.settlement.run_pending",
         # Phase 6 — auto-spawn a Fund-Only Settlement Run if Pending due exist
         # and no live run is executing. Defensive; safe on every tick.

@@ -35,26 +35,15 @@ def validate(doc, method=None):
 
 def on_submit(doc, method=None):
     _create_investment_disposals(doc)
-    if doc.get("custom_medusa_order_id"):
-        frappe.enqueue(
-            "polemarch.medusa.sync_orders.mirror_status",
-            queue="short",
-            invoice_name=doc.name,
-            new_status="paid",
-            enqueue_after_commit=True,
-        )
+    # Medusa-side plugin owns the SI-status mirror. It reads SI docstatus +
+    # custom_medusa_order_id from Frappe via REST and reflects state changes
+    # into Medusa on its own schedule.
 
 
 def on_cancel(doc, method=None):
     _cancel_investment_disposals(doc)
-    if doc.get("custom_medusa_order_id"):
-        frappe.enqueue(
-            "polemarch.medusa.sync_orders.mirror_status",
-            queue="short",
-            invoice_name=doc.name,
-            new_status="canceled",
-            enqueue_after_commit=True,
-        )
+    # Same as on_submit — Medusa plugin handles its side via REST polling
+    # or its own event subscription.
 
 
 def _create_investment_disposals(doc):
