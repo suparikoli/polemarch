@@ -1,36 +1,46 @@
-"""Security Sale — direct, ERPNext-bypassing proprietary share disposal.
+"""Security Sale — Polemarch disposes inventory.
 
-Replaces the Sales-Invoice-with-Polemarch-Item flow. A submitted Security
-Sale:
+Phase 12 generalises the doctype: instead of customer-only, the Sale now
+takes a (party_type, party) pair plus a `payment_method`. Combinations:
 
-  1. FIFO-consumes Investment Holdings filtered by `from_classification`
-     (Stock in Trade or Investment) and `security` — never mixed.
-  2. Creates + submits one Investment Disposal carrying the consumed lots
-     and the LTCG / STCG breakdown (the canonical capital-gains audit row).
-  3. Posts two Journal Entries:
-       - Revenue JE   : DR paid_to_account, CR revenue_account
-                        (gross sale proceeds)
-       - COGS JE      : DR Trading COGS,    CR <inventory bucket>
-                        (cost recognition, routed by classification)
-     Both JEs carry custom_source_doctype = "Security Sale" so audits +
-     reverse-on-cancel can find them.
-  4. db_set's the three back-link fields on self.
+  party_type=Customer, payment_method=Customer Wallet
+      Retail customer is buying from Polemarch through their Polemarch
+      wallet. FIFO consumes Polemarch's Stock-in-Trade inventory, a
+      proprietary Investment Disposal records the gain, the customer
+      gets a new customer-owned Investment Holding at trade price, and
+      the customer's wallet is debited (Buy Settlement).
 
-No Items, no Sales Invoice, no India Compliance GST validation. The
-Investment Disposal continues to be the source of truth for per-lot
-capital-gains tracking — Security Sale is the operator-facing input
-that drives it.
+  party_type=Customer, payment_method=Bank | Cash | Default Receivable
+      Same as above but the cash settles outside the wallet. Bank /
+      Cash credits Polemarch immediately; Default Receivable defers
+      via the customer's AR ledger.
 
-On cancel:
-  Reverse JEs (Revenue + COGS) via cancel_journal_entry_for_source,
-  then cancel the Investment Disposal (its own on_cancel decrements
-  qty_disposed on each Holding, restoring inventory).
+  party_type=Supplier, payment_method=Bank | Cash | Default Receivable
+      Block sale back to a counterparty (rare). NO customer Holding
+      gets minted — the Sale doesn't change the counterparty's books.
+
+Always posts:
+  - One Revenue JE: DR <payment_account>, CR <revenue_account>
+  - One Cost-Recognition JE: DR Trading COGS, CR <inventory bucket>
+    (reuses accounting.post_cost_recognition_je_for_disposal)
+
+Legacy `customer` / `paid_to_account` fields stay populated via
+back-compat sync in validate so old reports don't break.
 """
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt, getdate
+from frappe.utils import flt, getdate, now_datetime
+
+
+_VALID_PAYMENT_METHODS_FOR_CUSTOMER = {
+    "Default Receivable",
+    "Bank",
+    "Customer Wallet",
+    "Cash",
+}
+_VALID_PAYMENT_METHODS_FOR_SUPPLIER = {"Default Receivable", "Bank", "Cash"}
 
 
 class SecuritySale(Document):
@@ -38,7 +48,9 @@ class SecuritySale(Document):
         self._compute_amount()
         self._validate_qty_rate()
         self._validate_security_tradable()
+        self._validate_party_payment_combo()
         self._default_accounts()
+        self._sync_legacy_fields()
 
     def on_submit(self):
         plan = self._fifo_consume()
@@ -50,11 +62,10 @@ class SecuritySale(Document):
                 ).format(self.from_classification, self.security, self.company)
             )
 
-        # If FIFO couldn't fully cover the qty, fail loud — partial fills are
-        # not safe to silently accept (the operator likely picked the wrong
-        # classification or rate).
+        # Partial fills aren't safe to silently accept — the operator either
+        # picked the wrong classification or wants the sale split.
         covered = sum(flt(p.qty) for p in plan)
-        if covered < flt(self.qty):
+        if covered + 0.0001 < flt(self.qty):
             frappe.throw(
                 _(
                     "Insufficient {0} inventory for Security {1}: requested {2}, "
@@ -63,19 +74,27 @@ class SecuritySale(Document):
             )
 
         disposal_name = self._create_investment_disposal(plan)
+        customer_holding = self._mint_customer_holding_if_any()
         cogs_je = self._post_cogs_journal_entry(disposal_name)
+        wallet_txn = self._post_wallet_transaction_if_any()
         revenue_je = self._post_revenue_journal_entry()
 
         self.db_set("investment_disposal_ref", disposal_name, update_modified=False)
         self.db_set("cogs_journal_entry_ref", cogs_je, update_modified=False)
         self.db_set("revenue_journal_entry_ref", revenue_je, update_modified=False)
+        if customer_holding and hasattr(self, "customer_holding_ref"):
+            self.db_set("customer_holding_ref", customer_holding, update_modified=False)
+        if wallet_txn and hasattr(self, "wallet_transaction_ref"):
+            self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
     def on_cancel(self):
-        # Order: reverse JEs FIRST (they don't depend on the Disposal), then
-        # cancel the Disposal (which decrements qty_disposed on each Holding
-        # via its own on_cancel).
+        # Reverse JEs and wallet first (no inventory dependency), then
+        # cancel the Disposal (its on_cancel restores qty_disposed on the
+        # consumed Holdings). Finally delete the customer Holding if any.
+        self._reverse_wallet_transaction_if_any()
         self._cancel_journal_entries()
         self._cancel_investment_disposal()
+        self._delete_customer_holding_if_any()
 
     # ── validate-time ────────────────────────────────────────────────
 
@@ -101,27 +120,58 @@ class SecuritySale(Document):
                 _("Security {0} is not currently tradable.").format(self.security)
             )
 
+    def _validate_party_payment_combo(self):
+        if self.party_type == "Customer":
+            if self.payment_method not in _VALID_PAYMENT_METHODS_FOR_CUSTOMER:
+                frappe.throw(
+                    _(
+                        "Customer parties accept Default Receivable, Bank, "
+                        "Customer Wallet, or Cash."
+                    ),
+                    title=_("Invalid Payment Method"),
+                )
+        elif self.party_type == "Supplier":
+            if self.payment_method not in _VALID_PAYMENT_METHODS_FOR_SUPPLIER:
+                frappe.throw(
+                    _(
+                        "Suppliers don't have Customer Wallets. "
+                        "Pick Default Receivable, Bank, or Cash."
+                    ),
+                    title=_("Invalid Payment Method"),
+                )
+
     def _default_accounts(self):
-        """ERPNext composes Account.name as `<account_number> - <account_name>
-        - <abbr>` when account_number is set, so the literal-string compose
-        won't match a populated CoA. Resolve via `account_name` instead."""
         if not self.revenue_account:
             self.revenue_account = _resolve_account_by_name(
                 self.company, "Trading Revenue - Securities"
             )
-        if not self.paid_to_account:
-            default_receivable = frappe.db.get_value(
+        if self.payment_account:
+            return
+
+        if self.payment_method == "Customer Wallet" and self.party_type == "Customer":
+            self.payment_account = _wallet_gl_account_for_customer(self.party)
+        elif self.payment_method == "Bank":
+            self.payment_account = _company_default_bank_account(self.company)
+        elif self.payment_method == "Cash":
+            self.payment_account = _company_default_cash_account(self.company)
+        else:  # Default Receivable
+            self.payment_account = frappe.db.get_value(
                 "Company", self.company, "default_receivable_account"
             )
-            if default_receivable:
-                self.paid_to_account = default_receivable
 
-    # ── on_submit ────────────────────────────────────────────────────
+    def _sync_legacy_fields(self):
+        if self.party_type == "Customer":
+            self.customer = self.party
+        else:
+            self.customer = None
+        self.paid_to_account = self.payment_account
+
+    # ── on_submit — Disposal + customer Holding ──────────────────────
 
     def _fifo_consume(self):
-        """Plan a FIFO consumption against open Holdings. Non-mutating —
-        the Investment Disposal's on_submit is what actually bumps
-        qty_disposed via _apply_to_holdings(direction=+1)."""
+        """Plan a FIFO consumption against Polemarch's PROPRIETARY Holdings
+        (customer_filter=None). Non-mutating — the Investment Disposal's
+        on_submit is what actually bumps qty_disposed."""
         from polemarch.polemarch_trading import fifo as fifo_engine
 
         return fifo_engine.consume(
@@ -130,23 +180,18 @@ class SecuritySale(Document):
             classification=self.from_classification,
             qty_to_sell=flt(self.qty),
             sale_date=getdate(self.posting_date),
+            customer_filter=None,  # always proprietary inventory
         )
 
     def _create_investment_disposal(self, plan) -> str:
-        """Build + submit one Investment Disposal from the FIFO plan.
-
-        Investment Disposal is submittable; its on_submit calls
-        _apply_to_holdings(+1) which writes the qty_disposed updates.
-        We don't post the cost JE through Investment Disposal — Security
-        Sale owns that posting directly via _post_cogs_journal_entry below.
-        """
         disposal = frappe.get_doc({
             "doctype": "Investment Disposal",
+            "security": self.security,
             "disposal_date": self.posting_date,
             "company": self.company,
-            "customer": self.customer,
-            "sales_invoice": None,  # not coming from an SI in this flow
-            "polemarch_security_sale": self.name,  # Custom Field, set in v0_9_0 patch
+            "customer": self.party if self.party_type == "Customer" else None,
+            "sales_invoice": None,
+            "polemarch_security_sale": self.name,  # Custom Field (v0_9_0)
             "lots": [
                 {
                     "holding": entry.holding,
@@ -161,15 +206,89 @@ class SecuritySale(Document):
         disposal.submit()
         return disposal.name
 
+    def _mint_customer_holding_if_any(self):
+        """Customer-Buy via Security Sale: mint a customer-owned Holding at
+        trade price. Supplier-side sales don't mint anything on the
+        counterparty side."""
+        if self.party_type != "Customer":
+            return None
+        existing = frappe.db.get_value(
+            "Investment Holding",
+            {
+                "purchase_reference": "Security Sale",
+                "purchase_reference_link": self.name,
+                "customer": self.party,
+            },
+            "name",
+        )
+        if existing:
+            return existing
+
+        holding = frappe.get_doc({
+            "doctype": "Investment Holding",
+            "security": self.security,
+            "customer": self.party,
+            "company": self.company,
+            "acquisition_date": getdate(self.posting_date),
+            "qty_acquired": flt(self.qty),
+            "cost_basis_per_unit": flt(self.rate),
+            "purchase_reference": "Security Sale",
+            "purchase_reference_link": self.name,
+            # Customer-owned shares default to Investment classification —
+            # retail buyers hold for capital appreciation. Stamp the
+            # at-purchase decision via classified_by / classified_on.
+            "classification": "Investment",
+            "classified_on": now_datetime(),
+            "classified_by": frappe.session.user,
+        })
+        holding.flags.ignore_permissions = True
+        holding.insert(ignore_permissions=True)
+        return holding.name
+
+    def _delete_customer_holding_if_any(self):
+        if not hasattr(self, "customer_holding_ref") or not self.customer_holding_ref:
+            # Lookup by source reference as fallback (back-compat)
+            existing = frappe.db.get_value(
+                "Investment Holding",
+                {
+                    "purchase_reference": "Security Sale",
+                    "purchase_reference_link": self.name,
+                },
+                "name",
+            )
+            if not existing:
+                return
+            target = existing
+        else:
+            target = self.customer_holding_ref
+        if not frappe.db.exists("Investment Holding", target):
+            return
+        # Guard: don't delete if the customer has already disposed any of it.
+        h = frappe.db.get_value(
+            "Investment Holding",
+            target,
+            ["qty_disposed", "qty_reserved"],
+            as_dict=True,
+        )
+        if h and (flt(h.qty_disposed) > 0 or flt(h.qty_reserved) > 0):
+            frappe.throw(
+                _(
+                    "Cannot cancel Sale {0}: customer Holding {1} already has "
+                    "qty_disposed={2} or qty_reserved={3}."
+                ).format(self.name, target, h.qty_disposed, h.qty_reserved)
+            )
+        frappe.delete_doc(
+            "Investment Holding", target, ignore_permissions=True, force=True
+        )
+
+    # ── on_submit — JEs ──────────────────────────────────────────────
+
     def _post_cogs_journal_entry(self, disposal_name) -> str:
-        """Reuse the existing cost-recognition poster — it builds DR COGS
-        CR inventory(bucket) keyed on each lot's classification. Idempotent
-        on (custom_source_doctype, custom_source_name)."""
+        """DR Trading COGS, CR inventory bucket — same shape regardless of
+        payment_method. The accounting helper is keyed on the Disposal."""
         from polemarch.polemarch_trading import accounting as accounting_engine
 
         disposal = frappe.get_doc("Investment Disposal", disposal_name)
-        # The accounting helper keys the JE on (disposal.doctype, disposal.name)
-        # — that's correct: the COGS leg belongs to the Disposal, not the Sale.
         return accounting_engine.post_cost_recognition_je_for_disposal(disposal) or ""
 
     def _post_revenue_journal_entry(self) -> str:
@@ -180,7 +299,22 @@ class SecuritySale(Document):
             return existing
 
         cost_center = self.cost_center or _company_default_cost_center(self.company)
-        is_receivable = _is_receivable_account(self.paid_to_account)
+
+        debit_line = {
+            "account": self.payment_account,
+            "debit_in_account_currency": self.amount,
+            "cost_center": cost_center,
+        }
+        if (
+            self.payment_method == "Default Receivable"
+            and _is_receivable_account(self.payment_account)
+        ):
+            if self.party_type == "Customer":
+                debit_line["party_type"] = "Customer"
+                debit_line["party"] = self.party
+            elif self.party_type == "Supplier":
+                debit_line["party_type"] = "Supplier"
+                debit_line["party"] = self.party
 
         je = frappe.get_doc({
             "doctype": "Journal Entry",
@@ -194,13 +328,7 @@ class SecuritySale(Document):
             "custom_source_doctype": "Security Sale",
             "custom_source_name": self.name,
             "accounts": [
-                {
-                    "account": self.paid_to_account,
-                    "debit_in_account_currency": self.amount,
-                    "party_type": "Customer" if is_receivable else None,
-                    "party": self.customer if is_receivable else None,
-                    "cost_center": cost_center,
-                },
+                debit_line,
                 {
                     "account": self.revenue_account,
                     "credit_in_account_currency": self.amount,
@@ -213,13 +341,52 @@ class SecuritySale(Document):
         je.submit()
         return je.name
 
+    # ── on_submit — Wallet (customer-side) ───────────────────────────
+
+    def _post_wallet_transaction_if_any(self):
+        if self.payment_method != "Customer Wallet":
+            return None
+        if self.party_type != "Customer":
+            return None
+
+        from polemarch.polemarch_trading import wallet as wallet_engine
+
+        wallet_name = f"WAL-{self.party}"
+        if not frappe.db.exists("Wallet", wallet_name):
+            frappe.throw(
+                _("Customer {0} has no Wallet ({1}).").format(self.party, wallet_name),
+                title=_("Wallet Missing"),
+            )
+        # Customer is buying from Polemarch — debit their wallet by net amount.
+        # Buy Settlement direction=Debit is (-1, 0, -1) post-Phase-10 fix —
+        # decreases available and total directly (no Reservation Release pre-
+        # step because this is an instant flow, not the Trade Order lifecycle).
+        return wallet_engine.apply_delta(
+            wallet=wallet_name,
+            txn_type="Buy Settlement",
+            direction="Debit",
+            amount=flt(self.amount),
+            reference_doctype="Security Sale",
+            reference_name=self.name,
+            idempotency_key=f"sec-sale-settle:{self.name}",
+            remarks=f"Buy Settlement for Security Sale {self.name}",
+        )
+
+    def _reverse_wallet_transaction_if_any(self):
+        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
+            return
+        from polemarch.polemarch_trading import wallet as wallet_engine
+        wallet_engine.reverse(
+            self.wallet_transaction_ref,
+            remarks=f"Reversed on Security Sale {self.name} cancel",
+        )
+
     # ── on_cancel ────────────────────────────────────────────────────
 
     def _cancel_journal_entries(self):
         from polemarch.polemarch_trading.accounting import cancel_journal_entry_for_source
         cancel_journal_entry_for_source("Security Sale", self.name)
         if self.investment_disposal_ref:
-            # Cancel the COGS JE — keyed on the Disposal, not the Sale.
             cancel_journal_entry_for_source(
                 "Investment Disposal", self.investment_disposal_ref
             )
@@ -242,15 +409,40 @@ def _company_default_cost_center(company: str):
     return frappe.db.get_value("Company", company, "cost_center")
 
 
+def _company_default_bank_account(company: str):
+    direct = frappe.db.get_value("Company", company, "default_bank_account")
+    if direct:
+        return direct
+    return frappe.db.get_value(
+        "Account",
+        {"company": company, "account_type": "Bank", "disabled": 0, "is_group": 0},
+        "name",
+        order_by="creation ASC",
+    )
+
+
+def _company_default_cash_account(company: str):
+    direct = frappe.db.get_value("Company", company, "default_cash_account")
+    if direct:
+        return direct
+    return frappe.db.get_value(
+        "Account",
+        {"company": company, "account_type": "Cash", "disabled": 0, "is_group": 0},
+        "name",
+        order_by="creation ASC",
+    )
+
+
+def _wallet_gl_account_for_customer(customer: str):
+    wallet_name = f"WAL-{customer}"
+    return frappe.db.get_value("Wallet", wallet_name, "gl_liability_account")
+
+
 def _is_receivable_account(account: str) -> bool:
     return frappe.db.get_value("Account", account, "account_type") == "Receivable"
 
 
 def _resolve_account_by_name(company: str, account_name: str):
-    """Look up an Account by its `account_name` field. ERPNext composes
-    Account.name as `<account_number> - <account_name> - <abbr>` when
-    account_number is set, so a literal compose by abbr suffix won't
-    match. Returns the canonical Account.name or None."""
     return frappe.db.get_value(
         "Account",
         {

@@ -20,7 +20,8 @@
   "company",
   "column_break_1",
   "posting_date",
-  "customer",
+  "party_type",
+  "party",
   "from_classification",
   "section_amounts",
   "qty",
@@ -28,7 +29,8 @@
   "column_break_2",
   "amount",
   "section_accounts",
-  "paid_to_account",
+  "payment_method",
+  "payment_account",
   "revenue_account",
   "column_break_3",
   "cost_center",
@@ -38,6 +40,8 @@
   "cogs_journal_entry_ref",
   "section_meta",
   "remarks",
+  "customer",
+  "paid_to_account",
   "amended_from"
  ],
  "fields": [
@@ -85,14 +89,34 @@
    "in_standard_filter": 1
   },
   {
-   "fieldname": "customer",
-   "fieldtype": "Link",
-   "label": "Customer",
-   "options": "Customer",
+   "fieldname": "party_type",
+   "fieldtype": "Select",
+   "label": "Party Type",
+   "options": "Customer\nSupplier",
+   "default": "Customer",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "Who is Polemarch selling to? Customer = retail Polemarch customer (customer Holding gets minted). Supplier = block sale back to a counterparty (no customer Holding minted)."
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "label": "Party",
+   "options": "party_type",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "description": "Counterparty buying from Polemarch."
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer (legacy)",
+   "options": "Customer",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Back-compat field. Auto-synced from `party` when party_type=Customer."
   },
   {
    "fieldname": "from_classification",
@@ -141,12 +165,32 @@
    "label": "GL Accounts"
   },
   {
-   "fieldname": "paid_to_account",
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Default Receivable\nBank\nCustomer Wallet\nCash",
+   "default": "Default Receivable",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "How is the buyer paying for these shares?\n  - Default Receivable: defer cash settlement (DR Debtors; settle later via Payment Entry)\n  - Bank: direct receipt into a bank account\n  - Customer Wallet: debit the customer's Polemarch wallet (only valid when party_type=Customer)\n  - Cash: cash on hand"
+  },
+  {
+   "fieldname": "payment_account",
    "fieldtype": "Link",
-   "label": "Paid To Account (DR)",
+   "label": "Payment Account (DR)",
    "options": "Account",
    "reqd": 1,
-   "description": "Bank or customer-receivable account."
+   "description": "Account that takes the debit leg of the JE. Auto-defaulted from payment_method on save."
+  },
+  {
+   "fieldname": "paid_to_account",
+   "fieldtype": "Link",
+   "label": "Paid To Account (legacy)",
+   "options": "Account",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Back-compat field. Auto-synced from `payment_account`."
   },
   {
    "fieldname": "revenue_account",

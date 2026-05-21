@@ -407,28 +407,35 @@ def _ensure_wallet(customer: str, company: str) -> str:
 
 
 def _create_security_purchase(security: str, company: str, supplier: str,
-                              qty: float, rate: float) -> str:
+                              qty: float, rate: float,
+                              party_type: str = "Supplier",
+                              payment_method: str = "Default Payable") -> str:
     """Submit a Security Purchase. Returns the submitted SP name. Its
-    on_submit handler mints the linked Investment Holding + posts the JE."""
+    on_submit handler mints the linked Investment Holding + posts the JE.
+
+    party_type defaults to Supplier (proprietary acquisition). Pass
+    party_type="Customer" + supplier=<Customer name> to exercise the
+    customer-Sell path (FIFO consumes the customer's Holdings, mints
+    Polemarch's Stock-in-Trade inventory).
+    """
     cost_to = _lookup_account(company, "Securities Inventory - Trading")
     if not cost_to:
         raise RuntimeError(
             f"Securities Inventory - Trading account not found for {company}"
         )
-    paid_from = frappe.db.get_value("Company", company, "default_payable_account")
-    if not paid_from:
-        raise RuntimeError(f"Company {company} has no default_payable_account")
-
+    # The controller's _default_accounts will fill payment_account based on
+    # payment_method + party — pass through so the test exercises that path.
     sp = frappe.get_doc({
         "doctype": "Security Purchase",
         "security": security,
         "company": company,
         "posting_date": frappe.utils.today(),
-        "supplier": supplier,
+        "party_type": party_type,
+        "party": supplier,  # name is "supplier" for back-compat with callers
+        "payment_method": payment_method,
         "qty": qty,
         "rate": rate,
         "cost_to_account": cost_to,
-        "paid_from_account": paid_from,
         "remarks": f"{_FIXTURE_PREFIX}smoke",
     })
     sp.flags.ignore_permissions = True
@@ -438,26 +445,28 @@ def _create_security_purchase(security: str, company: str, supplier: str,
 
 
 def _create_security_sale(security: str, company: str, customer: str,
-                          qty: float, rate: float, from_classification: str) -> str:
+                          qty: float, rate: float, from_classification: str,
+                          party_type: str = "Customer",
+                          payment_method: str = "Default Receivable") -> str:
+    """Submit a Security Sale. Controller auto-resolves payment_account from
+    (payment_method, party). Defaults exercise customer-buy via deferred AR.
+    Pass payment_method="Customer Wallet" to exercise the wallet rail."""
     revenue = _lookup_account(company, "Trading Revenue - Securities")
     if not revenue:
         raise RuntimeError(
             f"Trading Revenue - Securities account not found for {company}"
         )
-    paid_to = frappe.db.get_value("Company", company, "default_receivable_account")
-    if not paid_to:
-        raise RuntimeError(f"Company {company} has no default_receivable_account")
-
     ss = frappe.get_doc({
         "doctype": "Security Sale",
         "security": security,
         "company": company,
         "posting_date": frappe.utils.today(),
-        "customer": customer,
+        "party_type": party_type,
+        "party": customer,
+        "payment_method": payment_method,
         "from_classification": from_classification,
         "qty": qty,
         "rate": rate,
-        "paid_to_account": paid_to,
         "revenue_account": revenue,
         "remarks": f"{_FIXTURE_PREFIX}smoke",
     })

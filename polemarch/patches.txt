@@ -75,3 +75,8 @@ polemarch.patches.v0_10_0.make_trade_order_portfolio_optional
 # matching the Phase 9 + 10 doctypes.
 polemarch.patches.v0_11_0.seed_security_types
 polemarch.patches.v0_11_0.import_polemarch_workspace
+# v0_12_0 — Consolidate Trade Order into Security Purchase / Sale.
+# Both doctypes gain a (party_type, party, payment_method, payment_account)
+# quad. Backfill existing rows from the old (supplier|customer, paid_from
+# |paid_to_account) pair so legacy data keeps rendering.
+polemarch.patches.v0_12_0.backfill_party_payment_fields

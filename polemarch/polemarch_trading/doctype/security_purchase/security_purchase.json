@@ -20,7 +20,8 @@
   "company",
   "column_break_1",
   "posting_date",
-  "supplier",
+  "party_type",
+  "party",
   "intended_classification",
   "section_amounts",
   "qty",
@@ -29,7 +30,8 @@
   "amount",
   "section_accounts",
   "cost_to_account",
-  "paid_from_account",
+  "payment_method",
+  "payment_account",
   "column_break_3",
   "cost_center",
   "section_refs",
@@ -37,6 +39,8 @@
   "investment_holding_ref",
   "section_meta",
   "remarks",
+  "supplier",
+  "paid_from_account",
   "amended_from"
  ],
  "fields": [
@@ -85,14 +89,34 @@
    "in_standard_filter": 1
   },
   {
-   "fieldname": "supplier",
-   "fieldtype": "Link",
-   "label": "Supplier",
-   "options": "Supplier",
+   "fieldname": "party_type",
+   "fieldtype": "Select",
+   "label": "Party Type",
+   "options": "Supplier\nCustomer",
+   "default": "Supplier",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "Who is Polemarch buying from? Supplier = off-market acquisition. Customer = a Polemarch customer is selling shares back to us (their Investment Holdings get consumed via FIFO; proprietary Stock-in-Trade inventory gets minted)."
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "label": "Party",
+   "options": "party_type",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "description": "Counterparty selling the shares to Polemarch."
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier (legacy)",
+   "options": "Supplier",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Back-compat field. Auto-synced from `party` when party_type=Supplier so legacy reports and patches keep working."
   },
   {
    "fieldname": "intended_classification",
@@ -150,12 +174,32 @@
    "description": "Inventory account that takes the debit. Defaults to Securities Inventory - Trading - <abbr>; Portfolio Transfer can later move to Long-Term Investments if classified as Investment."
   },
   {
-   "fieldname": "paid_from_account",
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Default Payable\nBank\nCustomer Wallet\nCash",
+   "default": "Default Payable",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "description": "How is Polemarch paying for these shares?\n  - Default Payable: defer cash settlement (CR Creditors; settle later via Payment Entry)\n  - Bank: pay directly from a bank account\n  - Customer Wallet: credit the customer's Polemarch wallet (only valid when party_type=Customer)\n  - Cash: cash on hand"
+  },
+  {
+   "fieldname": "payment_account",
    "fieldtype": "Link",
-   "label": "Paid From Account (CR)",
+   "label": "Payment Account (CR)",
    "options": "Account",
    "reqd": 1,
-   "description": "Supplier creditor or bank account that takes the credit."
+   "description": "Account that takes the credit leg of the JE. Auto-defaulted from payment_method on save."
+  },
+  {
+   "fieldname": "paid_from_account",
+   "fieldtype": "Link",
+   "label": "Paid From Account (legacy)",
+   "options": "Account",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1,
+   "description": "Back-compat field. Auto-synced from `payment_account`."
   },
   {"fieldname": "column_break_3", "fieldtype": "Column Break"},
   {
