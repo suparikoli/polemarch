@@ -124,16 +124,36 @@ def clear(
         seller_bank_payout_ref=seller_bank_payout_ref,
     )
 
-    # Advance Trade Order. For sells, create the Investment Disposal now —
-    # at clear-time, not match-time, so reversal stays cheap.
+    # Advance Trade Order. Two flows here:
+    #
+    #   side=Sell, book=Customer
+    #       The customer is disposing — their Holdings get consumed (FIFO
+    #       scoped to Holding.customer = order.customer), and Polemarch
+    #       acquires (mint a proprietary Holding at trade price).
+    #
+    #   side=Buy, book=Customer
+    #       Polemarch is disposing — proprietary Holdings get consumed,
+    #       and the customer acquires (mint a customer-owned Holding at
+    #       trade price). Proprietary Disposal records the inventory drop.
+    #
+    # Proprietary-book Trade Orders (book="Proprietary") aren't the primary
+    # input path post-Phase-9 — Security Purchase / Security Sale handle
+    # those directly — so we only branch on the customer-book cases.
     order = frappe.get_doc("Trade Order", si.trade_order)
+    from polemarch.polemarch_trading import matching as matching_engine
+
     if order.side == "Sell":
+        # Customer is selling → customer Disposal + proprietary Holding mint.
         _create_investment_disposal_for_trade_order(order)
-        # Release reserved qty (FIFO planner deterministically gives back the
-        # same Holdings); the consume side of the equation was just recorded
-        # by Investment Disposal which decrements qty_remaining.
-        from polemarch.polemarch_trading import matching as matching_engine
         matching_engine._release_sell_holdings(order)
+        if order.book == "Customer":
+            _mint_proprietary_holding_for_buy_in(order)
+
+    elif order.side == "Buy" and order.book == "Customer":
+        # Polemarch is selling → proprietary Disposal + customer Holding mint.
+        _create_investment_disposal_for_trade_order(order)
+        matching_engine._release_sell_holdings(order)
+        _mint_customer_holding_for_buy(order)
 
     order.transition_to("Settled")
     return si.name
@@ -265,7 +285,7 @@ def _create_investment_disposal_for_trade_order(order) -> Optional[str]:
         classification=classification,
         qty_to_sell=flt(order.qty),
         sale_date=getdate(order.posting_date),
-        customer_filter=order.customer if order.book == "Customer" else None,
+        customer_filter=matching_engine._seller_customer_filter(order),
     )
     if not plan:
         return None
@@ -292,3 +312,93 @@ def _create_investment_disposal_for_trade_order(order) -> Optional[str]:
     disposal.insert(ignore_permissions=True)
     disposal.submit()
     return disposal.name
+
+
+# ── Holding mint on the ACQUISITION side of a settled Trade Order ──────
+
+
+def _mint_customer_holding_for_buy(order) -> Optional[str]:
+    """customer-Buy clear: Polemarch sold to customer; mint a customer-owned
+    Holding for the buyer at the trade price (not Polemarch's cost basis —
+    that already flowed into the proprietary Disposal's realised-gain math).
+
+    Idempotent on (purchase_reference, purchase_reference_link).
+    """
+    if not (order.book == "Customer" and order.side == "Buy"):
+        return None
+    existing = frappe.db.get_value(
+        "Investment Holding",
+        {
+            "purchase_reference": "Trade Order",
+            "purchase_reference_link": order.name,
+            "customer": order.customer,
+        },
+        "name",
+    )
+    if existing:
+        return existing
+
+    holding = frappe.get_doc({
+        "doctype": "Investment Holding",
+        "security": order.security,
+        "customer": order.customer,
+        "company": order.company,
+        "acquisition_date": getdate(order.posting_date),
+        "qty_acquired": flt(order.qty),
+        "cost_basis_per_unit": flt(order.price),
+        "purchase_reference": "Trade Order",
+        "purchase_reference_link": order.name,
+        # Customer-owned shares default to Investment classification —
+        # retail buyers are treated as holding for capital appreciation.
+        # The 2-working-day Unallocated timer is bypassed (the trade was
+        # already executed; the operator's already classified by virtue
+        # of placing the order against the customer's book).
+        "classification": "Investment",
+        "classified_on": frappe.utils.now_datetime(),
+        "classified_by": frappe.session.user,
+    })
+    holding.flags.ignore_permissions = True
+    holding.insert(ignore_permissions=True)
+    return holding.name
+
+
+def _mint_proprietary_holding_for_buy_in(order) -> Optional[str]:
+    """customer-Sell clear: customer sold to Polemarch; mint a proprietary
+    Holding for Polemarch at the trade price (acquisition cost on the
+    proprietary book).
+
+    Idempotent on (purchase_reference, purchase_reference_link).
+    """
+    if not (order.book == "Customer" and order.side == "Sell"):
+        return None
+    existing = frappe.db.get_value(
+        "Investment Holding",
+        {
+            "purchase_reference": "Trade Order",
+            "purchase_reference_link": order.name,
+            "customer": ["in", [None, ""]],
+        },
+        "name",
+    )
+    if existing:
+        return existing
+
+    holding = frappe.get_doc({
+        "doctype": "Investment Holding",
+        "security": order.security,
+        "customer": None,  # proprietary
+        "company": order.company,
+        "acquisition_date": getdate(order.posting_date),
+        "qty_acquired": flt(order.qty),
+        "cost_basis_per_unit": flt(order.price),
+        "purchase_reference": "Trade Order",
+        "purchase_reference_link": order.name,
+        # Proprietary inventory acquired from a customer sale defaults to
+        # Stock in Trade — Polemarch's intent is to resell, not hold.
+        "classification": "Stock in Trade",
+        "classified_on": frappe.utils.now_datetime(),
+        "classified_by": frappe.session.user,
+    })
+    holding.flags.ignore_permissions = True
+    holding.insert(ignore_permissions=True)
+    return holding.name

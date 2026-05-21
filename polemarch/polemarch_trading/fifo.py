@@ -85,16 +85,33 @@ def consume(
             ),
             title=_("Schema Out of Date"),
         )
+
     classification_check = (
         "classification = %s"
         if frappe.db.has_column("Investment Holding", "classification")
         else "1=1"
     )
-    params = (
-        (security, company, classification)
-        if "classification" in classification_check
-        else (security, company)
-    )
+
+    # customer_filter scopes by Holding.customer (Phase 10):
+    #   None         → proprietary pool (Holding.customer IS NULL or '')
+    #   <Customer>   → that Customer's pool (Holding.customer = <name>)
+    # On pre-v0_10_0 sites the column is missing — fall back to no filter so
+    # legacy proprietary flows keep working.
+    has_customer_col = frappe.db.has_column("Investment Holding", "customer")
+    if has_customer_col:
+        if customer_filter:
+            customer_check = "customer = %s"
+        else:
+            customer_check = "(customer IS NULL OR customer = '')"
+    else:
+        customer_check = "1=1"
+
+    params = [security, company]
+    if "classification" in classification_check:
+        params.append(classification)
+    if has_customer_col and customer_filter:
+        params.append(customer_filter)
+
     rows = frappe.db.sql(
         f"""
         SELECT name, qty_acquired, qty_disposed,
@@ -105,10 +122,11 @@ def consume(
            AND company  = %s
            AND status IN ('Open', 'Partially Disposed')
            AND {classification_check}
+           AND {customer_check}
          ORDER BY creation ASC
          FOR UPDATE
         """,
-        params,
+        tuple(params),
         as_dict=True,
     )
 

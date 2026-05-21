@@ -60,3 +60,9 @@ polemarch.patches.v0_9_0.backfill_security_on_disposals
 polemarch.patches.v0_9_0.make_item_optional
 polemarch.patches.v0_9_0.drop_security_item_link
 polemarch.patches.v0_9_0.clear_stock_account_type
+# v0_10_0 — Customer Holdings. Investment Holding gains a `customer` field
+# (NULL = Polemarch proprietary, populated = customer-owned). FIFO scopes
+# by this field, and Trade Order settlement now mints Holdings on the
+# acquiring side (customer Holding on customer-Buy, proprietary Holding
+# on customer-Sell).
+polemarch.patches.v0_10_0.add_customer_field_to_investment_holding

@@ -135,7 +135,7 @@ def _reserve_sell_holdings(order) -> None:
         classification=classification,
         qty_to_sell=flt(order.qty),
         sale_date=getdate(order.posting_date),
-        customer_filter=order.customer if order.book == "Customer" else None,
+        customer_filter=_seller_customer_filter(order),
     )
 
     if not plan:
@@ -174,7 +174,7 @@ def _release_sell_holdings(order) -> None:
         classification=classification,
         qty_to_sell=flt(order.qty),
         sale_date=getdate(order.posting_date),
-        customer_filter=order.customer if order.book == "Customer" else None,
+        customer_filter=_seller_customer_filter(order),
     )
     if plan:
         fifo_engine.release_reservation(plan)
@@ -184,10 +184,25 @@ def _release_sell_holdings(order) -> None:
 
 
 def _classification_for_order(order) -> str:
-    """Customer orders default to Investment; prop orders default to Stock in Trade."""
-    if order.book == "Customer":
+    """Classification of the SELLER's inventory — what FIFO will consume.
+
+      customer-Sell → customer disposes their Investment-class Holdings
+      customer-Buy  → Polemarch disposes Stock-in-Trade inventory
+      proprietary   → Stock-in-Trade only (proprietary book never holds
+                      Investment-class inventory in this engine)
+    """
+    if order.book == "Customer" and order.side == "Sell":
         return "Investment"
     return "Stock in Trade"
+
+
+def _seller_customer_filter(order):
+    """FIFO customer_filter for the side that DISPOSES. Returns the Customer
+    name when the seller is a customer (customer-Sell), else None to scope
+    against the proprietary pool."""
+    if order.book == "Customer" and order.side == "Sell":
+        return order.customer
+    return None
 
 
 def _create_settlement_instruction(order, counter_party: Optional[str] = None) -> str:
