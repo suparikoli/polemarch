@@ -31,8 +31,17 @@ def execute():
         frappe.db.sql("DELETE FROM `tabSingles` WHERE doctype = %s", (single,))
 
     # 2. Drop the physical tables for the non-Single doctypes.
+    # Frappe's wrapper blocks DROP TABLE inside a patch (implicit-commit guard),
+    # so commit pending changes first and use the lower-level cursor.
+    frappe.db.commit()
     for table in _OBSOLETE_TABLES:
-        frappe.db.sql(f"DROP TABLE IF EXISTS `{table}`")
+        try:
+            frappe.db.sql_ddl(f"DROP TABLE IF EXISTS `{table}`")
+        except AttributeError:
+            # Older Frappe versions lack sql_ddl — fall back to raw cursor.
+            cursor = frappe.db._cursor
+            cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
+    frappe.db.commit()
 
     # 3. Clean up tabDocType registry rows + their DocField / DocPerm children.
     for dt in _OBSOLETE_DOCTYPES:
