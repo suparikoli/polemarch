@@ -12,14 +12,15 @@ class Security(Document):
     """Master record for an unlisted security.
 
     ISIN is the natural primary key (regulator-recognized, globally unique).
-    The Item link is a 1:1 back-reference into ERPNext's GST/India-Compliance
-    plumbing; Security itself stays decoupled from inventory taxonomy.
+    Post-Phase-9 the doctype is fully standalone — no Item back-link, no
+    sync to ERPNext inventory taxonomy. Security Purchase / Security Sale
+    drive trades directly against the Security and the Investment Holding
+    rows it backs.
     """
 
     def validate(self):
         self._normalise_isin()
         self._validate_isin_format()
-        self._sync_to_item()
 
     def on_update(self):
         # Invalidate cached LTP / lookup queries.
@@ -35,10 +36,3 @@ class Security(Document):
                 _("ISIN must be 12 characters: 2 letters + 9 alphanumeric + 1 digit (e.g. INE002A01018)."),
                 title=_("Invalid ISIN"),
             )
-
-    def _sync_to_item(self):
-        if not self.item or not self.security_name:
-            return
-        existing_item_name = frappe.db.get_value("Item", self.item, "item_name")
-        if existing_item_name and existing_item_name != self.security_name:
-            frappe.db.set_value("Item", self.item, "item_name", self.security_name)
