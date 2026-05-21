@@ -51,17 +51,24 @@ def apply_delta(
     idempotency_key: Optional[str] = None,
     remarks: Optional[str] = None,
     reverses: Optional[str] = None,
+    _override_deltas: Optional[tuple] = None,
 ) -> str:
     """Apply a wallet delta atomically; insert + submit a Wallet Transaction.
 
     Returns the new Wallet Transaction name.
+
+    `_override_deltas` is an internal parameter used by `reverse()` to inject
+    the inverse of the original transaction's deltas. Bypasses the lookup in
+    `_DELTA_MAP` — necessary because some txn types (Reservation, Buy
+    Settlement) have multi-bucket effects that the generic "Reversal" entry
+    can't represent. External callers should NEVER set this.
     """
     amount = flt(amount)
     if amount <= 0:
         frappe.throw(_("Wallet amount must be > 0."), title=_("Invalid Amount"))
 
     pair = (direction, txn_type)
-    if pair not in _DELTA_MAP:
+    if _override_deltas is None and pair not in _DELTA_MAP:
         frappe.throw(
             _("Direction {0} not valid for txn_type {1}.").format(direction, txn_type),
             title=_("Invalid Direction/Type"),
@@ -98,7 +105,10 @@ def apply_delta(
     if state.status == "Frozen" and txn_type not in ("Adjustment", "Reversal"):
         frappe.throw(_("Wallet {0} is Frozen.").format(wallet), title=_("Wallet Frozen"))
 
-    d_avail, d_reserved, d_total = _DELTA_MAP[pair]
+    if _override_deltas is not None:
+        d_avail, d_reserved, d_total = _override_deltas
+    else:
+        d_avail, d_reserved, d_total = _DELTA_MAP[pair]
     new_available = flt(state.balance_available) + d_avail * amount
     new_reserved = flt(state.balance_reserved) + d_reserved * amount
     new_total = flt(state.balance_total) + d_total * amount
@@ -151,7 +161,19 @@ def apply_delta(
 
 
 def reverse(wallet_transaction: str, remarks: Optional[str] = None) -> str:
-    """Reverse a submitted Wallet Transaction by posting a new opposite-direction WT.
+    """Reverse a submitted Wallet Transaction by posting a new opposite-effect WT.
+
+    Critical: the reversal must negate the ORIGINAL transaction's per-bucket
+    deltas, not assume a generic "Reversal" shape. For example, reversing a
+    Reservation (which moved 25k from available → reserved) must restore that
+    by crediting available AND debiting reserved — `_DELTA_MAP[("Credit",
+    "Reversal")] = (+1, 0, +1)` would credit available but leave reserved
+    stuck, creating phantom funds.
+
+    Strategy: look up the original's (direction, txn_type) in `_DELTA_MAP`,
+    negate the deltas, and pass them via `_override_deltas` to apply_delta.
+    The new row is tagged `txn_type="Reversal"` for audit clarity but its
+    balance effect is exactly the inverse of the original.
 
     Marks the original row's `is_cancelled=1` and `reversed_by=<new>`.
     """
@@ -169,17 +191,33 @@ def reverse(wallet_transaction: str, remarks: Optional[str] = None) -> str:
             title=_("Already Reversed"),
         )
 
-    opposite_direction = "Credit" if original.direction == "Debit" else "Debit"
+    original_pair = (original.direction, original.txn_type)
+    if original_pair not in _DELTA_MAP:
+        frappe.throw(
+            _("Cannot reverse {0}: original (direction={1}, txn_type={2}) has no delta mapping.").format(
+                wallet_transaction, original.direction, original.txn_type
+            ),
+            title=_("Cannot Reverse"),
+        )
+    orig_d_avail, orig_d_reserved, orig_d_total = _DELTA_MAP[original_pair]
+    inverse_deltas = (-orig_d_avail, -orig_d_reserved, -orig_d_total)
+
+    # `direction` on the new row reflects the dominant cash-direction so list
+    # views remain intuitive; the actual ledger effect comes from
+    # `_override_deltas`. Use Credit when the reversal returns funds to
+    # the customer's available bucket (the common case).
+    new_direction = "Credit" if orig_d_avail < 0 else "Debit"
 
     new_name = apply_delta(
         wallet=original.wallet,
         txn_type="Reversal",
-        direction=opposite_direction,
+        direction=new_direction,
         amount=original.amount,
         reference_doctype=original.reference_doctype,
         reference_name=original.reference_name,
         remarks=remarks or f"Reversal of {wallet_transaction}",
         reverses=wallet_transaction,
+        _override_deltas=inverse_deltas,
     )
 
     # Mark the original — bypassing the append-only guard via from_reversal flag.
