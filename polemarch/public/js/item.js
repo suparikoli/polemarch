@@ -3,26 +3,11 @@ frappe.ui.form.on("Item", {
 		if (frm.doc.brand === "Polemarch") {
 			frm.dashboard.add_indicator(__("Polemarch"), "green");
 			if (frm.doc.custom_medusa_product_id) {
+				// Indicator only — Medusa plugin owns the sync direction.
 				frm.dashboard.add_indicator(
 					__("Medusa: {0}", [frm.doc.custom_medusa_product_id]),
 					"blue"
 				);
-			}
-			if (!frm.is_new()) {
-				frm.add_custom_button(__("Re-sync to Medusa"), () => {
-					frappe.call({
-						method: "polemarch.medusa.api.resync_item",
-						args: { item_code: frm.doc.name },
-						freeze: true,
-						freeze_message: __("Pushing to Medusa..."),
-						callback: ({ message }) => {
-							if (message && message.ok) {
-								frappe.show_alert({ message: message.message, indicator: "green" });
-								frm.reload_doc();
-							}
-						},
-					});
-				}, __("Medusa"));
 			}
 		}
 		_apply_isin_requirement(frm);

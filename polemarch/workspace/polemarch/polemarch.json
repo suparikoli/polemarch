@@ -4,7 +4,7 @@
   {"chart_name": "Polemarch Trade Volume - Last 6 Months", "label": "Polemarch Trade Volume - Last 6 Months"},
   {"chart_name": "Polemarch Top Instruments", "label": "Polemarch Top Instruments"}
  ],
- "content": "[{\"id\":\"hdrA\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Polemarch Overview</b></span>\",\"col\":12}},{\"id\":\"ncMTDInv\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Invoices MTD\",\"col\":3}},{\"id\":\"ncMTDValue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Trade Value MTD\",\"col\":3}},{\"id\":\"ncAvgTicket\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Avg Ticket Size MTD\",\"col\":3}},{\"id\":\"ncCustomers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"chTrade\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Trade Volume - Last 6 Months\",\"col\":8}},{\"id\":\"chTop\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Top Instruments\",\"col\":4}},{\"id\":\"hdrB\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Medusa Sync Health</b></span>\",\"col\":12}},{\"id\":\"ncMSuccess\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Medusa Sync Successes 24h\",\"col\":4}},{\"id\":\"ncMFailed\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Medusa Sync Failures 24h\",\"col\":4}},{\"id\":\"ncPendingInvoice\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Medusa Orders Pending Invoice\",\"col\":4}},{\"id\":\"hdrC\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Invoices\",\"col\":3}},{\"id\":\"sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Items\",\"col\":3}},{\"id\":\"sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"sc4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Medusa Sync Log\",\"col\":3}},{\"id\":\"sc5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Medusa Settings\",\"col\":3}}]",
+ "content": "[{\"id\":\"hdrA\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Polemarch Overview</b></span>\",\"col\":12}},{\"id\":\"ncMTDInv\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Invoices MTD\",\"col\":3}},{\"id\":\"ncMTDValue\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Trade Value MTD\",\"col\":3}},{\"id\":\"ncAvgTicket\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Avg Ticket Size MTD\",\"col\":3}},{\"id\":\"ncCustomers\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"chTrade\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Trade Volume - Last 6 Months\",\"col\":8}},{\"id\":\"chTop\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Polemarch Top Instruments\",\"col\":4}},{\"id\":\"hdrC\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Invoices\",\"col\":3}},{\"id\":\"sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Items\",\"col\":3}},{\"id\":\"sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}}]",
  "creation": "2026-05-02 00:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -28,11 +28,6 @@
   {"hidden": 0, "is_query_report": 0, "label": "DP Details", "link_to": "DP Details", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Bank Details", "link_to": "Bank Details", "link_type": "DocType", "onboard": 0, "type": "Link"},
 
-  {"hidden": 0, "is_query_report": 0, "label": "Integrations", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 0, "label": "Medusa Settings", "link_to": "Medusa Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Medusa Sync Log", "link_to": "Medusa Sync Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Webhook", "link_to": "Webhook", "link_type": "DocType", "onboard": 0, "type": "Link"},
-
   {"hidden": 0, "is_query_report": 0, "label": "Reports", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 1, "label": "Sales Register", "link_to": "Sales Register", "link_type": "Report", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 1, "label": "Accounts Receivable Summary", "link_to": "Accounts Receivable Summary", "link_type": "Report", "onboard": 0, "type": "Link"}
@@ -45,10 +40,7 @@
   {"number_card_name": "Polemarch Invoices MTD", "label": "Polemarch Invoices MTD"},
   {"number_card_name": "Polemarch Trade Value MTD", "label": "Polemarch Trade Value MTD"},
   {"number_card_name": "Avg Ticket Size MTD", "label": "Avg Ticket Size MTD"},
-  {"number_card_name": "Polemarch Customers", "label": "Polemarch Customers"},
-  {"number_card_name": "Medusa Sync Successes 24h", "label": "Medusa Sync Successes 24h"},
-  {"number_card_name": "Medusa Sync Failures 24h", "label": "Medusa Sync Failures 24h"},
-  {"number_card_name": "Medusa Orders Pending Invoice", "label": "Medusa Orders Pending Invoice"}
+  {"number_card_name": "Polemarch Customers", "label": "Polemarch Customers"}
  ],
  "owner": "Administrator",
  "parent_page": "",
@@ -60,9 +52,7 @@
  "shortcuts": [
   {"color": "Blue", "doc_view": "List", "format": "{} Open", "label": "Polemarch Invoices", "link_to": "Sales Invoice", "stats_filter": "{\"custom_is_polemarch_invoice\":1}", "type": "DocType"},
   {"color": "Yellow", "doc_view": "List", "label": "Polemarch Items", "link_to": "Item", "stats_filter": "{\"brand\":\"Polemarch\"}", "type": "DocType"},
-  {"color": "Green", "doc_view": "List", "label": "Polemarch Customers", "link_to": "Customer", "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"},
-  {"color": "Grey", "doc_view": "List", "label": "Medusa Sync Log", "link_to": "Medusa Sync Log", "type": "DocType"},
-  {"color": "Grey", "doc_view": "", "label": "Medusa Settings", "link_to": "Medusa Settings", "type": "DocType"}
+  {"color": "Green", "doc_view": "List", "label": "Polemarch Customers", "link_to": "Customer", "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"}
  ],
  "title": "Polemarch"
 }

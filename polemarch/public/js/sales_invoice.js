@@ -24,14 +24,9 @@ frappe.ui.form.on("Sales Invoice", {
 			frm.meta.default_print_format = "Standard";
 		}
 
-		if (frm.doc.docstatus === 1 && frm.doc.custom_medusa_order_id) {
-			frm.add_custom_button(__("Mirror status to Medusa (paid)"), () => {
-				_mirror(frm, "paid");
-			}, __("Medusa"));
-			frm.add_custom_button(__("Mirror status to Medusa (canceled)"), () => {
-				_mirror(frm, "canceled");
-			}, __("Medusa"));
-		}
+		// Medusa-side plugin owns sync direction now — no manual mirror
+		// buttons on Frappe side. The custom_medusa_order_id indicator above
+		// is informational only.
 	},
 	before_print(frm) {
 		// Belt-and-braces: even if the user manually selected another
@@ -49,17 +44,3 @@ frappe.ui.form.on("Sales Invoice", {
 		}
 	},
 });
-
-function _mirror(frm, status) {
-	frappe.call({
-		method: "polemarch.medusa.api.resync_invoice_status",
-		args: { invoice: frm.doc.name, status },
-		freeze: true,
-		freeze_message: __("Pushing status to Medusa..."),
-		callback: ({ message }) => {
-			if (message && message.ok) {
-				frappe.show_alert({ message: message.message, indicator: "green" });
-			}
-		},
-	});
-}
