@@ -13,11 +13,19 @@ import frappe
 # tried in order; first hit wins. Falls back to the root group if all miss.
 ACCOUNTS = [
     # Assets
+    # Securities Inventory used to be account_type="Stock" — that triggers
+    # ERPNext's StockAccountInvalidTransaction guard on plain Journal Entry
+    # postings (Stock accounts must flow through Stock Entries / Purchase
+    # Receipts). Polemarch doesn't use the Stock module — Investment Holding
+    # is the inventory ledger — so the account is a Current Asset, not Stock.
     ("Securities Inventory - Trading",
-     "Stock", "Asset", "1410",
-     [("Current Assets", "Asset"), ("Stock Assets", "Asset")]),
+     "", "Asset", "1410",
+     [("Current Assets", "Asset")]),
+    # Long-Term Investments also can't be "Investments" account_type for the
+    # same reason — that type binds the account to specific ERPNext invest-
+    # ment workflows. Leave it as a plain Current Asset under Investments.
     ("Long-Term Investments",
-     "Investments", "Asset", "1510",
+     "", "Asset", "1510",
      [("Investments", "Asset"), ("Application of Funds", "Asset")]),
     ("Settlement Receivable",
      "Receivable", "Asset", "1310",

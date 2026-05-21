@@ -59,3 +59,4 @@ polemarch.patches.v0_9_0.backfill_security_on_holdings
 polemarch.patches.v0_9_0.backfill_security_on_disposals
 polemarch.patches.v0_9_0.make_item_optional
 polemarch.patches.v0_9_0.drop_security_item_link
+polemarch.patches.v0_9_0.clear_stock_account_type
