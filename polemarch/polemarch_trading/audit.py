@@ -57,10 +57,19 @@ def verify_wallet_balance_matches_ledger():
 def verify_security_position_matches_lots():
     """Verify each Security Position row matches a fresh Investment Holding rollup.
 
-    Filters by the Security's linked Item (1:1 mapping). Portfolio match is
-    via the legacy custom_portfolio Custom Field on Investment Holding.
+    Queries Investment Holdings keyed by `security` (Phase 9). Portfolio
+    match is via the legacy custom_portfolio Custom Field on Investment
+    Holding — those rows that pre-date Phase 9 stay keyed by portfolio
+    name; Holdings minted by Security Purchase carry no portfolio (the
+    classification engine routes them via Stock-in-Trade ↔ Investment
+    instead). The audit only flags positions whose Holdings actually
+    populate custom_portfolio — pure classification-routed positions are
+    audited by `verify_holding_disposal_chain` below.
     """
     if not frappe.db.table_exists("Security Position"):
+        return
+    if not frappe.db.has_column("Investment Holding", "security"):
+        # v0_9_0 migration hasn't landed; bail gracefully.
         return
 
     positions = frappe.get_all(
@@ -70,20 +79,17 @@ def verify_security_position_matches_lots():
 
     mismatches = []
     for p in positions:
-        item = frappe.db.get_value("Security", p.security, "item")
-        if not item:
-            continue
         rollup = frappe.db.sql(
             """
             SELECT COALESCE(SUM(qty_remaining), 0)                              AS qty_held,
                    COALESCE(SUM(COALESCE(qty_reserved, 0)), 0)                  AS qty_reserved,
                    COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)        AS total_cost
               FROM `tabInvestment Holding`
-             WHERE item    = %s
+             WHERE security = %s
                AND custom_portfolio = %s
                AND status IN ('Open', 'Partially Disposed')
             """,
-            (item, p.portfolio),
+            (p.security, p.portfolio),
             as_dict=True,
         )[0]
 

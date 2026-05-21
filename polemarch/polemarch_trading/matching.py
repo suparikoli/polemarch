@@ -130,7 +130,7 @@ def _reserve_sell_holdings(order) -> None:
 
     classification = _classification_for_order(order)
     plan = fifo_engine.consume(
-        item=_item_for_security(order.security),
+        security=order.security,
         company=order.company,
         classification=classification,
         qty_to_sell=flt(order.qty),
@@ -169,7 +169,7 @@ def _release_sell_holdings(order) -> None:
 
     classification = _classification_for_order(order)
     plan = fifo_engine.consume(
-        item=_item_for_security(order.security),
+        security=order.security,
         company=order.company,
         classification=classification,
         qty_to_sell=flt(order.qty),
@@ -188,16 +188,6 @@ def _classification_for_order(order) -> str:
     if order.book == "Customer":
         return "Investment"
     return "Stock in Trade"
-
-
-def _item_for_security(security: str) -> str:
-    item = frappe.db.get_value("Security", security, "item")
-    if not item:
-        frappe.throw(
-            _("Security {0} has no linked Item — cannot FIFO-consume.").format(security),
-            title=_("Security Not Linked"),
-        )
-    return item
 
 
 def _create_settlement_instruction(order, counter_party: Optional[str] = None) -> str:

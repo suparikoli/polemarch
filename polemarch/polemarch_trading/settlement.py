@@ -259,9 +259,8 @@ def _create_investment_disposal_for_trade_order(order) -> Optional[str]:
     from polemarch.polemarch_trading import matching as matching_engine
 
     classification = matching_engine._classification_for_order(order)
-    item = matching_engine._item_for_security(order.security)
     plan = fifo_engine.consume(
-        item=item,
+        security=order.security,
         company=order.company,
         classification=classification,
         qty_to_sell=flt(order.qty),
@@ -273,7 +272,7 @@ def _create_investment_disposal_for_trade_order(order) -> Optional[str]:
 
     disposal = frappe.get_doc({
         "doctype": "Investment Disposal",
-        "item": item,
+        "security": order.security,
         "company": order.company,
         "disposal_date": getdate(order.posting_date),
         "sales_invoice": None,  # Trade Order is the origin, not an SI

@@ -95,7 +95,12 @@ def _transfer_holdings(pt) -> None:
 
         new_holding = frappe.get_doc({
             "doctype": "Investment Holding",
-            "item": source.item,
+            # Carry both keys forward: `security` is the new primary identity,
+            # `item` stays populated so legacy queries on Item-keyed Holdings
+            # still see the new row. New-world Holdings (from Security
+            # Purchase) won't have `item` — getattr handles that case.
+            "security": getattr(source, "security", None),
+            "item": getattr(source, "item", None),
             "company": source.company,
             "acquisition_date": source.acquisition_date,
             "qty_acquired": qty,

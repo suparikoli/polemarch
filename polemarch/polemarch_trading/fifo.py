@@ -1,14 +1,15 @@
-"""FIFO engine — walks Investment Holding rows oldest-first.
+"""FIFO engine — walks Investment Holding rows oldest-first, keyed by Security.
 
 No lot identity; just pure FIFO across Investment Holdings filtered by
-classification (Stock in Trade or Investment).
+classification (Stock in Trade or Investment) and `security`.
 
 Ordering: by `creation` ASC (doc creation timestamp). The classification
 deadline is also creation-anchored, so "oldest holding" is consistent
 between FIFO selection and classification-expiry logic.
 
 `consume()` is non-mutating — returns a plan that callers turn into
-Investment Disposal Lot rows.
+Investment Disposal Lot rows. Security Sale.on_submit and the legacy
+matching/settlement paths both go through here.
 """
 
 from dataclasses import dataclass
@@ -34,7 +35,7 @@ class ConsumedHolding:
 
 
 def consume(
-    item: str,
+    security: str,
     company: str,
     classification: str,
     qty_to_sell: float,
@@ -45,7 +46,7 @@ def consume(
     """Plan a FIFO consumption against open Investment Holdings.
 
     Args:
-        item: Item code to consume.
+        security: Security name (the standalone trading identity) to consume.
         company: Company scope.
         classification: "Stock in Trade" or "Investment" — filters the pool.
         qty_to_sell: how much to consume.
@@ -63,32 +64,51 @@ def consume(
 
     sale_date = getdate(sale_date)
 
-    lock_key = f"polemarch:fifo:{item}:{classification}:{customer_filter or '_prop'}"
+    lock_key = f"polemarch:fifo:{security}:{classification}:{customer_filter or '_prop'}"
     if not _acquire_advisory_lock(lock_key, lock_timeout_seconds):
         frappe.throw(
             _("Could not acquire FIFO lock for {0}/{1} within {2}s.").format(
-                item, classification, lock_timeout_seconds
+                security, classification, lock_timeout_seconds
             ),
             title=_("FIFO Lock Timeout"),
         )
 
     # Walk Investment Holdings ordered by creation (FIFO).
-    # ALSO filtered by classification — Unallocated holdings can't be sold.
-    classification_check = "classification = %s" if frappe.db.has_column("Investment Holding", "classification") else "1=1"
+    # The security Custom Field was added in v0_9_0; pre-v0_9_0 sites can't
+    # consume here because there's no Holding.security column to query yet.
+    has_security_col = frappe.db.has_column("Investment Holding", "security")
+    if not has_security_col:
+        frappe.throw(
+            _(
+                "Investment Holding.security column is missing. Run the v0_9_0 "
+                "migration (`bench --site <site> migrate`) before consuming FIFO."
+            ),
+            title=_("Schema Out of Date"),
+        )
+    classification_check = (
+        "classification = %s"
+        if frappe.db.has_column("Investment Holding", "classification")
+        else "1=1"
+    )
+    params = (
+        (security, company, classification)
+        if "classification" in classification_check
+        else (security, company)
+    )
     rows = frappe.db.sql(
         f"""
         SELECT name, qty_acquired, qty_disposed,
                COALESCE(qty_reserved, 0) AS qty_reserved,
                cost_basis_per_unit, acquisition_date, creation
           FROM `tabInvestment Holding`
-         WHERE item    = %s
-           AND company = %s
+         WHERE security = %s
+           AND company  = %s
            AND status IN ('Open', 'Partially Disposed')
            AND {classification_check}
          ORDER BY creation ASC
          FOR UPDATE
         """,
-        ((item, company, classification) if "classification" in classification_check else (item, company)),
+        params,
         as_dict=True,
     )
 

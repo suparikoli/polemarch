@@ -60,15 +60,17 @@ def get_lots(
     or partially-disposed Investment Holdings only — fully disposed Holdings
     are hidden by default (they're audit-only).
 
-    Filters by Item linked to the Security (Security → Item is 1:1)."""
+    Filters Investment Holdings by `security` directly (Phase 9 — no Item
+    lookup required). Legacy Holdings without `security` populated won't
+    surface for security-scoped queries; the v0_9_0 backfill populates the
+    field for all pre-existing rows.
+    """
     _resolve_customer(customer)
     filters = {
         "status": ["in", ["Open", "Partially Disposed"]],
     }
     if security:
-        item = frappe.db.get_value("Security", security, "item")
-        if item:
-            filters["item"] = item
+        filters["security"] = security
     if portfolio:
         filters["custom_portfolio"] = portfolio
 
@@ -77,6 +79,7 @@ def get_lots(
         filters=filters,
         fields=[
             "name",
+            "security",
             "item",
             "item_name",
             "custom_portfolio",

@@ -143,13 +143,15 @@ def recompute_from_lots(portfolio: str, security: str) -> str:
 
     Used by the nightly reconciliation audit job and as an admin escape hatch.
 
-    Filters by the security's linked Item (Security → Item is 1:1). Portfolio
-    is matched via the legacy custom_portfolio Custom Field on Investment
-    Holding (set by Phase-0 backfill).
+    Filters by `security` directly (Phase 9 — no Item lookup). Portfolio is
+    matched via the legacy custom_portfolio Custom Field on Investment
+    Holding (set by Phase-0 backfill). Holdings that pre-date Phase 9 keep
+    portfolio; Holdings minted by Security Purchase live in classifications
+    instead and don't carry portfolio — those don't contribute to the
+    portfolio-keyed Security Position rollup.
     """
     name = _position_name(portfolio, security)
-    item = frappe.db.get_value("Security", security, "item")
-    if not item:
+    if not frappe.db.has_column("Investment Holding", "security"):
         return name
 
     rollup = frappe.db.sql(
@@ -158,11 +160,11 @@ def recompute_from_lots(portfolio: str, security: str) -> str:
                COALESCE(SUM(COALESCE(qty_reserved, 0)), 0)                  AS qty_reserved,
                COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)        AS total_cost
           FROM `tabInvestment Holding`
-         WHERE item    = %s
+         WHERE security = %s
            AND custom_portfolio = %s
            AND status IN ('Open', 'Partially Disposed')
         """,
-        (item, portfolio),
+        (security, portfolio),
         as_dict=True,
     )[0]
 

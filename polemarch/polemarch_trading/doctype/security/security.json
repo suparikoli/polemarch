@@ -23,8 +23,6 @@
   "section_status",
   "tradable",
   "active",
-  "column_break_2",
-  "item",
   "section_market",
   "last_traded_price",
   "price_updated_on",
@@ -113,19 +111,6 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "description": "Soft-delete flag. Inactive securities cannot back new lots."
-  },
-  {
-   "fieldname": "column_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "item",
-   "fieldtype": "Link",
-   "label": "Linked Item",
-   "options": "Item",
-   "read_only": 1,
-   "unique": 1,
-   "description": "Backreference to the GST/India-Compliance Item that owns the tax-template plumbing. 1:1."
   },
   {
    "fieldname": "section_market",

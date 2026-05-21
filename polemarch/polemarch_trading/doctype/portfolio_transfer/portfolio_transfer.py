@@ -142,15 +142,8 @@ class PortfolioTransfer(Document):
         if not self.from_classification or not self.security or not self.qty or not self.company:
             return
 
-        item = frappe.db.get_value("Security", self.security, "item")
-        if not item:
-            frappe.throw(
-                _("Security {0} has no linked Item — cannot plan FIFO.").format(self.security),
-                title=_("Security Not Linked"),
-            )
-
         plan = fifo_engine.consume(
-            item=item,
+            security=self.security,
             company=self.company,
             classification=self.from_classification,
             qty_to_sell=flt(self.qty),

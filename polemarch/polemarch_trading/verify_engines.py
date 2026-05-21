@@ -59,8 +59,8 @@ def execute(verbose: bool = False) -> dict:
         # 1) Setup fixture.
         company = step("01_resolve_company", _resolve_company)
         security = step("02_create_security", _ensure_security)
-        item = step("03_resolve_item_for_security", lambda: _ensure_item_for_security(security))
-        customer = step("04_create_customer", lambda: _ensure_customer(company))
+        customer = step("03_create_customer", lambda: _ensure_customer(company))
+        supplier = step("04_create_supplier", _ensure_supplier)
         wallet = step("05_resolve_or_create_wallet", lambda: _ensure_wallet(customer, company))
 
         # 2) Wallet engine smoke.
@@ -99,37 +99,77 @@ def execute(verbose: bool = False) -> dict:
         step("13_assert_no_double_credit",
              lambda: _assert_balance(wallet, available=100000, reserved=0, total=100000))
 
-        # 4) FIFO engine smoke — Investment Holdings, classify, then consume.
-        holding_a = step("14_holding_A_100u_at_500_Stock_in_Trade",
-                         lambda: _create_holding(item, company, qty=100, cost=500,
-                                                 classification="Stock in Trade"))
-        holding_b = step("15_holding_B_50u_at_600_Stock_in_Trade",
-                         lambda: _create_holding(item, company, qty=50, cost=600,
-                                                 classification="Stock in Trade"))
+        # 4) Security Purchase smoke — mint Holdings via the new doctype.
+        sp_a = step(
+            "14_security_purchase_A_100u_at_500",
+            lambda: _create_security_purchase(security, company, supplier, qty=100, rate=500),
+        )
+        sp_b = step(
+            "15_security_purchase_B_50u_at_600",
+            lambda: _create_security_purchase(security, company, supplier, qty=50, rate=600),
+        )
+        holding_a = step(
+            "16_assert_holding_A_minted",
+            lambda: _assert_holding_from_purchase(sp_a, expected_qty=100, expected_cost=500),
+        )
+        holding_b = step(
+            "17_assert_holding_B_minted",
+            lambda: _assert_holding_from_purchase(sp_b, expected_qty=50, expected_cost=600),
+        )
+        step(
+            "18_assert_purchase_je_posted",
+            lambda: _assert_je_for_source("Security Purchase", sp_a),
+        )
 
-        from polemarch.polemarch_trading import fifo as fifo_engine
-
-        plan = step("16_fifo_consume_120_stock_in_trade", lambda: fifo_engine.consume(
-            item=item, company=company, classification="Stock in Trade",
-            qty_to_sell=120, sale_date="2026-05-20",
-        ))
-        step("17_assert_fifo_oldest_first", lambda: _assert_fifo_plan(plan, holding_a, holding_b))
-
-        # 5) Classification engine smoke.
-        unalloc = step("18_holding_C_30u_at_700_Unallocated",
-                       lambda: _create_holding(item, company, qty=30, cost=700,
-                                               classification=None))
-        step("19_assert_classification_unallocated",
-             lambda: _assert_classification(unalloc, "Unallocated"))
-
+        # 5) Classification — both Holdings start Unallocated; bulk-classify
+        # as Stock in Trade so they're eligible for the FIFO step.
         from polemarch.polemarch_trading import classification as cls_engine
 
-        step("20_classify_as_investment",
-             lambda: cls_engine.classify_as_investment(unalloc, actor="Administrator"))
-        step("21_assert_classification_investment",
-             lambda: _assert_classification(unalloc, "Investment"))
+        step("19_assert_holding_A_unallocated",
+             lambda: _assert_classification(holding_a, "Unallocated"))
+        step("20_force_classify_A_stock_in_trade",
+             lambda: _force_classification(holding_a, "Stock in Trade"))
+        step("21_force_classify_B_stock_in_trade",
+             lambda: _force_classification(holding_b, "Stock in Trade"))
 
-        # 6) Cleanup.
+        # 6) FIFO engine smoke — query by security, expect oldest-first.
+        from polemarch.polemarch_trading import fifo as fifo_engine
+
+        plan = step("22_fifo_consume_120_by_security", lambda: fifo_engine.consume(
+            security=security, company=company, classification="Stock in Trade",
+            qty_to_sell=120, sale_date="2026-05-20",
+        ))
+        step("23_assert_fifo_oldest_first", lambda: _assert_fifo_plan(plan, holding_a, holding_b))
+
+        # 7) Security Sale smoke — sells 80 units, creates Disposal + JEs.
+        ss = step(
+            "24_security_sale_80u_at_700",
+            lambda: _create_security_sale(
+                security, company, customer, qty=80, rate=700,
+                from_classification="Stock in Trade",
+            ),
+        )
+        step("25_assert_disposal_created", lambda: _assert_disposal_for_sale(ss))
+        step("26_assert_revenue_je_posted",
+             lambda: _assert_je_for_source("Security Sale", ss))
+        step("27_assert_holding_A_qty_disposed_80",
+             lambda: _assert_holding_qty_disposed(holding_a, 80))
+
+        # 8) Classification engine smoke — manual Unallocated → Investment.
+        sp_c = step(
+            "28_security_purchase_C_30u_at_700_unalloc",
+            lambda: _create_security_purchase(security, company, supplier, qty=30, rate=700),
+        )
+        holding_c = step(
+            "29_assert_holding_C_minted",
+            lambda: _assert_holding_from_purchase(sp_c, expected_qty=30, expected_cost=700),
+        )
+        step("30_classify_C_as_investment",
+             lambda: cls_engine.classify_as_investment(holding_c, actor="Administrator"))
+        step("31_assert_classification_investment",
+             lambda: _assert_classification(holding_c, "Investment"))
+
+        # 9) Cleanup.
         step("99_post_cleanup", _cleanup)
 
         summary["ok"] = True
@@ -225,40 +265,25 @@ def _ensure_security() -> str:
     return doc.name
 
 
-def _ensure_item_for_security(security: str) -> str:
-    """Smoke needs an Item to back Investment Holding rows. Use the
-    Security's linked Item if present; else create a minimal Polemarch-brand
-    Item and link it. """
-    item = frappe.db.get_value("Security", security, "item")
-    if item and frappe.db.exists("Item", item):
-        return item
-
-    # Need an Item Group; reuse Polemarch Securities if seeded.
-    item_group = "Polemarch Securities" if frappe.db.exists(
-        "Item Group", "Polemarch Securities"
-    ) else "All Item Groups"
-    if not frappe.db.exists("Item", security):
-        item_doc = frappe.get_doc({
-            "doctype": "Item",
-            "item_code": security,
-            "item_name": f"{_FIXTURE_PREFIX}{security}",
-            "item_group": item_group,
-            "brand": "Polemarch" if frappe.db.exists("Brand", "Polemarch") else None,
-            "is_stock_item": 0,
-            # Smoke-only: skip sales/purchase wiring. india_compliance's
-            # Item.validate enforces a non-empty gst_hsn_code only when
-            # is_sales_item=1 — and we don't need to flow these through SI
-            # for the FIFO/classification smoke. Polemarch share Items in
-            # production carry Schedule-III Non-GST treatment via the
-            # `Polemarch - Non-GST` Item Tax Template, separate from HSN.
-            "is_sales_item": 0,
-            "is_purchase_item": 0,
-            "stock_uom": "Nos" if frappe.db.exists("UOM", "Nos") else None,
-        })
-        item_doc.flags.ignore_permissions = True
-        item_doc.insert(ignore_permissions=True)
-    frappe.db.set_value("Security", security, "item", security, update_modified=False)
-    return security
+def _ensure_supplier() -> str:
+    """Security Purchase requires a Supplier counterparty. Reuse a seeded
+    test supplier if present, else mint one keyed off the fixture prefix.
+    """
+    name = f"{_FIXTURE_PREFIX}supplier-001"
+    if frappe.db.exists("Supplier", name):
+        return name
+    doc = frappe.get_doc({
+        "doctype": "Supplier",
+        "supplier_name": name,
+        "supplier_type": "Individual",
+        "supplier_group": frappe.db.get_value(
+            "Supplier Group", {"is_group": 0}, "name", order_by="lft ASC"
+        ) or "All Supplier Groups",
+        "country": frappe.db.get_value("Country", {"name": "India"}, "name") or None,
+    })
+    doc.flags.ignore_permissions = True
+    doc.insert(ignore_permissions=True)
+    return doc.name
 
 
 def _ensure_customer(company: str) -> str:
@@ -300,28 +325,78 @@ def _ensure_wallet(customer: str, company: str) -> str:
     return doc.name
 
 
-def _create_holding(item: str, company: str, qty: float, cost: float,
-                    classification: str | None = None) -> str:
-    """Create an Investment Holding. classification=None lets the
-    before_insert hook default to Unallocated (the production behaviour)."""
-    fields = {
-        "doctype": "Investment Holding",
-        "item": item,
+def _create_security_purchase(security: str, company: str, supplier: str,
+                              qty: float, rate: float) -> str:
+    """Submit a Security Purchase. Returns the submitted SP name. Its
+    on_submit handler mints the linked Investment Holding + posts the JE."""
+    abbr = frappe.db.get_value("Company", company, "abbr")
+    cost_to = f"Securities Inventory - Trading - {abbr}"
+    paid_from = frappe.db.get_value("Company", company, "default_payable_account")
+    if not paid_from:
+        raise RuntimeError(f"Company {company} has no default_payable_account")
+
+    sp = frappe.get_doc({
+        "doctype": "Security Purchase",
+        "security": security,
         "company": company,
-        "acquisition_date": "2024-01-01",
-        "qty_acquired": qty,
-        "cost_basis_per_unit": cost,
-        "purchase_reference": "Manual",
-        "notes": "Smoke test holding",
-    }
-    if classification is not None:
-        fields["classification"] = classification
-        fields["classified_on"] = now_datetime()
-        fields["classified_by"] = "Administrator"
-    doc = frappe.get_doc(fields)
-    doc.flags.ignore_permissions = True
-    doc.insert(ignore_permissions=True)
-    return doc.name
+        "posting_date": frappe.utils.today(),
+        "supplier": supplier,
+        "qty": qty,
+        "rate": rate,
+        "cost_to_account": cost_to,
+        "paid_from_account": paid_from,
+        "remarks": f"{_FIXTURE_PREFIX}smoke",
+    })
+    sp.flags.ignore_permissions = True
+    sp.insert(ignore_permissions=True)
+    sp.submit()
+    return sp.name
+
+
+def _create_security_sale(security: str, company: str, customer: str,
+                          qty: float, rate: float, from_classification: str) -> str:
+    abbr = frappe.db.get_value("Company", company, "abbr")
+    revenue = f"Trading Revenue - Securities - {abbr}"
+    paid_to = frappe.db.get_value("Company", company, "default_receivable_account")
+    if not paid_to:
+        raise RuntimeError(f"Company {company} has no default_receivable_account")
+
+    ss = frappe.get_doc({
+        "doctype": "Security Sale",
+        "security": security,
+        "company": company,
+        "posting_date": frappe.utils.today(),
+        "customer": customer,
+        "from_classification": from_classification,
+        "qty": qty,
+        "rate": rate,
+        "paid_to_account": paid_to,
+        "revenue_account": revenue,
+        "remarks": f"{_FIXTURE_PREFIX}smoke",
+    })
+    ss.flags.ignore_permissions = True
+    ss.insert(ignore_permissions=True)
+    ss.submit()
+    return ss.name
+
+
+def _force_classification(holding: str, classification: str) -> dict:
+    """Smoke shortcut: skip the 2-working-day timer and slam a Holding
+    into the requested classification. Production flow would go through
+    polemarch_trading.classification.classify_as_investment or the daily
+    auto-classifier."""
+    frappe.db.set_value(
+        "Investment Holding",
+        holding,
+        {
+            "classification": classification,
+            "classified_on": now_datetime(),
+            "classified_by": "Administrator",
+        },
+        update_modified=False,
+    )
+    frappe.db.commit()
+    return {"holding": holding, "classification": classification}
 
 
 # ── assertions ───────────────────────────────────────────────────────────
@@ -383,31 +458,185 @@ def _assert_classification(holding_name: str, expected: str) -> dict:
     return {"classification": actual}
 
 
+def _assert_holding_from_purchase(sp_name: str, expected_qty: float,
+                                  expected_cost: float) -> str:
+    """Returns the Investment Holding name minted by the given Security Purchase."""
+    sp = frappe.db.get_value(
+        "Security Purchase", sp_name,
+        ("investment_holding_ref", "journal_entry_ref"),
+        as_dict=True,
+    )
+    if not sp or not sp.investment_holding_ref:
+        raise AssertionError(f"Security Purchase {sp_name}: no Holding linked back")
+    if not sp.journal_entry_ref:
+        raise AssertionError(f"Security Purchase {sp_name}: no JE linked back")
+    h = frappe.db.get_value(
+        "Investment Holding", sp.investment_holding_ref,
+        ("qty_acquired", "cost_basis_per_unit", "security"),
+        as_dict=True,
+    )
+    if not h:
+        raise AssertionError(f"Holding {sp.investment_holding_ref} disappeared")
+    if flt(h.qty_acquired) != flt(expected_qty):
+        raise AssertionError(
+            f"Holding {sp.investment_holding_ref}: qty {h.qty_acquired} != {expected_qty}"
+        )
+    if flt(h.cost_basis_per_unit) != flt(expected_cost):
+        raise AssertionError(
+            f"Holding {sp.investment_holding_ref}: cost {h.cost_basis_per_unit} != {expected_cost}"
+        )
+    return sp.investment_holding_ref
+
+
+def _assert_je_for_source(source_doctype: str, source_name: str) -> dict:
+    je = frappe.db.get_value(
+        "Journal Entry",
+        {
+            "custom_source_doctype": source_doctype,
+            "custom_source_name": source_name,
+            "docstatus": 1,
+        },
+        ("name", "total_debit", "total_credit"),
+        as_dict=True,
+    )
+    if not je:
+        raise AssertionError(
+            f"No submitted JE found for source ({source_doctype}, {source_name})"
+        )
+    if flt(je.total_debit) != flt(je.total_credit):
+        raise AssertionError(
+            f"JE {je.name} unbalanced: DR {je.total_debit} CR {je.total_credit}"
+        )
+    return {"je": je.name, "debit": flt(je.total_debit), "credit": flt(je.total_credit)}
+
+
+def _assert_disposal_for_sale(ss_name: str) -> dict:
+    ss = frappe.db.get_value(
+        "Security Sale", ss_name,
+        ("investment_disposal_ref", "revenue_journal_entry_ref", "cogs_journal_entry_ref"),
+        as_dict=True,
+    )
+    if not ss or not ss.investment_disposal_ref:
+        raise AssertionError(f"Security Sale {ss_name}: no Disposal linked back")
+    disposal = frappe.db.get_value(
+        "Investment Disposal", ss.investment_disposal_ref,
+        ("docstatus", "total_qty_sold", "polemarch_security_sale"),
+        as_dict=True,
+    )
+    if not disposal:
+        raise AssertionError(f"Disposal {ss.investment_disposal_ref} not found")
+    if disposal.docstatus != 1:
+        raise AssertionError(
+            f"Disposal {ss.investment_disposal_ref} not submitted (docstatus={disposal.docstatus})"
+        )
+    if disposal.polemarch_security_sale != ss_name:
+        raise AssertionError(
+            f"Disposal {ss.investment_disposal_ref}: back-link mismatch "
+            f"({disposal.polemarch_security_sale} != {ss_name})"
+        )
+    return {
+        "disposal": ss.investment_disposal_ref,
+        "revenue_je": ss.revenue_journal_entry_ref,
+        "cogs_je": ss.cogs_journal_entry_ref,
+        "qty_sold": flt(disposal.total_qty_sold),
+    }
+
+
+def _assert_holding_qty_disposed(holding: str, expected: float) -> dict:
+    actual = frappe.db.get_value("Investment Holding", holding, "qty_disposed")
+    if flt(actual) != flt(expected):
+        raise AssertionError(
+            f"Holding {holding}: qty_disposed {actual} != {expected}"
+        )
+    return {"holding": holding, "qty_disposed": flt(actual)}
+
+
 # ── cleanup ──────────────────────────────────────────────────────────────
 
 
 def _cleanup():
-    """Drop all SMOKE- fixtures + their dependents."""
-    test_customer = _TEST_CUSTOMER
+    """Drop all SMOKE- fixtures + their dependents.
 
-    # Wallet Transactions referencing the smoke wallet.
+    Cancels first (rather than delete-cascade-style) so any GL Entries
+    posted under a JE that touched a real company account reverse cleanly.
+    Then deletes the fixture rows + the JEs / Disposals they spawned.
+    """
+    test_customer = _TEST_CUSTOMER
+    test_supplier = f"{_FIXTURE_PREFIX}supplier-001"
+
+    # --- Cancel + delete Security Sales (cancels Disposal + JEs via on_cancel)
+    ss_names = [
+        r[0] for r in frappe.db.sql(
+            "SELECT name FROM `tabSecurity Sale` WHERE remarks = %s",
+            (f"{_FIXTURE_PREFIX}smoke",),
+        )
+    ]
+    for name in ss_names:
+        doc = frappe.get_doc("Security Sale", name)
+        if doc.docstatus == 1:
+            try:
+                doc.flags.ignore_permissions = True
+                doc.cancel()
+            except Exception:
+                pass
+        frappe.delete_doc("Security Sale", name, force=True, ignore_permissions=True)
+
+    # --- Cancel + delete Security Purchases (cancels JE + Holding via on_cancel)
+    sp_names = [
+        r[0] for r in frappe.db.sql(
+            "SELECT name FROM `tabSecurity Purchase` WHERE remarks = %s",
+            (f"{_FIXTURE_PREFIX}smoke",),
+        )
+    ]
+    for name in sp_names:
+        doc = frappe.get_doc("Security Purchase", name)
+        if doc.docstatus == 1:
+            try:
+                doc.flags.ignore_permissions = True
+                doc.cancel()
+            except Exception:
+                pass
+        frappe.delete_doc("Security Purchase", name, force=True, ignore_permissions=True)
+
+    # --- Belt-and-braces: any leftover Disposals / JEs / Holdings keyed back
+    #     to the smoke fixtures, e.g. from a previous failed run.
+    frappe.db.sql(
+        "DELETE FROM `tabInvestment Disposal Lot` "
+        "WHERE parent IN (SELECT name FROM (SELECT name FROM `tabInvestment Disposal` "
+        "                                    WHERE customer = %s) AS x)",
+        (test_customer,),
+    )
+    frappe.db.sql(
+        "DELETE FROM `tabInvestment Disposal` WHERE customer = %s",
+        (test_customer,),
+    )
+    frappe.db.sql(
+        "DELETE FROM `tabJournal Entry Account` "
+        "WHERE parent IN (SELECT name FROM (SELECT name FROM `tabJournal Entry` "
+        "                                    WHERE user_remark LIKE %s) AS x)",
+        (f"%{_FIXTURE_PREFIX}smoke%",),
+    )
+    frappe.db.sql(
+        "DELETE FROM `tabJournal Entry` WHERE user_remark LIKE %s",
+        (f"%{_FIXTURE_PREFIX}smoke%",),
+    )
+    frappe.db.sql(
+        "DELETE FROM `tabInvestment Holding` "
+        "WHERE notes LIKE %s OR purchase_reference_link IN (%s) OR security = %s",
+        (f"%{_FIXTURE_PREFIX}%", "", _TEST_ISIN),
+    )
+
+    # --- Wallet + Customer + Supplier
     frappe.db.sql(
         "DELETE FROM `tabWallet Transaction` WHERE wallet = %s",
         (f"WAL-{test_customer}",),
     )
-    # Wallet.
     frappe.db.sql("DELETE FROM `tabWallet` WHERE customer = %s", (test_customer,))
-    # Customer.
     frappe.db.sql("DELETE FROM `tabCustomer` WHERE name = %s", (test_customer,))
-    # Investment Holdings from smoke.
-    frappe.db.sql("DELETE FROM `tabInvestment Holding` WHERE notes = 'Smoke test holding'")
-    # Security (only if no Items reference it).
-    if not frappe.db.exists("Item", {"custom_security": _TEST_ISIN}):
-        frappe.db.sql("DELETE FROM `tabSecurity` WHERE isin = %s", (_TEST_ISIN,))
-    # Smoke Item.
-    frappe.db.sql(
-        "DELETE FROM `tabItem` WHERE item_name LIKE %s",
-        (f"{_FIXTURE_PREFIX}%",),
-    )
+    frappe.db.sql("DELETE FROM `tabSupplier` WHERE name = %s", (test_supplier,))
+
+    # --- Security itself (no Item linked back since Phase 9 dropped Security.item)
+    frappe.db.sql("DELETE FROM `tabSecurity` WHERE isin = %s", (_TEST_ISIN,))
+
     frappe.db.commit()
     return {"cleaned": True}

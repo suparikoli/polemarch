@@ -1,0 +1,242 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-22 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "module": "Polemarch Trading",
+ "name": "Security Purchase",
+ "title_field": "security_name",
+ "search_fields": "security,supplier,posting_date",
+ "track_changes": 1,
+ "track_seen": 1,
+ "field_order": [
+  "naming_series",
+  "security",
+  "security_name",
+  "company",
+  "column_break_1",
+  "posting_date",
+  "supplier",
+  "section_amounts",
+  "qty",
+  "rate",
+  "column_break_2",
+  "amount",
+  "section_accounts",
+  "cost_to_account",
+  "paid_from_account",
+  "column_break_3",
+  "cost_center",
+  "section_refs",
+  "journal_entry_ref",
+  "investment_holding_ref",
+  "section_meta",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-SP-.YYYY.-.#####",
+   "default": "POL-SP-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "security",
+   "fieldtype": "Link",
+   "label": "Security",
+   "options": "Security",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The instrument being purchased. Holdings are minted against this Security directly — no Item involved."
+  },
+  {
+   "fieldname": "security_name",
+   "fieldtype": "Data",
+   "label": "Security Name",
+   "fetch_from": "security.security_name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Counterparty selling the shares to Polemarch."
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break",
+   "label": "Quantity & Price"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate per Unit",
+   "options": "INR",
+   "reqd": 1,
+   "non_negative": 1
+  },
+  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "INR",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "qty × rate. Auto-computed on save."
+  },
+  {
+   "fieldname": "section_accounts",
+   "fieldtype": "Section Break",
+   "label": "GL Accounts"
+  },
+  {
+   "fieldname": "cost_to_account",
+   "fieldtype": "Link",
+   "label": "Cost To Account (DR)",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Inventory account that takes the debit. Defaults to Securities Inventory - Trading - <abbr>; Portfolio Transfer can later move to Long-Term Investments if classified as Investment."
+  },
+  {
+   "fieldname": "paid_from_account",
+   "fieldtype": "Link",
+   "label": "Paid From Account (CR)",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Supplier creditor or bank account that takes the credit."
+  },
+  {"fieldname": "column_break_3", "fieldtype": "Column Break"},
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center",
+   "description": "Optional. Falls back to the company's default cost center on the Journal Entry if blank."
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "Generated Documents"
+  },
+  {
+   "fieldname": "journal_entry_ref",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Auto-posted on submit: DR cost_to_account, CR paid_from_account."
+  },
+  {
+   "fieldname": "investment_holding_ref",
+   "fieldtype": "Link",
+   "label": "Investment Holding",
+   "options": "Investment Holding",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Holding minted on submit. Created in classification = Unallocated; a Polemarch officer must classify within 2 working days or it auto-rolls to Stock in Trade."
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Security Purchase",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "links": [
+  {"link_doctype": "Investment Holding", "link_fieldname": "purchase_reference_link"},
+  {"link_doctype": "Journal Entry",      "link_fieldname": "custom_source_name"}
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1, "write": 1, "create": 1, "delete": 1,
+   "submit": 1, "cancel": 1, "amend": 1,
+   "report": 1, "export": 1, "import": 1, "share": 1, "print": 1, "email": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1, "write": 1, "create": 1,
+   "submit": 1, "cancel": 1, "amend": 1,
+   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+  },
+  {
+   "role": "Polemarch Trader",
+   "read": 1, "write": 1, "create": 1,
+   "submit": 1,
+   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+  },
+  {
+   "role": "Polemarch Settlement Officer",
+   "read": 1,
+   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+  },
+  {
+   "role": "Polemarch Compliance Officer",
+   "read": 1,
+   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

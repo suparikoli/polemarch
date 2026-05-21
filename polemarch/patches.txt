@@ -45,3 +45,17 @@ polemarch.patches.v0_8_0.add_classification_fields_to_investment_holding
 polemarch.patches.v0_8_0.add_trade_order_link_to_investment_disposal
 polemarch.patches.v0_8_0.backfill_classification_from_portfolio
 polemarch.patches.v0_8_0.drop_lot_doctypes
+# v0_9_0 — Standalone Security. Drops the Security ↔ Item 1:1 link and
+# makes Security the primary trading identity. Investment Holding /
+# Investment Disposal gain a `security` Custom Field (backfilled from
+# item.custom_security), the `item` field becomes optional, and two new
+# submittable doctypes (Security Purchase / Security Sale) replace the
+# PI/SI flow for Polemarch share trades. Order matters: add fields →
+# backfill → make item optional → drop Security.item column.
+polemarch.patches.v0_9_0.add_security_field_to_investment_holding
+polemarch.patches.v0_9_0.add_security_field_to_investment_disposal
+polemarch.patches.v0_9_0.add_polemarch_security_sale_field_to_investment_disposal
+polemarch.patches.v0_9_0.backfill_security_on_holdings
+polemarch.patches.v0_9_0.backfill_security_on_disposals
+polemarch.patches.v0_9_0.make_item_optional
+polemarch.patches.v0_9_0.drop_security_item_link
