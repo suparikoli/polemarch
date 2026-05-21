@@ -63,8 +63,9 @@ def consume(
     if qty_to_sell <= 0:
         return []
 
-    if sale_date is None:
-        sale_date = getdate()
+    # Always coerce — `sale_date` may arrive as a string from API callers.
+    # `getdate(None)` returns today; `getdate(str)` parses ISO/locale dates.
+    sale_date = getdate(sale_date)
 
     lock_key = f"polemarch:fifo:{security}:{portfolio}"
     if not _acquire_advisory_lock(lock_key, lock_timeout_seconds):
