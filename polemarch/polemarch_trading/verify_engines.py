@@ -213,6 +213,14 @@ def _ensure_item_for_security(security: str) -> str:
             "item_group": item_group,
             "brand": "Polemarch" if frappe.db.exists("Brand", "Polemarch") else None,
             "is_stock_item": 0,
+            # Smoke-only: skip sales/purchase wiring. india_compliance's
+            # Item.validate enforces a non-empty gst_hsn_code only when
+            # is_sales_item=1 — and we don't need to flow these through SI
+            # for the FIFO/classification smoke. Polemarch share Items in
+            # production carry Schedule-III Non-GST treatment via the
+            # `Polemarch - Non-GST` Item Tax Template, separate from HSN.
+            "is_sales_item": 0,
+            "is_purchase_item": 0,
             "stock_uom": "Nos" if frappe.db.exists("UOM", "Nos") else None,
         })
         item_doc.flags.ignore_permissions = True
