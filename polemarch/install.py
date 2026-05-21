@@ -29,6 +29,7 @@ POLEMARCH_NAMING_SERIES = "POL-.YYYY.-.#####"
 
 
 def setup():
+    _ensure_polemarch_trading_module()
     _create_customer_group()
     _create_custom_fields()
     _make_hsn_optional_on_item()
@@ -36,6 +37,42 @@ def setup():
     _create_processing_fee_item()
     _create_low_order_fee_item()
     _seed_default_sync_mappings()
+
+
+def _ensure_polemarch_trading_module():
+    """Guarantee `Polemarch Trading` Module Def exists + its doctypes are
+    schema-synced before any patches that depend on them run.
+
+    Background: on a freshly-wiped site (`tabModule Def` row missing), the
+    default `bench migrate` flow's schema-sync step skips the trading module
+    — it scans `modules.txt`, but if there's no matching Module Def row it
+    won't create one. Patches then run against nonexistent tables and
+    silently no-op inside try/except. Operator has to manually
+    `frappe.model.sync.sync_for("polemarch", force=1)` to recover.
+
+    This guard runs on every `after_install` / `after_migrate` and:
+      1. Creates the Module Def if missing.
+      2. Triggers a non-forced sync of all polemarch modules — idempotent on
+         healthy sites, schema-creating on dirty ones.
+    """
+    if not frappe.db.exists("Module Def", "Polemarch Trading"):
+        frappe.get_doc(
+            {
+                "doctype": "Module Def",
+                "module_name": "Polemarch Trading",
+                "app_name": "polemarch",
+            }
+        ).insert(ignore_permissions=True)
+
+    # Idempotent schema sync. `force=0` means existing doctypes are
+    # untouched; missing ones get created. Avoids the silent-no-op patches.
+    try:
+        from frappe.model.sync import sync_for
+        sync_for("polemarch", force=0)
+    except Exception:
+        # Don't block setup() on a sync hiccup — log and continue. Operator
+        # can always run `bench migrate` or sync_for(force=1) manually.
+        frappe.log_error(frappe.get_traceback(), "Polemarch Trading sync guard")
 
 
 def _create_customer_group():
