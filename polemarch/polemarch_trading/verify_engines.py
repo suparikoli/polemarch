@@ -34,7 +34,12 @@ def execute(verbose: bool = False) -> dict:
     def step(name: str, fn):
         try:
             detail = fn()
-            steps.append({"step": name, "ok": True, "detail": detail})
+            # The smoke result is JSON-dumped by bench's `execute` command, but
+            # some step returns (e.g. fifo.ConsumedHolding dataclasses) aren't
+            # serialisable out of the box. Stringify those for the record so
+            # printing the summary never crashes — the caller still gets the
+            # live object back as the return value.
+            steps.append({"step": name, "ok": True, "detail": _safe_detail(detail)})
             return detail
         except Exception as exc:
             steps.append({
@@ -160,6 +165,33 @@ def execute(verbose: bool = False) -> dict:
     print()
 
     return report
+
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
+def _safe_detail(value):
+    """Best-effort JSON-friendly coercion for step-detail recording.
+
+    Frappe's `json_handler` covers datetimes, decimals, and frappe documents
+    but not arbitrary dataclasses (e.g. `fifo.ConsumedHolding`). We walk the
+    common containers and fall back to `str(...)` for anything exotic so the
+    summary print can't crash on the happy path.
+    """
+    import dataclasses
+    from datetime import date, datetime
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _safe_detail(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_safe_detail(v) for v in value]
+    if dataclasses.is_dataclass(value):
+        return _safe_detail(dataclasses.asdict(value))
+    return str(value)
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────
