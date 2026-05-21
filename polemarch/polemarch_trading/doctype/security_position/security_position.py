@@ -7,9 +7,10 @@ from frappe.utils import flt
 class SecurityPosition(Document):
     """Materialised view of (portfolio, security) holdings.
 
-    Updated atomically by `polemarch.polemarch_trading.position.apply_delta(...)` which
-    holds a row-level `FOR UPDATE` lock. A nightly recomputation job verifies
-    the row matches the underlying Security Lot rollup.
+    Updated atomically by `polemarch.polemarch_trading.position.apply_delta(...)`
+    which holds a row-level `FOR UPDATE` lock. A nightly recomputation job
+    verifies the row matches the underlying Investment Holding rollup
+    (post-Phase-8 the lot table is gone; Holdings are the source of truth).
     """
 
     def validate(self):

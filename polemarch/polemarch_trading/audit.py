@@ -55,7 +55,11 @@ def verify_wallet_balance_matches_ledger():
 
 
 def verify_security_position_matches_lots():
-    """Verify each Security Position row matches a fresh Security Lot rollup."""
+    """Verify each Security Position row matches a fresh Investment Holding rollup.
+
+    Filters by the Security's linked Item (1:1 mapping). Portfolio match is
+    via the legacy custom_portfolio Custom Field on Investment Holding.
+    """
     if not frappe.db.table_exists("Security Position"):
         return
 
@@ -66,17 +70,20 @@ def verify_security_position_matches_lots():
 
     mismatches = []
     for p in positions:
+        item = frappe.db.get_value("Security", p.security, "item")
+        if not item:
+            continue
         rollup = frappe.db.sql(
             """
-            SELECT COALESCE(SUM(qty_remaining), 0)           AS qty_held,
-                   COALESCE(SUM(qty_reserved), 0)            AS qty_reserved,
-                   COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0) AS total_cost
-              FROM `tabSecurity Lot`
-             WHERE portfolio = %s
-               AND security  = %s
-               AND status    IN ('Open', 'Partially Disposed')
+            SELECT COALESCE(SUM(qty_remaining), 0)                              AS qty_held,
+                   COALESCE(SUM(COALESCE(qty_reserved, 0)), 0)                  AS qty_reserved,
+                   COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)        AS total_cost
+              FROM `tabInvestment Holding`
+             WHERE item    = %s
+               AND custom_portfolio = %s
+               AND status IN ('Open', 'Partially Disposed')
             """,
-            (p.portfolio, p.security),
+            (item, p.portfolio),
             as_dict=True,
         )[0]
 
@@ -85,69 +92,17 @@ def verify_security_position_matches_lots():
             or abs(flt(p.qty_reserved) - flt(rollup.qty_reserved)) > _DELTA_TOLERANCE
             or abs(flt(p.total_cost) - flt(rollup.total_cost)) > _DELTA_TOLERANCE
         ):
-            mismatches.append(
-                {
-                    "position": p.name,
-                    "stored": {
-                        "qty_held": flt(p.qty_held),
-                        "qty_reserved": flt(p.qty_reserved),
-                        "total_cost": flt(p.total_cost),
-                    },
-                    "rollup": dict(rollup),
-                }
-            )
+            mismatches.append({
+                "position": p.name,
+                "stored": {
+                    "qty_held": flt(p.qty_held),
+                    "qty_reserved": flt(p.qty_reserved),
+                    "total_cost": flt(p.total_cost),
+                },
+                "rollup": dict(rollup),
+            })
 
     _log_audit("verify_security_position_matches_lots", len(positions), mismatches)
-
-
-def verify_holding_lot_ledger_mirror():
-    """Phase-1 only: SLLE rollup per Investment Holding must equal qty_disposed.
-
-    Active only while both legacy Investment Holding and the new SLLE table
-    coexist (mirror-write window). Once SLLE becomes the sole source-of-truth,
-    this job becomes a no-op for legacy rows.
-    """
-    if not (
-        frappe.db.table_exists("Investment Holding")
-        and frappe.db.table_exists("Security Lot Ledger Entry")
-    ):
-        return
-
-    rows = frappe.db.sql(
-        """
-        SELECT ih.name           AS holding,
-               ih.qty_disposed   AS legacy_qty_disposed,
-               COALESCE(SUM(CASE WHEN slle.is_cancelled = 0 AND slle.entry_type = 'Consume'
-                                  THEN slle.qty ELSE 0 END), 0)
-             - COALESCE(SUM(CASE WHEN slle.is_cancelled = 0 AND slle.entry_type = 'Reversal'
-                                  THEN slle.qty ELSE 0 END), 0)
-                            AS slle_qty_disposed
-          FROM `tabInvestment Holding` ih
-          LEFT JOIN `tabSecurity Lot Ledger Entry` slle
-            ON slle.reference_doctype = 'Investment Disposal'
-           AND slle.docstatus = 1
-           AND slle.reference_name IN (
-                 SELECT idl.parent
-                   FROM `tabInvestment Disposal Lot` idl
-                  WHERE idl.holding = ih.name
-               )
-         GROUP BY ih.name
-        """,
-        as_dict=True,
-    )
-
-    mismatches = [
-        {
-            "holding": r.holding,
-            "legacy_qty_disposed": flt(r.legacy_qty_disposed),
-            "slle_qty_disposed": flt(r.slle_qty_disposed),
-            "delta": flt(r.legacy_qty_disposed) - flt(r.slle_qty_disposed),
-        }
-        for r in rows
-        if abs(flt(r.legacy_qty_disposed) - flt(r.slle_qty_disposed)) > _DELTA_TOLERANCE
-    ]
-
-    _log_audit("verify_holding_lot_ledger_mirror", len(rows), mismatches)
 
 
 def verify_holding_disposal_chain():

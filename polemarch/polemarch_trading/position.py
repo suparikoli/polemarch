@@ -1,11 +1,13 @@
 """Security Position engine — atomic position-row mutations under row-level lock.
 
-Position rows are denormalized rollups of Security Lot quantities for fast UI
-queries. `apply_delta(...)` holds a `FOR UPDATE` lock on the row (creating it
-if missing) while applying the qty/cost delta in a single UPDATE.
+Position rows are denormalized rollups of Investment Holding quantities for
+fast UI queries. `apply_delta(...)` holds a `FOR UPDATE` lock on the row
+(creating it if missing) while applying the qty/cost delta in a single UPDATE.
 
 `recompute_from_lots(portfolio, security)` is the authoritative reconciliation
-path — used by the nightly audit job and the admin "Recompute" button.
+path — used by the nightly audit job and the admin "Recompute" button. Despite
+the function name, it rolls up Investment Holdings (the legacy `lots` name is
+preserved so external callers don't break).
 """
 
 from typing import Optional
@@ -137,23 +139,30 @@ def apply_delta(
 
 
 def recompute_from_lots(portfolio: str, security: str) -> str:
-    """Rebuild the Security Position row from Security Lot ground truth.
+    """Rebuild the Security Position row from Investment Holding ground truth.
 
     Used by the nightly reconciliation audit job and as an admin escape hatch.
+
+    Filters by the security's linked Item (Security → Item is 1:1). Portfolio
+    is matched via the legacy custom_portfolio Custom Field on Investment
+    Holding (set by Phase-0 backfill).
     """
     name = _position_name(portfolio, security)
+    item = frappe.db.get_value("Security", security, "item")
+    if not item:
+        return name
 
     rollup = frappe.db.sql(
         """
-        SELECT COALESCE(SUM(qty_remaining), 0)               AS qty_held,
-               COALESCE(SUM(qty_reserved), 0)                AS qty_reserved,
-               COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0) AS total_cost
-          FROM `tabSecurity Lot`
-         WHERE portfolio = %s
-           AND security  = %s
-           AND status   IN ('Open', 'Partially Disposed')
+        SELECT COALESCE(SUM(qty_remaining), 0)                              AS qty_held,
+               COALESCE(SUM(COALESCE(qty_reserved, 0)), 0)                  AS qty_reserved,
+               COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)        AS total_cost
+          FROM `tabInvestment Holding`
+         WHERE item    = %s
+           AND custom_portfolio = %s
+           AND status IN ('Open', 'Partially Disposed')
         """,
-        (portfolio, security),
+        (item, portfolio),
         as_dict=True,
     )[0]
 

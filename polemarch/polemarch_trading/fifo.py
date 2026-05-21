@@ -1,14 +1,14 @@
-"""Canonical FIFO consumption engine for Security Lots.
+"""FIFO engine — walks Investment Holding rows oldest-first.
 
-`consume(security, portfolio, qty_to_sell)` returns a non-mutating plan of
-which Security Lots to draw from, oldest-first. The caller is responsible
-for inserting Consume SLLE rows (typically `Trade Order.transition_to('Matched')`
-or the Phase-1 mirror-write hook in Investment Disposal).
+No lot identity; just pure FIFO across Investment Holdings filtered by
+classification (Stock in Trade or Investment).
 
-Concurrency: a MySQL advisory lock keyed on (security, portfolio) serializes
-concurrent FIFO scans, preventing two callers from over-consuming the same
-oldest lot. The lock is released when the calling transaction commits or
-the connection drops.
+Ordering: by `creation` ASC (doc creation timestamp). The classification
+deadline is also creation-anchored, so "oldest holding" is consistent
+between FIFO selection and classification-expiry logic.
+
+`consume()` is non-mutating — returns a plan that callers turn into
+Investment Disposal Lot rows.
 """
 
 from dataclasses import dataclass
@@ -20,103 +20,97 @@ from frappe import _
 from frappe.utils import flt, getdate
 
 
-LONG_TERM_THRESHOLD_DAYS = 730
+_LONG_TERM_THRESHOLD_DAYS = 730  # IT-Act unlisted-equity threshold
 
 
 @dataclass
-class ConsumedLot:
-    security_lot: str
-    qty: float
+class ConsumedHolding:
+    holding: str                # Investment Holding name
+    qty: float                  # qty to consume from this holding
     cost_basis_per_unit: float
-    acquisition_date: _date
+    acquisition_date: Optional[_date]
     holding_period_days: int
     is_long_term: bool
 
-    def as_dict(self) -> dict:
-        return {
-            "security_lot": self.security_lot,
-            "qty": self.qty,
-            "cost_basis_per_unit": self.cost_basis_per_unit,
-            "acquisition_date": self.acquisition_date.isoformat() if self.acquisition_date else None,
-            "holding_period_days": self.holding_period_days,
-            "is_long_term": int(self.is_long_term),
-        }
-
 
 def consume(
-    security: str,
-    portfolio: str,
+    item: str,
+    company: str,
+    classification: str,
     qty_to_sell: float,
     sale_date: Optional[_date] = None,
     lock_timeout_seconds: int = 5,
-) -> List[ConsumedLot]:
-    """Plan a FIFO consumption against open Security Lots.
+    customer_filter: Optional[str] = None,
+) -> List[ConsumedHolding]:
+    """Plan a FIFO consumption against open Investment Holdings.
 
-    Non-mutating — does NOT write SLLE rows. Caller inserts them.
+    Args:
+        item: Item code to consume.
+        company: Company scope.
+        classification: "Stock in Trade" or "Investment" — filters the pool.
+        qty_to_sell: how much to consume.
+        sale_date: defaults to today; used for holding-period calc.
+        lock_timeout_seconds: advisory lock wait.
+        customer_filter: optional Customer name (for customer-owned holdings).
+            Pass None for proprietary holdings.
 
-    Raises if the advisory lock cannot be acquired within `lock_timeout_seconds`.
-    Returns a partial plan (qty < qty_to_sell) if open lots are insufficient;
-    callers decide whether that's acceptable (facilitator-only trades may
-    legitimately have empty plans).
+    Returns: list of (holding, qty, cost_basis, acq_date, holding_days, is_long_term).
+    Empty list if qty_to_sell <= 0 or no open holdings available.
     """
     qty_to_sell = flt(qty_to_sell)
     if qty_to_sell <= 0:
         return []
 
-    # Always coerce — `sale_date` may arrive as a string from API callers.
-    # `getdate(None)` returns today; `getdate(str)` parses ISO/locale dates.
     sale_date = getdate(sale_date)
 
-    lock_key = f"polemarch:fifo:{security}:{portfolio}"
+    lock_key = f"polemarch:fifo:{item}:{classification}:{customer_filter or '_prop'}"
     if not _acquire_advisory_lock(lock_key, lock_timeout_seconds):
         frappe.throw(
             _("Could not acquire FIFO lock for {0}/{1} within {2}s.").format(
-                security, portfolio, lock_timeout_seconds
+                item, classification, lock_timeout_seconds
             ),
             title=_("FIFO Lock Timeout"),
         )
 
-    # Scan rows with row-lock so concurrent callers (after we release the advisory
-    # lock by commit) see consistent state. ORDER BY acquisition_date ASC enforces
-    # FIFO; secondary `creation ASC` deterministically breaks ties.
+    # Walk Investment Holdings ordered by creation (FIFO).
+    # ALSO filtered by classification — Unallocated holdings can't be sold.
+    classification_check = "classification = %s" if frappe.db.has_column("Investment Holding", "classification") else "1=1"
     rows = frappe.db.sql(
-        """
-        SELECT name,
-               qty_acquired,
-               qty_disposed,
-               cost_basis_per_unit,
-               acquisition_date
-          FROM `tabSecurity Lot`
-         WHERE security  = %s
-           AND portfolio = %s
-           AND status   IN ('Open', 'Partially Disposed')
-           AND lot_state IN ('Open', 'Reserved')
-         ORDER BY acquisition_date ASC, creation ASC
+        f"""
+        SELECT name, qty_acquired, qty_disposed,
+               COALESCE(qty_reserved, 0) AS qty_reserved,
+               cost_basis_per_unit, acquisition_date, creation
+          FROM `tabInvestment Holding`
+         WHERE item    = %s
+           AND company = %s
+           AND status IN ('Open', 'Partially Disposed')
+           AND {classification_check}
+         ORDER BY creation ASC
          FOR UPDATE
         """,
-        (security, portfolio),
+        ((item, company, classification) if "classification" in classification_check else (item, company)),
         as_dict=True,
     )
 
-    plan: List[ConsumedLot] = []
+    plan: List[ConsumedHolding] = []
     remaining = qty_to_sell
     for row in rows:
         if remaining <= 0:
             break
-        available = flt(row.qty_acquired) - flt(row.qty_disposed)
+        available = flt(row.qty_acquired) - flt(row.qty_disposed) - flt(row.qty_reserved)
         if available <= 0:
             continue
         take = min(available, remaining)
-        acq = getdate(row.acquisition_date)
+        acq = getdate(row.acquisition_date) if row.acquisition_date else None
         days = (sale_date - acq).days if acq else 0
         plan.append(
-            ConsumedLot(
-                security_lot=row.name,
+            ConsumedHolding(
+                holding=row.name,
                 qty=take,
                 cost_basis_per_unit=flt(row.cost_basis_per_unit),
                 acquisition_date=acq,
                 holding_period_days=days,
-                is_long_term=days > LONG_TERM_THRESHOLD_DAYS,
+                is_long_term=days > _LONG_TERM_THRESHOLD_DAYS,
             )
         )
         remaining -= take
@@ -124,93 +118,29 @@ def consume(
     return plan
 
 
-def write_consume_entries(
-    plan: List[ConsumedLot],
-    reference_doctype: str,
-    reference_name: str,
-    sale_price_per_unit: float = 0,
-) -> List[str]:
-    """Insert one Consume SLLE per planned lot.
-
-    Returns the list of created SLLE names. Idempotency is the caller's
-    responsibility (typically by checking for existing rows with the same
-    (reference_doctype, reference_name)).
-    """
-    sale_price_per_unit = flt(sale_price_per_unit)
-    names: List[str] = []
+def reserve(plan: List[ConsumedHolding]) -> None:
+    """Bump qty_reserved on each Investment Holding in the plan."""
     for entry in plan:
-        slle = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": entry.security_lot,
-                "entry_type": "Consume",
-                "qty": entry.qty,
-                "cost_basis_per_unit": entry.cost_basis_per_unit,
-                "sale_price_per_unit": sale_price_per_unit,
-                "reference_doctype": reference_doctype,
-                "reference_name": reference_name,
-                "holding_period_days": entry.holding_period_days,
-                "is_long_term": int(entry.is_long_term),
-                "realized_gain": (sale_price_per_unit - entry.cost_basis_per_unit) * entry.qty,
-            }
+        frappe.db.sql(
+            "UPDATE `tabInvestment Holding` SET qty_reserved = COALESCE(qty_reserved, 0) + %s WHERE name = %s",
+            (entry.qty, entry.holding),
         )
-        slle.flags.ignore_permissions = True
-        slle.insert(ignore_permissions=True)
-        slle.submit()
-        names.append(slle.name)
-    return names
+    frappe.db.commit()
 
 
-def reverse_consume_entries(reference_doctype: str, reference_name: str) -> List[str]:
-    """Post Reversal SLLE rows for every Consume row tied to a reference doc.
-
-    Idempotent: skips already-cancelled rows.
-    """
-    consume_rows = frappe.get_all(
-        "Security Lot Ledger Entry",
-        filters={
-            "reference_doctype": reference_doctype,
-            "reference_name": reference_name,
-            "entry_type": "Consume",
-            "is_cancelled": 0,
-            "docstatus": 1,
-        },
-        fields=["name", "security_lot", "qty", "cost_basis_per_unit"],
-    )
-
-    reversal_names: List[str] = []
-    for row in consume_rows:
-        reversal = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": row.security_lot,
-                "entry_type": "Reversal",
-                "qty": row.qty,
-                "cost_basis_per_unit": row.cost_basis_per_unit,
-                "reverses": row.name,
-                "reference_doctype": reference_doctype,
-                "reference_name": reference_name,
-            }
+def release_reservation(plan: List[ConsumedHolding]) -> None:
+    """Decrement qty_reserved (reversal of reserve())."""
+    for entry in plan:
+        frappe.db.sql(
+            "UPDATE `tabInvestment Holding` SET qty_reserved = GREATEST(COALESCE(qty_reserved, 0) - %s, 0) WHERE name = %s",
+            (entry.qty, entry.holding),
         )
-        reversal.flags.ignore_permissions = True
-        reversal.insert(ignore_permissions=True)
-        reversal.submit()
-
-        # Mark the original as cancelled via the reversal path.
-        original = frappe.get_doc("Security Lot Ledger Entry", row.name)
-        original.flags.from_reversal = True
-        original.is_cancelled = 1
-        original.reversed_by = reversal.name
-        original.db_update()
-
-        reversal_names.append(reversal.name)
-    return reversal_names
+    frappe.db.commit()
 
 
-def _acquire_advisory_lock(key: str, timeout_seconds: int) -> bool:
-    result = frappe.db.sql(
-        "SELECT GET_LOCK(%s, %s)", (key, timeout_seconds), as_list=True
-    )
-    if not result or not result[0]:
-        return False
-    return bool(result[0][0])
+# ── internals ───────────────────────────────────────────────────────────
+
+
+def _acquire_advisory_lock(key: str, timeout: int) -> bool:
+    result = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (key, timeout), as_list=True)
+    return bool(result and result[0] and result[0][0])

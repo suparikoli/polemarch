@@ -28,8 +28,8 @@
   {
    "fieldname": "source_lot",
    "fieldtype": "Link",
-   "label": "Source Security Lot",
-   "options": "Security Lot",
+   "label": "Source Investment Holding",
+   "options": "Investment Holding",
    "reqd": 1,
    "in_list_view": 1
   },
@@ -112,10 +112,10 @@
   {
    "fieldname": "new_lot",
    "fieldtype": "Link",
-   "label": "New Security Lot",
-   "options": "Security Lot",
+   "label": "New Investment Holding",
+   "options": "Investment Holding",
    "read_only": 1,
-   "description": "Populated when Portfolio Transfer is Posted — the lot created on the destination portfolio."
+   "description": "Populated when Portfolio Transfer is Posted — the Holding created on the destination classification."
   }
  ],
  "permissions": [],

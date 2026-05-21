@@ -57,25 +57,30 @@ def get_lots(
     portfolio: Optional[str] = None,
 ):
     """Lot-level view for drill-down from a position. Restricted to open
-    or partially-disposed lots only — fully consumed lots are hidden by
-    default (they're audit-only)."""
-    customer = _resolve_customer(customer)
+    or partially-disposed Investment Holdings only — fully disposed Holdings
+    are hidden by default (they're audit-only).
+
+    Filters by Item linked to the Security (Security → Item is 1:1)."""
+    _resolve_customer(customer)
     filters = {
-        "owning_customer": customer,
         "status": ["in", ["Open", "Partially Disposed"]],
     }
     if security:
-        filters["security"] = security
+        item = frappe.db.get_value("Security", security, "item")
+        if item:
+            filters["item"] = item
     if portfolio:
-        filters["portfolio"] = portfolio
+        filters["custom_portfolio"] = portfolio
 
     return frappe.get_all(
-        "Security Lot",
+        "Investment Holding",
         filters=filters,
         fields=[
             "name",
-            "security",
-            "portfolio",
+            "item",
+            "item_name",
+            "custom_portfolio",
+            "classification",
             "acquisition_date",
             "qty_acquired",
             "qty_remaining",
@@ -83,9 +88,8 @@ def get_lots(
             "cost_basis_per_unit",
             "remaining_cost",
             "status",
-            "lot_state",
         ],
-        order_by="acquisition_date ASC",
+        order_by="creation ASC",
         limit_page_length=500,
     )
 
@@ -97,33 +101,29 @@ def get_realized_pnl(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ):
-    """Realized P&L summary across Investment Disposals for the customer's
-    lots. Sourced from the immutable SLLE Consume rows so the values reflect
-    cancellation / reversal cleanly.
+    """Realized P&L summary aggregated from Investment Disposal Lots.
 
-    Returns aggregated LTCG / STCG buckets plus a per-disposal detail list."""
-    customer = _resolve_customer(customer)
+    Returns aggregated LTCG / STCG buckets per Item."""
+    _resolve_customer(customer)
     from_date = from_date or _fy_start_for_today().isoformat()
     to_date = to_date or "2099-12-31"
 
     rows = frappe.db.sql(
         """
-        SELECT slle.security,
-               slle.is_long_term,
-               COALESCE(SUM(slle.qty * slle.cost_basis_per_unit), 0)  AS cost_basis,
-               COALESCE(SUM(slle.qty * slle.sale_price_per_unit), 0)  AS proceeds,
-               COALESCE(SUM(slle.realized_gain), 0)                   AS realized_gain
-          FROM `tabSecurity Lot Ledger Entry` slle
-          JOIN `tabSecurity Lot`              sl   ON sl.name = slle.security_lot
-         WHERE sl.owning_customer = %(customer)s
-           AND slle.entry_type    = 'Consume'
-           AND slle.is_cancelled  = 0
-           AND slle.docstatus     = 1
-           AND DATE(slle.posting_datetime) BETWEEN %(from_date)s AND %(to_date)s
-         GROUP BY slle.security, slle.is_long_term
-         ORDER BY slle.security
+        SELECT idl.parent                                              AS disposal,
+               disposal.item                                           AS item,
+               idl.is_long_term,
+               COALESCE(SUM(idl.cost_basis_amount), 0)                 AS cost_basis,
+               COALESCE(SUM(idl.sale_amount), 0)                       AS proceeds,
+               COALESCE(SUM(idl.realized_gain), 0)                     AS realized_gain
+          FROM `tabInvestment Disposal Lot` idl
+          JOIN `tabInvestment Disposal`     disposal ON disposal.name = idl.parent
+         WHERE disposal.docstatus = 1
+           AND DATE(disposal.disposal_date) BETWEEN %(from_date)s AND %(to_date)s
+         GROUP BY disposal.item, idl.is_long_term
+         ORDER BY disposal.item
         """,
-        {"customer": customer, "from_date": from_date, "to_date": to_date},
+        {"from_date": from_date, "to_date": to_date},
         as_dict=True,
     )
 

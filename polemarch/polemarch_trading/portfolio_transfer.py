@@ -1,26 +1,22 @@
 """Portfolio Transfer Posted-state engine.
 
+Refactored to operate on Investment Holding `classification` field rather
+than Security Lots. The transfer moves shares between classifications
+(Stock in Trade ↔ Investment), with optional FMV revaluation.
+
 `post_transfer(name)` is the only path that takes an Approved Portfolio
 Transfer to Posted. It:
 
-  1. Acquires both portfolios' advisory locks in sorted name order
-     (deadlock avoidance).
-  2. Writes Consume SLLE rows against each source lot.
-  3. Creates new Security Lot(s) on the destination portfolio.
-     - At-cost transfer (default): cost_basis_per_unit = source.cost_basis_per_unit
-       (one new lot per source lot, preserving lot identity)
-     - FMV transfer (future): cost_basis_per_unit = transfer.fmv_per_unit
-       (single consolidated lot at transfer date)
-     This implementation uses the **at-cost** policy by default. FMV mode
-     is reserved for cross-beneficial-owner transfers.
-  4. Posts a Journal Entry (DR destination-inventory / CR source-inventory)
-     at total cost basis. No P&L impact at default policy.
-  5. Cross-links `reversal_of` ↔ `reversed_by` if this transfer reverses
-     a prior one.
-  6. Transitions Approved → Posted.
+  1. Walks lots_consumed (the FIFO plan against Investment Holdings).
+  2. For each: marks the source Holding as fully disposed (qty_disposed +=
+     qty_transferred) and creates a NEW Investment Holding on the target
+     classification at the original cost basis (at-cost default).
+  3. Posts a Journal Entry (DR target-inventory / CR source-inventory) at
+     total cost basis. No P&L impact at default policy.
+  4. Cross-links `reversal_of` ↔ `reversed_by` if applicable.
+  5. Transitions Approved → Posted.
 
-Idempotent: re-running on an already-Posted transfer is a no-op (returns the
-existing JE name).
+Idempotent: re-running on an already-Posted transfer is a no-op.
 """
 
 from typing import Optional
@@ -31,26 +27,27 @@ from frappe.utils import flt, getdate, now_datetime
 
 
 def post_transfer(name: str) -> str:
-    """Drive an Approved Portfolio Transfer to Posted. Returns its name."""
     pt = frappe.get_doc("Portfolio Transfer", name)
     if pt.transfer_state == "Posted":
         return pt.name
     if pt.transfer_state != "Approved":
         frappe.throw(
-            _(
-                "Portfolio Transfer {0}: must be Approved before posting (state={1})."
-            ).format(name, pt.transfer_state),
+            _("Portfolio Transfer {0}: must be Approved before posting (state={1}).").format(
+                name, pt.transfer_state
+            ),
             title=_("Cannot Post"),
         )
 
     if not pt.lots_consumed:
         frappe.throw(
-            _("Portfolio Transfer {0}: no lots planned (empty lots_consumed table).").format(name),
+            _("Portfolio Transfer {0}: no source holdings planned.").format(name),
             title=_("Nothing to Post"),
         )
 
-    # 1) Sorted advisory locks for the two portfolios.
-    keys = sorted([f"polemarch:pt:{pt.from_portfolio}", f"polemarch:pt:{pt.to_portfolio}"])
+    keys = sorted([
+        f"polemarch:pt:{pt.from_classification or 'src'}",
+        f"polemarch:pt:{pt.to_classification or 'dst'}",
+    ])
     for key in keys:
         result = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (key, 5), as_list=True)
         if not result or not result[0] or not result[0][0]:
@@ -59,30 +56,18 @@ def post_transfer(name: str) -> str:
                 title=_("Lock Timeout"),
             )
 
-    # 2) Consume SLLE per source lot.
-    _write_consume_slles(pt)
-
-    # 3) Create destination lots.
-    _create_destination_lots(pt)
-
-    # 4) Post the JE.
+    _transfer_holdings(pt)
     je_name = _post_je(pt)
     if je_name:
         frappe.db.set_value(
             "Portfolio Transfer", pt.name, "journal_entry", je_name, update_modified=False
         )
 
-    # 5) Cross-link reversal pointers.
     if pt.reversal_of and not frappe.db.get_value("Portfolio Transfer", pt.reversal_of, "reversed_by"):
         frappe.db.set_value(
-            "Portfolio Transfer",
-            pt.reversal_of,
-            "reversed_by",
-            pt.name,
-            update_modified=False,
+            "Portfolio Transfer", pt.reversal_of, "reversed_by", pt.name, update_modified=False
         )
 
-    # 6) Transition state.
     pt.reload()
     pt.transition_to("Posted")
     return pt.name
@@ -91,119 +76,59 @@ def post_transfer(name: str) -> str:
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
-def _write_consume_slles(pt) -> None:
+def _transfer_holdings(pt) -> None:
+    """Consume from source Holdings, mint new Holdings on target classification."""
     for lot in pt.lots_consumed or []:
-        if frappe.db.exists(
-            "Security Lot Ledger Entry",
-            {
-                "reference_doctype": "Portfolio Transfer",
-                "reference_name": pt.name,
-                "security_lot": lot.source_lot,
-                "entry_type": "Consume",
-                "is_cancelled": 0,
-            },
-        ):
+        if lot.get("new_lot"):
+            continue
+        if not lot.source_lot:
             continue
 
-        slle = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": lot.source_lot,
-                "entry_type": "Consume",
-                "qty": flt(lot.qty_consumed),
-                "cost_basis_per_unit": flt(lot.original_cost_basis_per_unit),
-                "sale_price_per_unit": flt(lot.transfer_fmv_per_unit),
-                "reference_doctype": "Portfolio Transfer",
-                "reference_name": pt.name,
-                "holding_period_days": lot.holding_period_days_at_transfer,
-                "is_long_term": lot.is_long_term_at_transfer,
-                "realized_gain": 0,
-            }
-        )
-        slle.flags.ignore_permissions = True
-        slle.insert(ignore_permissions=True)
-        slle.submit()
-
-
-def _create_destination_lots(pt) -> None:
-    """At-cost policy: one new Security Lot per source lot on the destination
-    portfolio. Preserves lot identity for FIFO ordering on subsequent sales."""
-    to_portfolio = frappe.db.get_value(
-        "Portfolio", pt.to_portfolio, ("owner_kind", "customer"), as_dict=True
-    )
-    owning_customer = (
-        to_portfolio.customer
-        if to_portfolio and to_portfolio.owner_kind == "Customer"
-        else None
-    )
-
-    for lot in pt.lots_consumed or []:
-        if lot.new_lot:
-            # Already created on a prior run; idempotent.
+        source = frappe.get_doc("Investment Holding", lot.source_lot)
+        qty = flt(lot.qty_consumed)
+        if qty <= 0:
             continue
 
-        source = frappe.db.get_value(
-            "Security Lot",
-            lot.source_lot,
-            ("acquisition_date", "purchase_reference", "purchase_reference_link"),
-            as_dict=True,
-        )
-        if not source:
-            continue
+        source.qty_disposed = flt(source.qty_disposed or 0) + qty
+        source.flags.ignore_permissions = True
+        source.save(ignore_permissions=True)
 
-        new_lot = frappe.get_doc(
-            {
-                "doctype": "Security Lot",
-                "security": pt.security,
-                "portfolio": pt.to_portfolio,
-                "owning_customer": owning_customer,
-                "acquisition_date": source.acquisition_date,
-                "qty_acquired": flt(lot.qty_consumed),
-                "cost_basis_per_unit": flt(lot.original_cost_basis_per_unit),
-                "purchase_reference": "Portfolio Transfer",
-                "purchase_reference_link": pt.name,
-                "notes": (
-                    f"Created by Portfolio Transfer {pt.name} from source lot {lot.source_lot}. "
-                    f"Holding-period clock preserved from source acquisition date."
-                ),
-            }
-        )
-        new_lot.flags.ignore_permissions = True
-        new_lot.insert(ignore_permissions=True)
-
-        # Acquire SLLE for the new lot.
-        acq = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": new_lot.name,
-                "entry_type": "Acquire",
-                "qty": flt(lot.qty_consumed),
-                "cost_basis_per_unit": flt(lot.original_cost_basis_per_unit),
-                "reference_doctype": "Portfolio Transfer",
-                "reference_name": pt.name,
-            }
-        )
-        acq.flags.ignore_permissions = True
-        acq.insert(ignore_permissions=True)
-        acq.submit()
+        new_holding = frappe.get_doc({
+            "doctype": "Investment Holding",
+            "item": source.item,
+            "company": source.company,
+            "acquisition_date": source.acquisition_date,
+            "qty_acquired": qty,
+            "cost_basis_per_unit": flt(lot.original_cost_basis_per_unit),
+            "purchase_reference": "Portfolio Transfer",
+            "purchase_reference_link": pt.name,
+            "classification": pt.to_classification,
+            "classified_on": now_datetime(),
+            "classified_by": frappe.session.user,
+            "notes": (
+                f"Created by Portfolio Transfer {pt.name} from source Holding {source.name}. "
+                f"Holding-period clock preserved from source acquisition date."
+            ),
+        })
+        new_holding.flags.ignore_permissions = True
+        new_holding.insert(ignore_permissions=True)
 
         frappe.db.set_value(
-            "Portfolio Transfer Lot", lot.name, "new_lot", new_lot.name, update_modified=False
+            "Portfolio Transfer Lot", lot.name, "new_lot", new_holding.name, update_modified=False
         )
 
 
 def _post_je(pt) -> Optional[str]:
     """At-cost reclassification JE:
 
-        DR  <destination-inventory-account>   total_cost
-        CR  <source-inventory-account>        total_cost
+        DR  <to_classification inventory account>     total_cost
+        CR  <from_classification inventory account>   total_cost
 
-    No P&L. Idempotent via custom_source_doctype/name on Journal Entry.
+    Idempotent via custom_source_doctype/name on Journal Entry.
     """
     if not frappe.db.exists(
         "Custom Field", {"dt": "Journal Entry", "fieldname": "custom_source_doctype"}
     ):
-        # Phase 3 patch hasn't run; skip cleanly.
         return None
 
     existing = frappe.db.get_value(
@@ -226,8 +151,8 @@ def _post_je(pt) -> Optional[str]:
     if not abbr:
         return None
 
-    from_account = _portfolio_inventory_account(pt.from_portfolio, abbr, pt.company)
-    to_account = _portfolio_inventory_account(pt.to_portfolio, abbr, pt.company)
+    from_account = _classification_inventory_account(pt.from_classification, abbr, pt.company)
+    to_account = _classification_inventory_account(pt.to_classification, abbr, pt.company)
     if not from_account or not to_account:
         frappe.log_error(
             f"Portfolio Transfer {pt.name}: inventory accounts missing "
@@ -248,7 +173,7 @@ def _post_je(pt) -> Optional[str]:
     je.company = pt.company
     je.user_remark = (
         f"Polemarch Portfolio Transfer | {pt.name} | "
-        f"{pt.from_portfolio} → {pt.to_portfolio} | {pt.security}"
+        f"{pt.from_classification} → {pt.to_classification} | {pt.security}"
     )
     je.custom_source_doctype = "Portfolio Transfer"
     je.custom_source_name = pt.name
@@ -272,10 +197,9 @@ def _post_je(pt) -> Optional[str]:
     return je.name
 
 
-def _portfolio_inventory_account(portfolio: str, abbr: str, company: str) -> Optional[str]:
-    portfolio_type = frappe.db.get_value("Portfolio", portfolio, "portfolio_type")
+def _classification_inventory_account(classification: str, abbr: str, company: str) -> Optional[str]:
     logical = (
-        "Long-Term Investments" if portfolio_type == "Investment"
+        "Long-Term Investments" if classification == "Investment"
         else "Securities Inventory - Trading"
     )
     candidate = f"{logical} - {abbr}"

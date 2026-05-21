@@ -20,18 +20,30 @@ import frappe
 _REQUIRED_DOCTYPES = [
     "Security", "Portfolio",
     "Wallet", "Wallet Transaction",
-    "Security Lot", "Security Lot Ledger Entry", "Security Position",
-    "Trade Order", "Trade Order Lot Consumption",
+    "Security Position",
+    "Trade Order",
     "Settlement Instruction",
     "Portfolio Transfer", "Portfolio Transfer Lot",
     "Polemarch Audit Log",
-    "Polemarch API Idempotency Log", "Polemarch API Log",
     "Settlement Run", "Settlement Run Item",
 ]
 
 _REQUIRED_JE_CUSTOM_FIELDS = ["custom_source_doctype", "custom_source_name"]
 _REQUIRED_ITEM_CUSTOM_FIELDS = ["custom_security"]
-_REQUIRED_IH_CUSTOM_FIELDS = ["custom_portfolio"]
+# Investment Holding gets:
+#   - custom_portfolio        (Phase 2 — Trading vs Investment portfolio routing)
+#   - classification          (Phase 8 — Unallocated / Stock in Trade / Investment)
+#   - classification_deadline (Phase 8 — 2-working-day auto-classification timer)
+#   - qty_reserved            (Phase 8 — FIFO reservation bucket for open Sell orders)
+_REQUIRED_IH_CUSTOM_FIELDS = [
+    "custom_portfolio",
+    "classification",
+    "classification_deadline",
+    "qty_reserved",
+]
+# Investment Disposal gets:
+#   - polemarch_trade_order (Phase 8 — back-link from Disposal → originating Trade Order)
+_REQUIRED_ID_CUSTOM_FIELDS = ["polemarch_trade_order"]
 
 _REQUIRED_ROLES = [
     "Polemarch Settlement Officer",
@@ -83,6 +95,11 @@ def execute(verbose: bool = False) -> dict:
             ok.append(f"Custom Field present: Investment Holding.{fn}")
         else:
             errors.append(f"Custom Field MISSING: Investment Holding.{fn}")
+    for fn in _REQUIRED_ID_CUSTOM_FIELDS:
+        if frappe.db.exists("Custom Field", {"dt": "Investment Disposal", "fieldname": fn}):
+            ok.append(f"Custom Field present: Investment Disposal.{fn}")
+        else:
+            errors.append(f"Custom Field MISSING: Investment Disposal.{fn}")
 
     # 4) Roles seeded.
     for role in _REQUIRED_ROLES:
@@ -154,9 +171,7 @@ def execute(verbose: bool = False) -> dict:
         required_daily = [
             "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
             "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
-            "polemarch.polemarch_trading.audit.verify_holding_lot_ledger_mirror",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
-            "polemarch.polemarch_trading.api._idempotency.purge_expired",
         ]
         hourly = getattr(polemarch_hooks, "scheduler_events", {}).get("hourly", [])
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])
@@ -170,8 +185,8 @@ def execute(verbose: bool = False) -> dict:
     # 8) Feature flags — report state (informational, not error).
     try:
         from polemarch.polemarch_trading import feature_flags
-        for flag in ("MIRROR_WRITE_SLLE", "AUTO_CREATE_WALLET_ON_POLEMARCH_FLAG",
-                     "CREATE_TRADE_ORDER_FROM_MEDUSA", "AUTO_POST_CAPITAL_GAINS_JE",
+        for flag in ("AUTO_CREATE_WALLET_ON_POLEMARCH_FLAG",
+                     "AUTO_POST_CAPITAL_GAINS_JE",
                      "CUSTOMER_ROLE_SCOPING"):
             state = "ON" if feature_flags.is_enabled(flag) else "OFF"
             (warnings if state == "OFF" else ok).append(f"Feature flag {flag}={state}")

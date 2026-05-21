@@ -14,7 +14,7 @@ from typing import Optional
 
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import flt, getdate, now_datetime
 
 
 _BATCH_SIZE = 50
@@ -124,14 +124,16 @@ def clear(
         seller_bank_payout_ref=seller_bank_payout_ref,
     )
 
-    # Advance Trade Order. For sells, write the actual Consume SLLE rows now —
-    # we held off at match-time so reversal would be cheap.
+    # Advance Trade Order. For sells, create the Investment Disposal now —
+    # at clear-time, not match-time, so reversal stays cheap.
     order = frappe.get_doc("Trade Order", si.trade_order)
     if order.side == "Sell":
-        _write_consume_slles_from_lots_consumed(order)
-        # Drop the Reserve rows; they've served their purpose.
+        _create_investment_disposal_for_trade_order(order)
+        # Release reserved qty (FIFO planner deterministically gives back the
+        # same Holdings); the consume side of the equation was just recorded
+        # by Investment Disposal which decrements qty_remaining.
         from polemarch.polemarch_trading import matching as matching_engine
-        matching_engine._release_sell_lots(order)
+        matching_engine._release_sell_holdings(order)
 
     order.transition_to("Settled")
     return si.name
@@ -175,7 +177,7 @@ def on_instruction_cancelled(si) -> None:
     if order.side == "Buy" and order.book == "Customer":
         matching_engine._release_buy_wallet(order)
     elif order.side == "Sell":
-        matching_engine._release_sell_lots(order)
+        matching_engine._release_sell_holdings(order)
 
 
 # ── Internal helpers ────────────────────────────────────────────────────
@@ -235,38 +237,59 @@ def _credit_seller_proceeds(order):
     )
 
 
-def _write_consume_slles_from_lots_consumed(order) -> None:
-    """At Cleared time, materialise the planned consumption as immutable
-    Consume SLLE rows. Idempotent on (Trade Order, security_lot) — duplicate
-    runs skip lots that already have a Consume row referencing the order."""
-    for lot in order.lots_consumed or []:
-        if frappe.db.exists(
-            "Security Lot Ledger Entry",
-            {
-                "reference_doctype": "Trade Order",
-                "reference_name": order.name,
-                "entry_type": "Consume",
-                "security_lot": lot.security_lot,
-                "is_cancelled": 0,
-            },
-        ):
-            continue
+def _create_investment_disposal_for_trade_order(order) -> Optional[str]:
+    """At Clear time, materialise the FIFO consumption as an Investment
+    Disposal (with child Investment Disposal Lot rows). The legacy controller
+    handles all the math: realized gain, LTCG/STCG split, qty_disposed updates
+    on Investment Holding rows, and (if AUTO_POST_CAPITAL_GAINS_JE is enabled)
+    the cost-recognition Journal Entry.
 
-        slle = frappe.get_doc(
+    Idempotent: re-runs are skipped if a Disposal already exists for this
+    Trade Order.
+    """
+    existing = frappe.db.get_value(
+        "Investment Disposal",
+        {"polemarch_trade_order": order.name, "docstatus": ["!=", 2]},
+        "name",
+    )
+    if existing:
+        return existing
+
+    from polemarch.polemarch_trading import fifo as fifo_engine
+    from polemarch.polemarch_trading import matching as matching_engine
+
+    classification = matching_engine._classification_for_order(order)
+    item = matching_engine._item_for_security(order.security)
+    plan = fifo_engine.consume(
+        item=item,
+        company=order.company,
+        classification=classification,
+        qty_to_sell=flt(order.qty),
+        sale_date=getdate(order.posting_date),
+        customer_filter=order.customer if order.book == "Customer" else None,
+    )
+    if not plan:
+        return None
+
+    disposal = frappe.get_doc({
+        "doctype": "Investment Disposal",
+        "item": item,
+        "company": order.company,
+        "disposal_date": getdate(order.posting_date),
+        "sales_invoice": None,  # Trade Order is the origin, not an SI
+        "polemarch_trade_order": order.name,
+        "total_qty_sold": flt(order.qty),
+        "sale_price_per_unit": flt(order.price),
+        "lots": [
             {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": lot.security_lot,
-                "entry_type": "Consume",
-                "qty": flt(lot.qty_consumed),
-                "cost_basis_per_unit": flt(lot.cost_basis_per_unit),
-                "sale_price_per_unit": flt(lot.sale_price_per_unit),
-                "reference_doctype": "Trade Order",
-                "reference_name": order.name,
-                "holding_period_days": lot.holding_period_days,
-                "is_long_term": lot.is_long_term,
-                "realized_gain": flt(lot.realized_gain),
+                "holding": p.holding,
+                "qty_consumed": p.qty,
+                "sale_price_per_unit": flt(order.price),
             }
-        )
-        slle.flags.ignore_permissions = True
-        slle.insert(ignore_permissions=True)
-        slle.submit()
+            for p in plan
+        ],
+    })
+    disposal.flags.ignore_permissions = True
+    disposal.insert(ignore_permissions=True)
+    disposal.submit()
+    return disposal.name

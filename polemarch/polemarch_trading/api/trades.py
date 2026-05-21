@@ -1,15 +1,13 @@
-"""Trade Order REST endpoints (Phase 2).
+"""Trade Order REST endpoints.
 
-All endpoints are role-gated and idempotency-key-aware. They are the only
-public-facing way to drive the Trade Order state machine from outside Frappe.
+All endpoints are role-gated. They drive the Trade Order state machine from
+outside Frappe (back-office UI, scripts, or any external system).
 
-Conventions:
-  - Idempotency keys live in `Polemarch API Idempotency Log` (Phase 5 doctype).
-    Until that ships, the wallet/SLLE engines already enforce idempotency at
-    the inner layer, so duplicate API calls are safe but not deduplicated at
-    the API surface.
-  - Responses use Frappe's standard JSON envelope. Errors raise typed
-    exceptions so the response_status_code is set correctly by Frappe.
+Idempotency: the wallet and SLLE engines deduplicate by `idempotency_key`
+at the row level — that's the only idempotency layer.
+
+Responses use Frappe's standard JSON envelope. Errors raise typed exceptions
+so the response_status_code is set correctly by Frappe.
 """
 
 from typing import Optional

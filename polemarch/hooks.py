@@ -48,8 +48,9 @@ doc_events = {
         "validate": "polemarch.overrides.sales_order.validate",
     },
     # Phase 2 — proprietary share purchases route cost to Securities
-    # Inventory / Long-Term Investments and mint Security Lots + Acquire
-    # SLLE rows. Validates the expense account BEFORE GL posting.
+    # Inventory / Long-Term Investments and mint Investment Holdings (one
+    # per PI line) in `Unallocated` classification. Validates the expense
+    # account BEFORE GL posting.
     "Purchase Invoice": {
         "validate": "polemarch.polemarch_trading.hooks.purchase_invoice_validate",
         "on_submit": "polemarch.polemarch_trading.hooks.purchase_invoice_on_submit",
@@ -76,10 +77,7 @@ scheduler_events = {
         # none of them auto-heal.
         "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
         "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
-        "polemarch.polemarch_trading.audit.verify_holding_lot_ledger_mirror",
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
-        # Phase 5 — purge expired idempotency cache rows.
-        "polemarch.polemarch_trading.api._idempotency.purge_expired",
     ],
     "cron": {
         # Phase 6 — mark-to-market at 06:00 IST (00:30 UTC).
@@ -101,7 +99,6 @@ permission_query_conditions = {
     "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_perm_query",
     "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_perm_query",
     "Security Position":     "polemarch.polemarch_trading.permissions.security_position_perm_query",
-    "Security Lot":          "polemarch.polemarch_trading.permissions.security_lot_perm_query",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_perm_query",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_perm_query",
 }
@@ -112,7 +109,6 @@ has_permission = {
     "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_has_permission",
     "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_has_permission",
     "Security Position":     "polemarch.polemarch_trading.permissions.security_position_has_permission",
-    "Security Lot":          "polemarch.polemarch_trading.permissions.security_lot_has_permission",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_has_permission",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_has_permission",
 }

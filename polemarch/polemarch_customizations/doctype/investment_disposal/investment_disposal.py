@@ -43,12 +43,10 @@ class InvestmentDisposal(Document):
 
     def on_submit(self):
         self._apply_to_holdings(direction=+1)
-        self._mirror_write_slle(direction=+1)
         self._post_journal_entry()
 
     def on_cancel(self):
         self._cancel_journal_entry()
-        self._mirror_write_slle(direction=-1)
         self._apply_to_holdings(direction=-1)
 
     # ── derived-field math ────────────────────────────────────────────
@@ -126,72 +124,6 @@ class InvestmentDisposal(Document):
                 holding.qty_disposed = 0
             holding.flags.ignore_permissions = True
             holding.save(ignore_permissions=True)
-
-    # ── Phase 1 mirror-write: emit SLLE rows alongside the legacy mutation ─
-
-    def _mirror_write_slle(self, direction: int):
-        """Phase 1 — additively write Security Lot Ledger Entry rows for
-        every consumed lot so the new append-only ledger stays in sync
-        with the legacy Investment Holding mutation. Gated by feature
-        flag `MIRROR_WRITE_SLLE`. Best-effort: failures here NEVER block
-        the legacy flow — the daily audit job will catch divergence and
-        flag it for manual reconciliation.
-        """
-        try:
-            from polemarch.polemarch_trading.feature_flags import is_enabled
-
-            if not is_enabled("MIRROR_WRITE_SLLE"):
-                return
-            if not frappe.db.table_exists("Security Lot Ledger Entry"):
-                return
-
-            from polemarch.polemarch_trading import fifo as fifo_engine
-
-            if direction == +1:
-                self._slle_write_consume_rows(fifo_engine)
-            else:
-                fifo_engine.reverse_consume_entries(
-                    reference_doctype=self.doctype, reference_name=self.name
-                )
-        except Exception:
-            frappe.log_error(
-                frappe.get_traceback(),
-                "Polemarch SLLE Mirror-Write",
-            )
-
-    def _slle_write_consume_rows(self, fifo_engine):
-        """Map each Investment Disposal Lot → a Consume SLLE row on the
-        Security Lot that mirrors the legacy Investment Holding (1:1 by
-        backfill convention)."""
-        for lot in self.lots or []:
-            if not lot.holding or not lot.qty_consumed:
-                continue
-
-            # Phase 0 backfill maps Investment Holding name → Security Lot
-            # of the same name once `backfill_security_lots_from_holdings`
-            # has run. Skip silently if the Security Lot is absent — the
-            # audit job will surface the gap.
-            if not frappe.db.exists("Security Lot", lot.holding):
-                continue
-
-            slle = frappe.get_doc(
-                {
-                    "doctype": "Security Lot Ledger Entry",
-                    "security_lot": lot.holding,
-                    "entry_type": "Consume",
-                    "qty": flt(lot.qty_consumed),
-                    "cost_basis_per_unit": flt(lot.cost_basis_per_unit),
-                    "sale_price_per_unit": flt(lot.sale_price_per_unit),
-                    "reference_doctype": self.doctype,
-                    "reference_name": self.name,
-                    "holding_period_days": lot.holding_period_days,
-                    "is_long_term": lot.is_long_term,
-                    "realized_gain": flt(lot.realized_gain),
-                }
-            )
-            slle.flags.ignore_permissions = True
-            slle.insert(ignore_permissions=True)
-            slle.submit()
 
     # ── Phase 3 auto-JE: cost recognition ────────────────────────────────
 

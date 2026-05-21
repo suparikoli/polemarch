@@ -55,27 +55,19 @@ def security_position_perm_query(user=None):
     return _perm_query("Security Position", "customer", user)
 
 
-def security_lot_perm_query(user=None):
-    return _perm_query("Security Lot", "owning_customer", user)
-
-
 def investment_disposal_perm_query(user=None):
     return _perm_query("Investment Disposal", "customer", user)
 
 
 def portfolio_transfer_perm_query(user=None):
-    # PT scopes by customer ownership of from_portfolio.customer — fan out via a
-    # subquery so we don't add a Portfolio JOIN to every list-view.
+    # Classification-based PT doesn't carry a customer field directly; show all
+    # to operators / nothing to scoped customers.
     if not _flag_on():
         return ""
     customer_filter = _customer_filter_for_user(user)
     if customer_filter is None:
         return ""
-    return (
-        f"(`tabPortfolio Transfer`.from_portfolio IN ("
-        f"  SELECT name FROM `tabPortfolio` WHERE customer IN ({customer_filter})"
-        f"))"
-    )
+    return "1=0"  # Customers don't see Portfolio Transfers (operator-only)
 
 
 # ── has_permission ───────────────────────────────────────────────────────
@@ -101,10 +93,6 @@ def security_position_has_permission(doc, user=None, permission_type=None):
     return _has_permission(doc, user, "customer")
 
 
-def security_lot_has_permission(doc, user=None, permission_type=None):
-    return _has_permission(doc, user, "owning_customer")
-
-
 def investment_disposal_has_permission(doc, user=None, permission_type=None):
     return _has_permission(doc, user, "customer")
 
@@ -115,12 +103,8 @@ def portfolio_transfer_has_permission(doc, user=None, permission_type=None):
     user = user or frappe.session.user
     if _has_unrestricted_role(user):
         return True
-    customer = _resolve_customer_for_user(user)
-    if not customer:
-        return False
-    from_customer = frappe.db.get_value("Portfolio", doc.from_portfolio, "customer")
-    to_customer = frappe.db.get_value("Portfolio", doc.to_portfolio, "customer")
-    return from_customer == customer or to_customer == customer
+    # Customer-scoped users don't get to see Portfolio Transfers.
+    return False
 
 
 # ── helpers ──────────────────────────────────────────────────────────────

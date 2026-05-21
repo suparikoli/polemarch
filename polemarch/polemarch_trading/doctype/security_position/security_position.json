@@ -100,7 +100,7 @@
    "read_only": 1,
    "default": "0",
    "in_list_view": 1,
-   "description": "Sum of qty_remaining across open Security Lots in this (portfolio, security)."
+   "description": "Sum of qty_remaining across open Investment Holdings in this (portfolio, security)."
   },
   {
    "fieldname": "qty_reserved",

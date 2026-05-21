@@ -51,8 +51,6 @@
   "sales_invoice",
   "column_break_6",
   "purchase_invoice",
-  "section_fifo",
-  "lots_consumed",
   "section_meta",
   "rejection_reason",
   "cancellation_reason",
@@ -324,13 +322,6 @@
    "fieldtype": "Section Break",
    "label": "FIFO Consumption (Sell-side)",
    "collapsible": 1
-  },
-  {
-   "fieldname": "lots_consumed",
-   "fieldtype": "Table",
-   "label": "Lots Consumed",
-   "options": "Trade Order Lot Consumption",
-   "read_only": 1
   },
   {
    "fieldname": "section_meta",

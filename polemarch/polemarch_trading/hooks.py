@@ -7,36 +7,36 @@ Journal Entry) that Polemarch shouldn't subclass.
 """
 
 import frappe
-from frappe.utils import flt, getdate, now_datetime
+from frappe.utils import flt
 
 
 # ── Purchase Invoice: proprietary share acquisitions ─────────────────────
 
 
 def purchase_invoice_on_submit(doc, method=None):
-    """Phase 2: when a Purchase Invoice with brand=Polemarch lines is
-    submitted, mint a Security Lot per line + emit an Acquire SLLE row.
+    """When a Purchase Invoice with brand=Polemarch lines is submitted, create
+    one Investment Holding per line. New holdings start `classification =
+    Unallocated` and have 2 working days to be manually classified as
+    Investment (else they auto-classify to Stock in Trade via the daily
+    scheduler).
 
     The expense account override (routing cost to Securities Inventory -
-    Trading / Long-Term Investments) is handled in `purchase_invoice_validate`
-    BEFORE ERPNext's GL engine reads the line's expense account.
+    Trading by default) is handled in `purchase_invoice_validate` BEFORE
+    ERPNext's GL engine reads the line's expense account.
     """
-    if not frappe.db.table_exists("Security Lot"):
-        return
     if not _has_polemarch_lines(doc):
         return
 
     for line in doc.items or []:
         if not _is_polemarch_line(line):
             continue
-        _create_security_lot_from_pi_line(doc, line)
+        _create_investment_holding_from_pi_line(doc, line)
 
 
 def purchase_invoice_validate(doc, method=None):
     """Override the expense account on every brand=Polemarch line BEFORE
     ERPNext posts GL. Routes the cost to Securities Inventory - Trading
-    (Trading book) or Long-Term Investments (Investment book), determined
-    by the security's default portfolio."""
+    (the default — the classification engine reclassifies later if needed)."""
     if not _has_polemarch_lines(doc):
         return
 
@@ -49,46 +49,31 @@ def purchase_invoice_validate(doc, method=None):
 
 
 def purchase_invoice_on_cancel(doc, method=None):
-    """If we minted Security Lots on submit, cancel the corresponding SLLE
-    Acquire rows and soft-close the lots. Idempotent — safe to re-run."""
-    if not frappe.db.table_exists("Security Lot Ledger Entry"):
+    """Cancel any Investment Holdings created by this PI submit.
+    Idempotent — safe to re-run."""
+    if not frappe.db.table_exists("Investment Holding"):
         return
 
-    # SLLEs we wrote against this PI are reference_doctype="Purchase Invoice"
-    # and reference_name=<pi name>. Walk and reverse.
-    acquires = frappe.get_all(
-        "Security Lot Ledger Entry",
+    holdings = frappe.get_all(
+        "Investment Holding",
         filters={
-            "reference_doctype": "Purchase Invoice",
-            "reference_name": doc.name,
-            "entry_type": "Acquire",
-            "is_cancelled": 0,
-            "docstatus": 1,
+            "purchase_reference": "Purchase Invoice",
+            "purchase_reference_link": doc.name,
         },
-        fields=["name", "security_lot", "qty", "cost_basis_per_unit"],
+        fields=["name", "qty_disposed", "qty_reserved"],
     )
-    for row in acquires:
-        reversal = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": row.security_lot,
-                "entry_type": "Reversal",
-                "qty": row.qty,
-                "cost_basis_per_unit": row.cost_basis_per_unit,
-                "reverses": row.name,
-                "reference_doctype": "Purchase Invoice",
-                "reference_name": doc.name,
-            }
-        )
-        reversal.flags.ignore_permissions = True
-        reversal.insert(ignore_permissions=True)
-        reversal.submit()
-
-        original = frappe.get_doc("Security Lot Ledger Entry", row.name)
-        original.flags.from_reversal = True
-        original.is_cancelled = 1
-        original.reversed_by = reversal.name
-        original.db_update()
+    for row in holdings:
+        # If any quantity has been disposed or reserved, we can't safely delete
+        # — fall back to leaving the holding in place with a comment.
+        if flt(row.qty_disposed) > 0 or flt(row.get("qty_reserved", 0)) > 0:
+            frappe.get_doc("Investment Holding", row.name).add_comment(
+                "Comment",
+                f"Source Purchase Invoice {doc.name} was cancelled but this "
+                f"Holding has disposed/reserved qty — left in place for audit. "
+                f"Operator must reconcile manually.",
+            )
+            continue
+        frappe.delete_doc("Investment Holding", row.name, ignore_permissions=True)
 
 
 # ── Bank Transaction: deposit reconciliation (Phase 5 — wallet credit) ──
@@ -126,103 +111,46 @@ def _is_polemarch_line(line) -> bool:
 
 
 def _resolve_polemarch_expense_account(company: str, line) -> str:
-    """Map a Polemarch line to its inventory account.
+    """Map a Polemarch line to the default Securities Inventory account.
 
-    Strategy:
-      - If the source Purchase Invoice carries a `custom_portfolio` (Phase 2
-        candidate field), use it.
-      - Else infer from the Item's linked Security → security_type. Equity
-        defaults to Trading; Bonds/Debentures default to Investment. This is
-        a heuristic; ops can override per PI line later.
+    Classification (Stock in Trade vs Investment) happens AFTER purchase
+    via the 2-working-day rule, so all incoming Holdings default to the
+    Trading inventory account. Portfolio Transfer reclassifies them later
+    if needed (with a corresponding inventory GL move).
     """
     abbr = frappe.db.get_value("Company", company, "abbr")
     if not abbr:
         return ""
-
-    # Default: Trading.
     target_account = f"Securities Inventory - Trading - {abbr}"
-
-    # Heuristic override: if the Item's Security is a long-term instrument.
-    security = frappe.db.get_value("Item", line.item_code, "custom_security")
-    if security:
-        sec_type = frappe.db.get_value("Security", security, "security_type")
-        if sec_type in ("Bond", "Debenture", "SGB"):
-            target_account = f"Long-Term Investments - {abbr}"
-
     if frappe.db.exists("Account", target_account):
         return target_account
     return ""
 
 
-def _create_security_lot_from_pi_line(doc, line) -> None:
-    """One Security Lot per PI line, with a paired Acquire SLLE row.
-
-    Lot naming uses the autoseries POL-LOT-... (Phase 0 backfill uses legacy
-    INV-HOLD-... names; this is for net-new acquisitions). Idempotency keyed
-    by (Purchase Invoice, child name) — if the lot exists we skip.
-    """
+def _create_investment_holding_from_pi_line(doc, line) -> None:
+    """One Investment Holding per PI line. classification = Unallocated by
+    default (the InvestmentHolding.before_insert hook stamps the
+    classification_deadline = creation + 2 working days)."""
     if frappe.db.exists(
-        "Security Lot",
+        "Investment Holding",
         {"purchase_reference": "Purchase Invoice", "purchase_reference_link": doc.name},
     ):
-        # Already minted for this PI; assume idempotent re-submit.
+        # Already minted for this PI — idempotent re-submit.
         return
 
-    security = frappe.db.get_value("Item", line.item_code, "custom_security")
-    if not security:
-        frappe.log_error(
-            f"Purchase Invoice {doc.name} line {line.idx}: Item {line.item_code} has no "
-            f"linked Security; skipping Security Lot creation.",
-            "Polemarch PI Hook",
-        )
-        return
+    item_code = line.item_code
 
-    abbr = frappe.db.get_value("Company", doc.company, "abbr")
-    sec_type = frappe.db.get_value("Security", security, "security_type")
-    portfolio_type = "Investment" if sec_type in ("Bond", "Debenture", "SGB") else "Trading"
-    portfolio = frappe.db.get_value(
-        "Portfolio",
-        {"company": doc.company, "portfolio_type": portfolio_type, "owner_kind": "Proprietary"},
-        "name",
-    )
-    if not portfolio:
-        frappe.log_error(
-            f"Purchase Invoice {doc.name}: no proprietary {portfolio_type} portfolio for "
-            f"company {doc.company}; skipping.",
-            "Polemarch PI Hook",
-        )
-        return
+    holding = frappe.get_doc({
+        "doctype": "Investment Holding",
+        "item": item_code,
+        "company": doc.company,
+        "acquisition_date": doc.posting_date,
+        "qty_acquired": flt(line.qty),
+        "cost_basis_per_unit": flt(line.rate),
+        "purchase_reference": "Purchase Invoice",
+        "purchase_reference_link": doc.name,
+    })
+    holding.flags.ignore_permissions = True
+    holding.insert(ignore_permissions=True)
 
-    rate = flt(line.rate)
-    qty = flt(line.qty)
 
-    lot = frappe.get_doc(
-        {
-            "doctype": "Security Lot",
-            "security": security,
-            "portfolio": portfolio,
-            "acquisition_date": getdate(doc.posting_date),
-            "qty_acquired": qty,
-            "cost_basis_per_unit": rate,
-            "purchase_reference": "Purchase Invoice",
-            "purchase_reference_link": doc.name,
-        }
-    )
-    lot.flags.ignore_permissions = True
-    lot.insert(ignore_permissions=True)
-
-    slle = frappe.get_doc(
-        {
-            "doctype": "Security Lot Ledger Entry",
-            "security_lot": lot.name,
-            "posting_datetime": now_datetime(),
-            "entry_type": "Acquire",
-            "qty": qty,
-            "cost_basis_per_unit": rate,
-            "reference_doctype": "Purchase Invoice",
-            "reference_name": doc.name,
-        }
-    )
-    slle.flags.ignore_permissions = True
-    slle.insert(ignore_permissions=True)
-    slle.submit()

@@ -10,7 +10,7 @@
  "module": "Polemarch Trading",
  "name": "Portfolio Transfer",
  "title_field": "name",
- "search_fields": "security,from_portfolio,to_portfolio",
+ "search_fields": "security,from_classification,to_classification",
  "track_changes": 1,
  "field_order": [
   "naming_series",
@@ -19,8 +19,8 @@
   "transfer_date",
   "company",
   "section_route",
-  "from_portfolio",
-  "to_portfolio",
+  "from_classification",
+  "to_classification",
   "column_break_2",
   "security",
   "isin",
@@ -87,8 +87,7 @@
    "fieldtype": "Link",
    "label": "Company",
    "options": "Company",
-   "fetch_from": "from_portfolio.company",
-   "read_only": 1
+   "reqd": 1
   },
   {
    "fieldname": "section_route",
@@ -96,19 +95,19 @@
    "label": "Route"
   },
   {
-   "fieldname": "from_portfolio",
-   "fieldtype": "Link",
-   "label": "From Portfolio",
-   "options": "Portfolio",
+   "fieldname": "from_classification",
+   "fieldtype": "Select",
+   "label": "From Classification",
+   "options": "Stock in Trade\nInvestment",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
   },
   {
-   "fieldname": "to_portfolio",
-   "fieldtype": "Link",
-   "label": "To Portfolio",
-   "options": "Portfolio",
+   "fieldname": "to_classification",
+   "fieldtype": "Select",
+   "label": "To Classification",
+   "options": "Stock in Trade\nInvestment",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1

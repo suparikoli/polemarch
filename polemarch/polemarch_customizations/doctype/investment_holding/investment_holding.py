@@ -31,6 +31,31 @@ class InvestmentHolding(Document):
         self._compute_derived_fields()
         self._update_status()
 
+    def before_insert(self):
+        # Set classification + deadline if the new fields are present.
+        # Done in before_insert so the values land in the inserted row.
+        self._set_initial_classification()
+
+    def _set_initial_classification(self):
+        """First-save defaults for classification fields. Safe to call before
+        the v0_8_0 patch has installed the Custom Fields — getattr falls
+        through cleanly."""
+        if not hasattr(self, "classification"):
+            return
+        if not self.classification:
+            self.classification = "Unallocated"
+        if not self.classification_deadline:
+            try:
+                from polemarch.polemarch_trading.classification import compute_deadline
+                self.classification_deadline = compute_deadline(
+                    frappe.utils.now_datetime(), self.company
+                )
+            except Exception:
+                frappe.log_error(
+                    frappe.get_traceback(),
+                    "Polemarch Classification deadline compute",
+                )
+
     def on_trash(self):
         # Block deletion if any Investment Disposal Lot references this
         # holding — the cost-basis snapshot is needed to recompute

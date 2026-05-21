@@ -6,9 +6,10 @@ State machine (hand-rolled; not Frappe Workflow):
     Pending Approval → Approved         (Compliance Officer; cannot self-approve)
     Pending Approval → Rejected         (with reason)
     Rejected         → Draft            (resubmit allowed)
-    Approved         → Posted           (writes SLLEs on from_portfolio,
-                                         creates new Security Lots on
-                                         to_portfolio at FMV basis, posts JE)
+    Approved         → Posted           (consumes from-side Investment
+                                         Holdings via FIFO, mints new
+                                         to-side Holdings at FMV basis,
+                                         posts the inventory JE)
     Posted           → terminal         (reversal only via NEW Portfolio
                                          Transfer with reversal_of=<original>)
 
@@ -138,12 +139,20 @@ class PortfolioTransfer(Document):
     def populate_lots_from_fifo(self):
         from polemarch.polemarch_trading import fifo as fifo_engine
 
-        if not self.from_portfolio or not self.security or not self.qty:
+        if not self.from_classification or not self.security or not self.qty or not self.company:
             return
 
+        item = frappe.db.get_value("Security", self.security, "item")
+        if not item:
+            frappe.throw(
+                _("Security {0} has no linked Item — cannot plan FIFO.").format(self.security),
+                title=_("Security Not Linked"),
+            )
+
         plan = fifo_engine.consume(
-            security=self.security,
-            portfolio=self.from_portfolio,
+            item=item,
+            company=self.company,
+            classification=self.from_classification,
             qty_to_sell=flt(self.qty),
             sale_date=getdate(self.transfer_date),
         )
@@ -155,7 +164,7 @@ class PortfolioTransfer(Document):
             self.append(
                 "lots_consumed",
                 {
-                    "source_lot": p.security_lot,
+                    "source_lot": p.holding,
                     "qty_consumed": p.qty,
                     "original_cost_basis_per_unit": p.cost_basis_per_unit,
                     "transfer_fmv_per_unit": flt(self.fmv_per_unit),
@@ -170,42 +179,24 @@ class PortfolioTransfer(Document):
     # ── Validations ──────────────────────────────────────────────────────
 
     def _validate_portfolios_share_company(self):
-        if not self.from_portfolio or not self.to_portfolio:
+        # Renamed from old "portfolios share company"; now validates
+        # classifications differ + company is set.
+        if not self.from_classification or not self.to_classification:
             return
-        if self.from_portfolio == self.to_portfolio:
+        if self.from_classification == self.to_classification:
             frappe.throw(
-                _("Portfolio Transfer requires distinct from/to portfolios."),
-                title=_("Same Portfolio"),
+                _("Portfolio Transfer requires distinct from/to classifications."),
+                title=_("Same Classification"),
             )
-        from_company = frappe.db.get_value("Portfolio", self.from_portfolio, "company")
-        to_company = frappe.db.get_value("Portfolio", self.to_portfolio, "company")
-        if from_company != to_company:
-            frappe.throw(
-                _(
-                    "From and To portfolios must share the same Company "
-                    "(got {0} and {1})."
-                ).format(from_company, to_company),
-                title=_("Cross-Company Transfer"),
-            )
-        self.company = from_company
+        if not self.company:
+            frappe.throw(_("Company is required."), title=_("Company Required"))
 
     def _validate_directional_change(self):
-        if not self.from_portfolio or not self.to_portfolio:
-            return
-        from_type = frappe.db.get_value("Portfolio", self.from_portfolio, "portfolio_type")
-        to_type = frappe.db.get_value("Portfolio", self.to_portfolio, "portfolio_type")
-        if from_type == to_type and not self.reversal_of:
-            # Same-type transfers are operationally valid only when the
-            # owner_kind differs (e.g., Customer → Proprietary repurchase) or
-            # when reversing a prior transfer. Otherwise warn loudly.
-            frappe.msgprint(
-                _(
-                    "Portfolio Transfer {0}: from and to portfolios are both {1}. "
-                    "This is allowed but uncommon — verify the reason."
-                ).format(self.name or "<draft>", from_type),
-                indicator="orange",
-                title=_("Unusual Transfer"),
-            )
+        # With only 2 classifications (Stock in Trade ↔ Investment), the
+        # only valid transition is between them. Same-classification is
+        # already blocked by `_validate_portfolios_share_company`. Nothing
+        # else to check here.
+        return
 
     def _validate_qty_fmv(self):
         if flt(self.qty) <= 0:

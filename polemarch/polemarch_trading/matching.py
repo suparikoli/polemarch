@@ -1,19 +1,17 @@
 """Trade Order matching + reservation engine.
 
-Phase 2 scope:
-  - `place_reservation(order)` — called on Trade Order submit.
-      • Buy + Customer book: debit wallet (Reservation) for net_amount.
-      • Sell + Customer book: place Reserve SLLE rows on the customer's
-        Security Lots via FIFO.
-      • Proprietary orders: no wallet reservation; lot reservation only.
-  - `match(order)` — back-office or scheduler-driven. Populates lots_consumed
-     for sells via FIFO, transitions Submitted → Matched, creates a Settlement
-     Instruction.
-  - `cancel_order(order)` — releases reservations and SLLEs.
+Refactored to operate on Investment Holding directly (no Security Lot).
+FIFO is by `creation` ASC, filtered by classification.
 
-Counterparty-side P2P matching is Phase 6 (out of scope here). Phase 2 assumes
-either Polemarch is the counterparty (Proprietary book on one side) or the
-match is admin-driven.
+Public surface:
+  - place_reservation(order)  — called on Trade Order submit.
+        Buy + Customer: wallet Reservation Debit for net_amount.
+        Sell: FIFO scan + bump qty_reserved on the chosen holdings.
+  - match(order_name)         — Submitted → Matched. Creates Settlement Instruction.
+  - cancel_order(order)       — releases reservations.
+
+Settlement actually creates Investment Disposal rows; this module only
+plans + reserves.
 """
 
 import secrets
@@ -24,24 +22,20 @@ from frappe import _
 from frappe.utils import add_days, flt, getdate, now_datetime
 
 
-DEFAULT_T_PLUS = 1  # Default settlement window for unlisted: T+1.
+DEFAULT_T_PLUS = 1  # T+1 settlement window for unlisted securities.
 
 
 def place_reservation(order) -> None:
     """Called from Trade Order.on_submit. Idempotent on reservation_id."""
     if order.reservation_id:
-        # Already reserved — keep idempotent on accidental re-submit.
         return
 
     reservation_id = secrets.token_hex(16)
 
     if order.side == "Buy" and order.book == "Customer":
         _reserve_buy_wallet(order, reservation_id)
-    elif order.side == "Sell" and order.book == "Customer":
-        _reserve_sell_lots(order, reservation_id)
-    elif order.side == "Sell" and order.book == "Proprietary":
-        _reserve_sell_lots(order, reservation_id)
-    # Buy + Proprietary: no wallet (company funds), no lot reservation needed.
+    elif order.side == "Sell":
+        _reserve_sell_holdings(order)
 
     frappe.db.set_value(
         "Trade Order", order.name,
@@ -51,7 +45,7 @@ def place_reservation(order) -> None:
 
 
 def match(order_name: str, counter_party: Optional[str] = None) -> str:
-    """Move a Submitted order to Matched. Returns the Trade Order name."""
+    """Move a Submitted order to Matched. Settlement Instruction is created."""
     order = frappe.get_doc("Trade Order", order_name)
     if order.order_state != "Submitted":
         frappe.throw(
@@ -61,21 +55,17 @@ def match(order_name: str, counter_party: Optional[str] = None) -> str:
             title=_("Cannot Match"),
         )
 
-    if order.side == "Sell":
-        _populate_lots_consumed_for_sell(order)
-
-    # Mark Matched and create the Settlement Instruction.
     order.transition_to("Matched")
     _create_settlement_instruction(order, counter_party=counter_party)
     return order.name
 
 
 def cancel_order(order) -> None:
-    """Release reservations / SLLEs. Idempotent — safe to re-run."""
+    """Release reservations + qty_reserved. Idempotent."""
     if order.side == "Buy" and order.book == "Customer":
         _release_buy_wallet(order)
     if order.side == "Sell":
-        _release_sell_lots(order)
+        _release_sell_holdings(order)
     frappe.db.set_value(
         "Trade Order", order.name,
         "released_at", now_datetime(),
@@ -83,7 +73,7 @@ def cancel_order(order) -> None:
     )
 
 
-# ── Reservation primitives ──────────────────────────────────────────────
+# ── reservation primitives ──────────────────────────────────────────────
 
 
 def _reserve_buy_wallet(order, reservation_id: str) -> None:
@@ -118,7 +108,6 @@ def _release_buy_wallet(order) -> None:
     if not frappe.db.exists("Wallet", wallet_name):
         return
 
-    # Idempotent: skip if the release WT already exists.
     release_idem = f"release:{order.reservation_id}"
     if frappe.db.exists("Wallet Transaction", {"idempotency_key": release_idem}):
         return
@@ -135,145 +124,80 @@ def _release_buy_wallet(order) -> None:
     )
 
 
-def _reserve_sell_lots(order, reservation_id: str) -> None:
+def _reserve_sell_holdings(order) -> None:
+    """FIFO scan Investment Holdings, bump qty_reserved by the consumption plan."""
     from polemarch.polemarch_trading import fifo as fifo_engine
 
+    classification = _classification_for_order(order)
     plan = fifo_engine.consume(
-        security=order.security,
-        portfolio=order.portfolio,
+        item=_item_for_security(order.security),
+        company=order.company,
+        classification=classification,
         qty_to_sell=flt(order.qty),
         sale_date=getdate(order.posting_date),
+        customer_filter=order.customer if order.book == "Customer" else None,
     )
 
-    total_planned = sum(p.qty for p in plan)
-    if total_planned + 0.0001 < flt(order.qty):
-        # Insufficient inventory — order will still record what is reservable
-        # and rely on match() to either reject or facilitate. For Phase 2 we
-        # only error on Customer-book sells; Proprietary may legitimately be
-        # short-selling against a future acquisition.
+    if not plan:
         if order.book == "Customer":
             frappe.throw(
-                _(
-                    "Trade Order {0}: insufficient lots in portfolio {1} for security {2}. "
-                    "Requested {3}, available {4}."
-                ).format(
-                    order.name, order.portfolio, order.security, order.qty, total_planned
+                _("Insufficient {0} inventory for Trade Order {1}: no consumable holdings found.").format(
+                    classification, order.name
                 ),
                 title=_("Insufficient Inventory"),
             )
+        return
 
-    for p in plan:
-        slle = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": p.security_lot,
-                "entry_type": "Reserve",
-                "qty": p.qty,
-                "cost_basis_per_unit": p.cost_basis_per_unit,
-                "reference_doctype": "Trade Order",
-                "reference_name": order.name,
-            }
+    total_planned = sum(p.qty for p in plan)
+    if total_planned + 0.0001 < flt(order.qty) and order.book == "Customer":
+        frappe.throw(
+            _(
+                "Trade Order {0}: insufficient {1} inventory. Requested {2}, available {3}."
+            ).format(order.name, classification, order.qty, total_planned),
+            title=_("Insufficient Inventory"),
         )
-        slle.flags.ignore_permissions = True
-        slle.insert(ignore_permissions=True)
-        slle.submit()
+
+    fifo_engine.reserve(plan)
 
 
-def _release_sell_lots(order) -> None:
-    """Post Reserve Release SLLE rows mirroring each open Reserve row."""
+def _release_sell_holdings(order) -> None:
+    """On cancel: re-run FIFO and reverse the reservation."""
     if order.side != "Sell":
         return
 
-    reserves = frappe.get_all(
-        "Security Lot Ledger Entry",
-        filters={
-            "reference_doctype": "Trade Order",
-            "reference_name": order.name,
-            "entry_type": "Reserve",
-            "is_cancelled": 0,
-            "docstatus": 1,
-        },
-        fields=["name", "security_lot", "qty", "cost_basis_per_unit"],
-    )
-    for row in reserves:
-        # Idempotency: skip if a Reserve Release for this Reserve already exists.
-        if frappe.db.exists(
-            "Security Lot Ledger Entry",
-            {
-                "reference_doctype": "Trade Order",
-                "reference_name": order.name,
-                "entry_type": "Reserve Release",
-                "reverses": row.name,
-                "is_cancelled": 0,
-            },
-        ):
-            continue
-
-        release = frappe.get_doc(
-            {
-                "doctype": "Security Lot Ledger Entry",
-                "security_lot": row.security_lot,
-                "entry_type": "Reserve Release",
-                "qty": row.qty,
-                "cost_basis_per_unit": row.cost_basis_per_unit,
-                "reverses": row.name,
-                "reference_doctype": "Trade Order",
-                "reference_name": order.name,
-            }
-        )
-        release.flags.ignore_permissions = True
-        release.insert(ignore_permissions=True)
-        release.submit()
-
-        # Cancel the Reserve row via the reversal-flag.
-        original = frappe.get_doc("Security Lot Ledger Entry", row.name)
-        original.flags.from_reversal = True
-        original.is_cancelled = 1
-        original.reversed_by = release.name
-        original.db_update()
-
-
-# ── Match-time FIFO ─────────────────────────────────────────────────────
-
-
-def _populate_lots_consumed_for_sell(order) -> None:
-    """Replay FIFO at match-time; convert Reserve SLLEs into the lots_consumed
-    child table. The actual Consume SLLE rows are written at settle-time, not
-    match-time, so a Matched-but-Failed settlement can reverse cleanly."""
     from polemarch.polemarch_trading import fifo as fifo_engine
 
+    classification = _classification_for_order(order)
     plan = fifo_engine.consume(
-        security=order.security,
-        portfolio=order.portfolio,
+        item=_item_for_security(order.security),
+        company=order.company,
+        classification=classification,
         qty_to_sell=flt(order.qty),
         sale_date=getdate(order.posting_date),
+        customer_filter=order.customer if order.book == "Customer" else None,
     )
+    if plan:
+        fifo_engine.release_reservation(plan)
 
-    order.set("lots_consumed", [])
-    for p in plan:
-        sale_amt = p.qty * flt(order.price)
-        cost_amt = p.qty * p.cost_basis_per_unit
-        order.append(
-            "lots_consumed",
-            {
-                "security_lot": p.security_lot,
-                "acquisition_date": p.acquisition_date,
-                "qty_consumed": p.qty,
-                "cost_basis_per_unit": p.cost_basis_per_unit,
-                "sale_price_per_unit": flt(order.price),
-                "holding_period_days": p.holding_period_days,
-                "is_long_term": int(p.is_long_term),
-                "cost_basis_amount": cost_amt,
-                "sale_amount": sale_amt,
-                "realized_gain": sale_amt - cost_amt,
-            },
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
+def _classification_for_order(order) -> str:
+    """Customer orders default to Investment; prop orders default to Stock in Trade."""
+    if order.book == "Customer":
+        return "Investment"
+    return "Stock in Trade"
+
+
+def _item_for_security(security: str) -> str:
+    item = frappe.db.get_value("Security", security, "item")
+    if not item:
+        frappe.throw(
+            _("Security {0} has no linked Item — cannot FIFO-consume.").format(security),
+            title=_("Security Not Linked"),
         )
-    order.flags.from_state_transition = True
-    order.db_update()
-    order.update_children()
-
-
-# ── Settlement Instruction creation ────────────────────────────────────
+    return item
 
 
 def _create_settlement_instruction(order, counter_party: Optional[str] = None) -> str:
@@ -282,17 +206,15 @@ def _create_settlement_instruction(order, counter_party: Optional[str] = None) -
 
     expected = order.expected_settlement_date or add_days(getdate(order.posting_date), DEFAULT_T_PLUS)
 
-    si = frappe.get_doc(
-        {
-            "doctype": "Settlement Instruction",
-            "trade_order": order.name,
-            "qty": flt(order.qty),
-            "gross_amount": flt(order.gross_amount),
-            "net_amount": flt(order.net_amount),
-            "expected_settlement_date": expected,
-            "settlement_state": "Pending",
-        }
-    )
+    si = frappe.get_doc({
+        "doctype": "Settlement Instruction",
+        "trade_order": order.name,
+        "qty": flt(order.qty),
+        "gross_amount": flt(order.gross_amount),
+        "net_amount": flt(order.net_amount),
+        "expected_settlement_date": expected,
+        "settlement_state": "Pending",
+    })
     si.flags.ignore_permissions = True
     si.insert(ignore_permissions=True)
     si.submit()

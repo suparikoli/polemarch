@@ -16,11 +16,10 @@ polemarch.polemarch_trading.patches.v0_2_0.add_custom_security_field_to_item
 polemarch.polemarch_trading.patches.v0_2_0.add_custom_portfolio_field_to_investment_holding
 polemarch.polemarch_trading.patches.v0_2_0.backfill_security_from_polemarch_items
 polemarch.polemarch_trading.patches.v0_2_0.backfill_portfolio_on_holdings
-# Phase 1 — Core ledgers (Wallet / SLLE / Position) and mirror-seed.
-# Order: wallets → lots (needs Security + Portfolio) → SLLE (needs lots) → positions (needs lots).
+# Phase 1 — Core ledgers (Wallet / Position) and mirror-seed.
+# Order: wallets → positions. (The Security Lot + SLLE backfills that used to
+# run here were dropped in v0_8_0 — those doctypes no longer exist.)
 polemarch.polemarch_trading.patches.v0_2_0.seed_wallets_for_polemarch_customers
-polemarch.polemarch_trading.patches.v0_2_0.backfill_security_lots_from_holdings
-polemarch.polemarch_trading.patches.v0_2_0.mirror_seed_slle_from_holdings
 polemarch.polemarch_trading.patches.v0_2_0.seed_position_from_holdings
 # Phase 3 — Capital Gains auto-JE plumbing.
 # `add_custom_fields_to_je` is the only auto-run Phase 3 patch.
@@ -32,3 +31,17 @@ polemarch.polemarch_trading.patches.v0_4_0.seed_polemarch_roles
 polemarch.patches.v0_5_0.remove_medusa_sync_doctypes
 # v0_6_0 — Full Medusa decoupling: drop the 7 Medusa-related Custom Fields.
 polemarch.patches.v0_6_0.remove_medusa_custom_fields
+# v0_7_0 — Remove Polemarch API Log + Polemarch API Idempotency Log doctypes
+# (no longer needed with sync delegated to Medusa-side plugin).
+polemarch.patches.v0_7_0.remove_api_audit_doctypes
+# v0_8_0 — Lot-free FIFO refactor. Classification fields land on Investment
+# Holding, legacy portfolio values get mapped to classifications, and the
+# Security Lot / SLLE / TOLC doctypes are dropped. Order:
+#   1. Custom Fields land on Investment Holding (classification + helpers).
+#   2. Trade Order back-link Custom Field lands on Investment Disposal.
+#   3. Existing Holdings get a classification based on custom_portfolio.
+#   4. Lot-tracking doctypes get dropped (tables + tabDocType rows).
+polemarch.patches.v0_8_0.add_classification_fields_to_investment_holding
+polemarch.patches.v0_8_0.add_trade_order_link_to_investment_disposal
+polemarch.patches.v0_8_0.backfill_classification_from_portfolio
+polemarch.patches.v0_8_0.drop_lot_doctypes

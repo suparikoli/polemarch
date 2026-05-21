@@ -16,7 +16,6 @@ from typing import Optional
 import frappe
 from frappe import _
 
-from polemarch.polemarch_trading.api import _idempotency
 from polemarch.polemarch_trading.api._ratelimit import rate_limit
 
 
@@ -123,26 +122,20 @@ def deposit(
         message=_("Not allowed to deposit into customer wallets."),
     )
 
-    with _idempotency.scope(
-        "polemarch.polemarch_trading.api.wallet.deposit", idempotency_key, locals()
-    ) as ctx:
-        if ctx.replay:
-            return ctx.replay
-
-        from polemarch.polemarch_trading import wallet as wallet_engine
-        wt_name = wallet_engine.apply_delta(
-            wallet=f"WAL-{customer}",
-            txn_type="Deposit",
-            direction="Credit",
-            amount=float(amount),
-            reference_doctype="Bank Transaction" if not source_ref.startswith("ext:") else None,
-            reference_name=source_ref if not source_ref.startswith("ext:") else None,
-            idempotency_key=f"api-deposit:{idempotency_key}" if idempotency_key else None,
-            remarks=f"Deposit (source: {source_ref}, bank: {bank_account or '-'})",
-        )
-        response = {"wallet_transaction": wt_name, "balance": _balance_snapshot(customer)}
-        ctx.store(response)
-        return response
+    # Idempotency at the engine level: the wallet engine already dedupes by
+    # `idempotency_key` on the Wallet Transaction row. Passing through.
+    from polemarch.polemarch_trading import wallet as wallet_engine
+    wt_name = wallet_engine.apply_delta(
+        wallet=f"WAL-{customer}",
+        txn_type="Deposit",
+        direction="Credit",
+        amount=float(amount),
+        reference_doctype="Bank Transaction" if not source_ref.startswith("ext:") else None,
+        reference_name=source_ref if not source_ref.startswith("ext:") else None,
+        idempotency_key=f"api-deposit:{idempotency_key}" if idempotency_key else None,
+        remarks=f"Deposit (source: {source_ref}, bank: {bank_account or '-'})",
+    )
+    return {"wallet_transaction": wt_name, "balance": _balance_snapshot(customer)}
 
 
 @frappe.whitelist()
@@ -162,30 +155,22 @@ def withdraw(
     if amount <= 0:
         frappe.throw(_("Amount must be positive."), title=_("Invalid Amount"))
 
-    with _idempotency.scope(
-        "polemarch.polemarch_trading.api.wallet.withdraw", idempotency_key, locals()
-    ) as ctx:
-        if ctx.replay:
-            return ctx.replay
-
-        from polemarch.polemarch_trading import wallet as wallet_engine
-        wt_name = wallet_engine.apply_delta(
-            wallet=f"WAL-{customer}",
-            txn_type="Withdrawal",
-            direction="Debit",
-            amount=amount,
-            reference_doctype=None,
-            reference_name=None,
-            idempotency_key=f"api-withdraw:{idempotency_key}" if idempotency_key else None,
-            remarks=f"Withdrawal requested to bank {target_bank or '-'}",
-        )
-        response = {
-            "wallet_transaction": wt_name,
-            "status": "Pending payout",
-            "balance": _balance_snapshot(customer),
-        }
-        ctx.store(response)
-        return response
+    from polemarch.polemarch_trading import wallet as wallet_engine
+    wt_name = wallet_engine.apply_delta(
+        wallet=f"WAL-{customer}",
+        txn_type="Withdrawal",
+        direction="Debit",
+        amount=amount,
+        reference_doctype=None,
+        reference_name=None,
+        idempotency_key=f"api-withdraw:{idempotency_key}" if idempotency_key else None,
+        remarks=f"Withdrawal requested to bank {target_bank or '-'}",
+    )
+    return {
+        "wallet_transaction": wt_name,
+        "status": "Pending payout",
+        "balance": _balance_snapshot(customer),
+    }
 
 
 @frappe.whitelist()
@@ -205,29 +190,21 @@ def reserve(
     customer = _resolve_customer(customer)
     amount = float(amount)
 
-    with _idempotency.scope(
-        "polemarch.polemarch_trading.api.wallet.reserve", idempotency_key, locals()
-    ) as ctx:
-        if ctx.replay:
-            return ctx.replay
-
-        from polemarch.polemarch_trading import wallet as wallet_engine
-        wt_name = wallet_engine.apply_delta(
-            wallet=f"WAL-{customer}",
-            txn_type="Reservation",
-            direction="Debit",
-            amount=amount,
-            reference_doctype="Trade Order" if trade_order else None,
-            reference_name=trade_order,
-            idempotency_key=f"api-reserve:{idempotency_key}" if idempotency_key else None,
-            remarks=f"Reserved for Trade Order {trade_order or '-'}",
-        )
-        response = {
-            "wallet_transaction": wt_name,
-            "balance": _balance_snapshot(customer),
-        }
-        ctx.store(response)
-        return response
+    from polemarch.polemarch_trading import wallet as wallet_engine
+    wt_name = wallet_engine.apply_delta(
+        wallet=f"WAL-{customer}",
+        txn_type="Reservation",
+        direction="Debit",
+        amount=amount,
+        reference_doctype="Trade Order" if trade_order else None,
+        reference_name=trade_order,
+        idempotency_key=f"api-reserve:{idempotency_key}" if idempotency_key else None,
+        remarks=f"Reserved for Trade Order {trade_order or '-'}",
+    )
+    return {
+        "wallet_transaction": wt_name,
+        "balance": _balance_snapshot(customer),
+    }
 
 
 @frappe.whitelist()
@@ -242,22 +219,14 @@ def release_reservation(
         message=_("Not allowed to release reservations."),
     )
 
-    with _idempotency.scope(
-        "polemarch.polemarch_trading.api.wallet.release_reservation", idempotency_key, locals()
-    ) as ctx:
-        if ctx.replay:
-            return ctx.replay
-
-        from polemarch.polemarch_trading import wallet as wallet_engine
-        new_name = wallet_engine.reverse(wallet_transaction, remarks="Reservation released via API")
-        original = frappe.db.get_value("Wallet Transaction", wallet_transaction, "wallet")
-        customer = frappe.db.get_value("Wallet", original, "customer") if original else None
-        response = {
-            "reversed_by": new_name,
-            "balance": _balance_snapshot(customer) if customer else None,
-        }
-        ctx.store(response)
-        return response
+    from polemarch.polemarch_trading import wallet as wallet_engine
+    new_name = wallet_engine.reverse(wallet_transaction, remarks="Reservation released via API")
+    original = frappe.db.get_value("Wallet Transaction", wallet_transaction, "wallet")
+    customer = frappe.db.get_value("Wallet", original, "customer") if original else None
+    return {
+        "reversed_by": new_name,
+        "balance": _balance_snapshot(customer) if customer else None,
+    }
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
