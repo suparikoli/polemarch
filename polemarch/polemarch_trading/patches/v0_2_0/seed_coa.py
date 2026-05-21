@@ -162,13 +162,18 @@ def _resolve_parent(company, root_type, parent_fragments):
 
 
 def _safe_account_type(account_type):
-    # ERPNext only accepts specific account_type strings; guard against custom values.
-    # The Account.account_type field is a Select; setting an unknown value throws.
-    # Known-safe values cover all our seeds: Stock, Investments, Receivable, Temporary,
-    # Payable, Income Account, Cost of Goods Sold, Expense Account.
+    # ERPNext v16 Account.account_type Select values. Setting an unknown value
+    # throws. Confirmed on test.polemarch.in via the seed_coa error path that
+    # "Investments" is NOT in the allow-list on this version.
     allowed = {
-        "Stock", "Investments", "Receivable", "Temporary", "Payable",
-        "Income Account", "Cost of Goods Sold", "Expense Account",
-        "Tax", "Bank", "Cash", "Equity", "Fixed Asset", "Asset Received But Not Billed",
+        "Accumulated Depreciation", "Asset Received But Not Billed", "Bank",
+        "Cash", "Chargeable", "Capital Work in Progress", "Cost of Goods Sold",
+        "Current Asset", "Current Liability", "Depreciation", "Direct Expense",
+        "Direct Income", "Equity", "Expense Account",
+        "Expenses Included In Asset Valuation", "Expenses Included In Valuation",
+        "Fixed Asset", "Income Account", "Indirect Expense", "Indirect Income",
+        "Liability", "Payable", "Receivable", "Round Off", "Round Off for Opening",
+        "Stock", "Stock Adjustment", "Stock Received But Not Billed",
+        "Service Received But Not Billed", "Tax", "Temporary",
     }
     return account_type if account_type in allowed else ""

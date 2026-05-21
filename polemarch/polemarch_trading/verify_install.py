@@ -92,34 +92,48 @@ def execute(verbose: bool = False) -> dict:
             errors.append(f"Role MISSING: {role}")
 
     # 5) Per-company CoA accounts. (Company has no `disabled` column on v16.)
+    # ERPNext composes Account.name as `<account_number> - <account_name> - <abbr>`
+    # when account_number is set, so the bare `<fragment> - <abbr>` literal
+    # rarely matches. Use account_name (not name) as the lookup key.
     companies = frappe.get_all("Company", fields=["name", "abbr"])
     for company in companies:
         if not company.abbr:
             warnings.append(f"Company {company.name} has no abbr — CoA check skipped")
             continue
         for fragment in _REQUIRED_ACCOUNT_FRAGMENTS:
-            candidate = f"{fragment} - {company.abbr}"
-            if frappe.db.exists("Account", candidate):
+            found = frappe.db.get_value(
+                "Account",
+                {
+                    "company": company.name,
+                    "account_name": fragment,
+                    "disabled": 0,
+                },
+                "name",
+            )
+            if found:
                 if verbose:
-                    ok.append(f"Account present: {candidate}")
-            else:
-                # LIKE fallback — operator may have edited names.
-                fallback = frappe.db.get_value(
-                    "Account",
-                    {
-                        "company": company.name,
-                        "account_name": ["like", f"{fragment}%"],
-                        "disabled": 0,
-                    },
-                    "name",
+                    ok.append(f"Account present: {found}")
+                continue
+            # Account-name didn't match exactly — try LIKE fallback (operator
+            # may have renamed). If still nothing, that's a real error.
+            fallback = frappe.db.get_value(
+                "Account",
+                {
+                    "company": company.name,
+                    "account_name": ["like", f"{fragment}%"],
+                    "disabled": 0,
+                },
+                "name",
+            )
+            if fallback:
+                warnings.append(
+                    f"Account renamed: expected account_name='{fragment}' for company "
+                    f"{company.abbr}; found similar '{fallback}'"
                 )
-                if fallback:
-                    warnings.append(
-                        f"Account variant: '{fragment} - {company.abbr}' missing, "
-                        f"fallback resolved to '{fallback}'"
-                    )
-                else:
-                    errors.append(f"Account MISSING: {candidate} (no LIKE fallback either)")
+            else:
+                errors.append(
+                    f"Account MISSING: account_name='{fragment}' for company {company.abbr}"
+                )
 
     # 6) Polemarch - Non-GST ITT per company.
     for company in companies:
