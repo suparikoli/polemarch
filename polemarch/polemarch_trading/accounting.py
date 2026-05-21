@@ -88,8 +88,10 @@ def post_cost_recognition_je_for_disposal(disposal) -> Optional[str]:
                 "account": account_name,
                 "credit_in_account_currency": flt(amount),
                 "cost_center": cost_center,
-                "reference_type": disposal.doctype,
-                "reference_name": disposal.name,
+                # JE Account.reference_type is a Select restricted to ERPNext-
+                # native voucher doctypes (SI, PI, Payment Entry, ...). The
+                # custom Disposal back-link lives on the parent JE via
+                # custom_source_doctype / custom_source_name (set below).
             }
         )
 
@@ -105,8 +107,6 @@ def post_cost_recognition_je_for_disposal(disposal) -> Optional[str]:
             "account": cogs_account,
             "debit_in_account_currency": total_cost,
             "cost_center": cost_center,
-            "reference_type": disposal.doctype,
-            "reference_name": disposal.name,
         },
     )
 
