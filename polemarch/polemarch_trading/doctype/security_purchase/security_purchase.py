@@ -91,15 +91,20 @@ class SecurityPurchase(Document):
         self._cancel_journal_entry()
 
     def _sever_wallet_transaction_link_if_any(self):
-        """Clear WT.reference_name on the linked Wallet Transaction so
+        """Clear WT.reference_name on the linked Wallet Transaction(s) so
         Frappe's link check doesn't block this cancel. Idempotent — safe
-        to call multiple times. The reversal posted in on_cancel records
-        the cancel reason in remarks, preserving audit trail."""
-        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
-            return
-        if frappe.db.exists("Wallet Transaction", self.wallet_transaction_ref):
+        to call multiple times. Also stashes the linked WT names on
+        self.flags._pending_wt_reversal so on_cancel can still find them
+        after the reverse link is severed."""
+        linked = frappe.get_all(
+            "Wallet Transaction",
+            filters={"reference_doctype": "Security Purchase", "reference_name": self.name},
+            pluck="name",
+        )
+        self.flags._pending_wt_reversal = linked
+        for wt in linked:
             frappe.db.set_value(
-                "Wallet Transaction", self.wallet_transaction_ref,
+                "Wallet Transaction", wt,
                 {"reference_doctype": "", "reference_name": ""},
                 update_modified=False,
             )
@@ -351,29 +356,30 @@ class SecurityPurchase(Document):
         )
 
     def _reverse_wallet_transaction_if_any(self):
-        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
+        """Reverse any Wallet Transaction(s) created on submit. before_cancel
+        already severed the WT → SP link so Frappe's link check passes; here
+        we restore the wallet balance via the reversal mechanism. Find by
+        reverse pointer (since SP doesn't carry a wallet_transaction_ref)."""
+        # Both pre-severance (active link) and post-severance lookups may run
+        # in different flows; we already cleared the link in before_cancel,
+        # so the lookup is by remarks pattern or by recent WTs tied to this
+        # customer. Simpler: also stash the linked WT name on self.flags
+        # in before_cancel for use here.
+        linked = list(getattr(self.flags, "_pending_wt_reversal", None) or [])
+        if not linked:
             return
         from polemarch.polemarch_trading import wallet as wallet_engine
-        original_wt = self.wallet_transaction_ref
-        reversing_wt = wallet_engine.reverse(
-            original_wt,
-            remarks=f"Reversed on Security Purchase {self.name} cancel",
-        )
-        # Sever the WT → Security Purchase link on BOTH rows so Frappe's
-        # `check_if_doc_is_dynamically_linked` doesn't block the SP cancel.
-        # The audit trail survives via Wallet Transaction.reverses (which
-        # chains original ↔ reversal) plus the remarks above. The reference
-        # change preserves docstatus=1 and the append-only guarantee — we
-        # only edit reference_doctype/_name, not amounts or buckets.
-        # Use db_set with update_modified=False to bypass the doctype's
-        # validate-time append-only guard.
-        for wt in (original_wt, reversing_wt):
-            if wt and frappe.db.exists("Wallet Transaction", wt):
-                frappe.db.set_value(
-                    "Wallet Transaction", wt,
-                    {"reference_doctype": "", "reference_name": ""},
-                    update_modified=False,
-                )
+        for original_wt in linked:
+            if not frappe.db.exists("Wallet Transaction", original_wt):
+                continue
+            # Idempotent: skip if already reversed.
+            already_reversed = frappe.db.get_value("Wallet Transaction", original_wt, "is_cancelled")
+            if already_reversed:
+                continue
+            wallet_engine.reverse(
+                original_wt,
+                remarks=f"Reversed on Security Purchase {self.name} cancel",
+            )
 
     # ── on_submit — Journal Entry ────────────────────────────────────
 

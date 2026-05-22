@@ -103,13 +103,18 @@ class SecuritySale(Document):
         self._reverse_customer_holding_snapshot()
 
     def _sever_wallet_transaction_link_if_any(self):
-        """Clear WT.reference_name on the linked Wallet Transaction so
-        Frappe's link check doesn't block this cancel. Idempotent."""
-        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
-            return
-        if frappe.db.exists("Wallet Transaction", self.wallet_transaction_ref):
+        """Clear WT.reference_name on the linked Wallet Transaction(s) so
+        Frappe's link check doesn't block this cancel. Also stash the
+        WT names on self.flags so on_cancel can still reverse them."""
+        linked = frappe.get_all(
+            "Wallet Transaction",
+            filters={"reference_doctype": "Security Sale", "reference_name": self.name},
+            pluck="name",
+        )
+        self.flags._pending_wt_reversal = linked
+        for wt in linked:
             frappe.db.set_value(
-                "Wallet Transaction", self.wallet_transaction_ref,
+                "Wallet Transaction", wt,
                 {"reference_doctype": "", "reference_name": ""},
                 update_modified=False,
             )
@@ -399,25 +404,23 @@ class SecuritySale(Document):
         )
 
     def _reverse_wallet_transaction_if_any(self):
-        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
+        """Reverse any Wallet Transaction(s) created on submit. The reverse
+        link was already severed in before_cancel; we use the stashed WT
+        names from self.flags."""
+        linked = list(getattr(self.flags, "_pending_wt_reversal", None) or [])
+        if not linked:
             return
         from polemarch.polemarch_trading import wallet as wallet_engine
-        original_wt = self.wallet_transaction_ref
-        reversing_wt = wallet_engine.reverse(
-            original_wt,
-            remarks=f"Reversed on Security Sale {self.name} cancel",
-        )
-        # Sever the WT → Security Sale link on BOTH rows so Frappe's
-        # link check doesn't block the Sale cancel. The audit trail
-        # survives via Wallet Transaction.reverses (original ↔ reversal
-        # chain) plus the remarks above. Same pattern as Security Purchase.
-        for wt in (original_wt, reversing_wt):
-            if wt and frappe.db.exists("Wallet Transaction", wt):
-                frappe.db.set_value(
-                    "Wallet Transaction", wt,
-                    {"reference_doctype": "", "reference_name": ""},
-                    update_modified=False,
-                )
+        for original_wt in linked:
+            if not frappe.db.exists("Wallet Transaction", original_wt):
+                continue
+            already_reversed = frappe.db.get_value("Wallet Transaction", original_wt, "is_cancelled")
+            if already_reversed:
+                continue
+            wallet_engine.reverse(
+                original_wt,
+                remarks=f"Reversed on Security Sale {self.name} cancel",
+            )
 
     # ── on_cancel ────────────────────────────────────────────────────
 
