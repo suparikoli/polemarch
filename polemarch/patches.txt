@@ -107,3 +107,8 @@ polemarch.patches.v0_15_0.drop_customer_field_on_holding
 # Customer.validate hook auto-syncs customer_name from the primary Contact
 # for Individual customers.
 polemarch.patches.v0_16_0.drop_customer_pan_name_fields
+# v0_18_0 — Every Customer gets a primary Contact. Backfill for Polemarch
+# customers created before the after_insert hook landed. The hook itself
+# (polemarch.overrides.customer.after_insert) catches new inserts going
+# forward; this patch fixes the historical gap.
+polemarch.patches.v0_18_0.backfill_primary_contact_for_polemarch_customers

@@ -8,6 +8,97 @@ def validate(doc, method=None):
     in_polemarch_group = doc.customer_group == POLEMARCH_CUSTOMER_GROUP
     doc.custom_is_polemarch_customer = 1 if (has_dp or in_polemarch_group) else 0
     _sync_customer_name_from_primary_contact(doc)
+    _enforce_primary_contact_for_polemarch(doc)
+
+
+def after_insert(doc, method=None):
+    """Auto-create a placeholder Contact for every new Customer.
+
+    Phase 16 made the standard ERPNext Contact the source of truth for
+    name / email / phone, but Frappe doesn't auto-create one when a
+    Customer is inserted. Without this hook, customers created via API
+    / scripts / smoke tests get no Contact and the Phase-16 sync hook
+    has nothing to sync from. So: create a placeholder Contact with
+    first_name = customer_name, link it via Dynamic Link, and set
+    customer_primary_contact.
+
+    Operators open the Contact afterwards to split first/middle/last,
+    add email + phone, etc. The auto-create is purely a safety net so
+    no Customer ever exists without a Contact.
+
+    Idempotent: skipped if customer_primary_contact is already set or
+    any Contact is already linked to this Customer.
+    """
+    _ensure_primary_contact(doc.name, doc.customer_name)
+
+
+def _ensure_primary_contact(customer_name: str, display_name: str) -> str | None:
+    """Create-or-reuse a Contact for the given Customer. Returns the Contact name."""
+    # Reuse if customer_primary_contact already populated.
+    existing_primary = frappe.db.get_value(
+        "Customer", customer_name, "customer_primary_contact"
+    )
+    if existing_primary and frappe.db.exists("Contact", existing_primary):
+        return existing_primary
+
+    # Reuse if any Contact is already linked via Dynamic Link.
+    linked = frappe.db.sql(
+        """
+        SELECT parent FROM `tabDynamic Link`
+         WHERE link_doctype = 'Customer'
+           AND link_name    = %s
+           AND parenttype   = 'Contact'
+         ORDER BY creation ASC
+         LIMIT 1
+        """,
+        (customer_name,),
+        as_dict=True,
+    )
+    if linked:
+        contact_name = linked[0].parent
+        frappe.db.set_value(
+            "Customer", customer_name, "customer_primary_contact", contact_name,
+            update_modified=False,
+        )
+        return contact_name
+
+    # Otherwise — create a placeholder Contact.
+    contact = frappe.get_doc({
+        "doctype": "Contact",
+        "first_name": display_name or customer_name,
+        "links": [
+            {"link_doctype": "Customer", "link_name": customer_name},
+        ],
+    })
+    contact.flags.ignore_permissions = True
+    contact.insert(ignore_permissions=True)
+
+    frappe.db.set_value(
+        "Customer", customer_name, "customer_primary_contact", contact.name,
+        update_modified=False,
+    )
+    return contact.name
+
+
+def _enforce_primary_contact_for_polemarch(doc):
+    """Polemarch customers MUST have a primary Contact. Skipped for brand-new
+    docs — after_insert auto-creates the placeholder Contact, but that fires
+    after validate. Catches the case where an operator clears the primary_
+    contact link or imports a Polemarch customer without one."""
+    if doc.is_new():
+        return
+    if not doc.custom_is_polemarch_customer:
+        return
+    if doc.customer_primary_contact:
+        return
+    frappe.throw(
+        frappe._(
+            "Polemarch customers must have a primary Contact. Open the "
+            "Contacts panel on this Customer and link one (or set "
+            "Customer Primary Contact directly)."
+        ),
+        title=frappe._("Primary Contact Required"),
+    )
 
 
 def _sync_customer_name_from_primary_contact(doc):

@@ -30,6 +30,9 @@ doc_events = {
     "Customer": {
         "validate": "polemarch.overrides.customer.validate",
         "on_update": "polemarch.overrides.customer.on_update",
+        # Phase 18 — auto-create a placeholder Contact for every new Customer
+        # so the Phase-16 Contact-first model isn't bypassed by API / scripts.
+        "after_insert": "polemarch.overrides.customer.after_insert",
     },
     "Item": {
         # `validate` auto-links the `Polemarch - Non-GST` Item Tax
