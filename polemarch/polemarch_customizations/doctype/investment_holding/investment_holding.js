@@ -15,6 +15,16 @@ frappe.ui.form.on('Investment Holding', {
     refresh(frm) {
         if (frm.is_new()) return;
 
+        // Hide the auto-status indicator pill in the page title — the
+        // breakdown panel below shows the same Open / Partially Disposed
+        // / Fully Disposed information via actual qty numbers. Status
+        // stays in the DB for FIFO + report filters.
+        try {
+            if (frm.page && frm.page.indicator && frm.page.indicator.hide) {
+                frm.page.indicator.hide();
+            }
+        } catch (e) { /* harmless */ }
+
         // Phase 24A deadline banner — visible whenever classification is
         // Unallocated, regardless of qty. Drives the operator to either
         // classify before deadline or accept the auto-SiT default.
@@ -24,14 +34,15 @@ frappe.ui.form.on('Investment Holding', {
         // SiT / Investment / Unclassified split at a glance.
         render_classification_breakdown(frm);
 
-        // Phase 24B-1 "Classify Qty" button — only meaningful while there's
-        // Unclassified qty to assign and the window hasn't expired. Lets
-        // operators classify a partial qty without forking a new Holding
-        // via Portfolio Transfer.
-        const qty_unclass = frm.doc.qty_unclassified;
+        // Window state — drives which Action button(s) appear.
         const deadline_open = !frm.doc.classification_deadline
             || new Date(String(frm.doc.classification_deadline).replace(' ', 'T')) > new Date();
-        if (qty_unclass !== undefined && qty_unclass > 0 && deadline_open) {
+
+        // Phase 24B-1 "Classify Qty" — within the classification window
+        // ONLY. Appends a child row to the SAME Holding without posting
+        // a JE. Operator's first-class path during the 5-day window.
+        const qty_unclass = frm.doc.qty_unclassified;
+        if (deadline_open && qty_unclass !== undefined && qty_unclass > 0) {
             frm.add_custom_button(
                 __('Classify Qty'),
                 () => open_classify_dialog(frm, qty_unclass),
@@ -39,21 +50,24 @@ frappe.ui.form.on('Investment Holding', {
             );
         }
 
-        if (!frm.doc.classification) return;
-        // Only meaningful when there's something to split and the source has
-        // a definite classification (not Unallocated).
-        const available =
-            (frm.doc.qty_acquired || 0)
-            - (frm.doc.qty_disposed || 0)
-            - (frm.doc.qty_reserved || 0);
-        if (available <= 0) return;
-        if (frm.doc.classification === 'Unallocated') return;
-
-        frm.add_custom_button(
-            __('Split & Classify'),
-            () => open_split_dialog(frm, available),
-            __('Actions'),
-        );
+        // Split & Classify — POST-window path only. Requires a Portfolio
+        // Transfer + JE because by then the cost is locked into a final
+        // inventory account (Securities Inventory or LT Investments).
+        // During the window, Classify Qty does the same thing without
+        // a JE — Split & Classify here would be redundant + noisy.
+        if (!deadline_open && frm.doc.classification && frm.doc.classification !== 'Unallocated') {
+            const available =
+                (frm.doc.qty_acquired || 0)
+                - (frm.doc.qty_disposed || 0)
+                - (frm.doc.qty_reserved || 0);
+            if (available > 0) {
+                frm.add_custom_button(
+                    __('Split & Classify'),
+                    () => open_split_dialog(frm, available),
+                    __('Actions'),
+                );
+            }
+        }
     },
 });
 

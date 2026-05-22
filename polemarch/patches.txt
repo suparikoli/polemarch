@@ -137,3 +137,9 @@ polemarch.patches.v0_24_0.add_classification_child_table
 # LCM table read from the child rows; the legacy `classification`
 # field stays in sync via the controller's _compute_derived_fields.
 polemarch.patches.v0_24_0.backfill_classification_child_rows
+# Phase 24B-1 cleanup: hide form-redundant legacy Custom Fields
+# (classification, classified_on, classified_by, qty_reserved). DB
+# columns stay — FIFO + reports still read them. Just removed from
+# the form because the breakdown panel + child table render the same
+# info more usefully.
+polemarch.patches.v0_24_0.hide_legacy_classification_fields
