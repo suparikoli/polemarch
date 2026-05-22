@@ -74,19 +74,54 @@ def _rows(company: Optional[str] = None, security: Optional[str] = None) -> list
 
 
 def _attach_market_value(row: dict) -> dict:
-    """Compute market_value + unrealised_gain on a single row in-place."""
+    """Compute market_value, unrealised_gain, and per-classification LCM
+    on a single row in-place.
+
+    LCM = Lower of Cost or Market (conservative accounting): for each
+    classification bucket we value at min(cost_value, fair_value). When
+    last_traded_price is blank/0, fair_value is unknown — LCM falls back
+    to cost so the row still has a defensible valuation.
+
+    Adds these keys to the row:
+        sit_market         total_market
+        inv_market
+        sit_lcm            inv_lcm        unalloc_lcm        total_lcm
+        market_value       (alias of total_market for back-compat)
+        unrealised_gain    unrealised_gain_pct
+    """
     ltp = flt(row.get("last_traded_price"))
+
+    def _pair(units, cost):
+        units = flt(units)
+        cost = flt(cost)
+        if ltp > 0 and units > 0:
+            fair = units * ltp
+            return fair, min(fair, cost)
+        # No price → fair unknown, LCM defaults to cost.
+        return None, cost
+
+    row["sit_market"], row["sit_lcm"]         = _pair(row.get("sit_units"),     row.get("sit_cost"))
+    row["inv_market"], row["inv_lcm"]         = _pair(row.get("inv_units"),     row.get("inv_cost"))
+    row["unalloc_market"], row["unalloc_lcm"] = _pair(row.get("unalloc_units"), row.get("unalloc_cost"))
+
     total_units = flt(row.get("total_units"))
     total_cost = flt(row.get("total_cost"))
     if ltp > 0 and total_units > 0:
-        market = total_units * ltp
-        row["market_value"] = market
-        row["unrealised_gain"] = market - total_cost
-        row["unrealised_gain_pct"] = (market - total_cost) / total_cost * 100 if total_cost else 0
+        total_market = total_units * ltp
+        row["total_market"] = total_market
+        row["market_value"] = total_market
+        row["unrealised_gain"] = total_market - total_cost
+        row["unrealised_gain_pct"] = (total_market - total_cost) / total_cost * 100 if total_cost else 0
     else:
+        row["total_market"] = None
         row["market_value"] = None
         row["unrealised_gain"] = None
         row["unrealised_gain_pct"] = None
+
+    # Total LCM = sum of per-classification LCMs (each already individually
+    # min'd against its own cost). When LTP is missing, this collapses to
+    # total cost as expected.
+    row["total_lcm"] = flt(row["sit_lcm"]) + flt(row["inv_lcm"]) + flt(row["unalloc_lcm"])
     return row
 
 
