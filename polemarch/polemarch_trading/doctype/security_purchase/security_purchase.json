@@ -121,13 +121,14 @@
   {
    "fieldname": "intended_classification",
    "fieldtype": "Select",
-   "label": "Classification",
+   "label": "Initial Classification",
    "options": "Unallocated\nStock in Trade\nInvestment",
    "default": "Unallocated",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "description": "Where the new Holding lands. Leave on Unallocated to keep the 2-working-day classification window. Pick Stock in Trade or Investment to skip the window and lock the classification at submit."
+   "depends_on": "eval:!doc.docstatus || doc.docstatus === 0",
+   "description": "Where the new Investment Holding lands at create time — a one-shot hint, not a live mirror. Leave on Unallocated to keep the 2-working-day classification window. Pick Stock in Trade or Investment to skip the window and lock the classification at submit. After submit, the actual classification lives on the linked Investment Holding (which can be reclassified independently); this field hides so it doesn't drift."
   },
   {
    "fieldname": "section_amounts",
