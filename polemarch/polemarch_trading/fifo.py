@@ -45,6 +45,10 @@ def consume(
 ) -> List[ConsumedHolding]:
     """Plan a FIFO consumption against open Investment Holdings.
 
+    Investment Holding is proprietary-only as of Phase 15 — customer
+    holdings are CRM data on the separate `Customer Holding` doctype,
+    and FIFO never walks them.
+
     Args:
         security: Security name (the standalone trading identity) to consume.
         company: Company scope.
@@ -52,8 +56,8 @@ def consume(
         qty_to_sell: how much to consume.
         sale_date: defaults to today; used for holding-period calc.
         lock_timeout_seconds: advisory lock wait.
-        customer_filter: optional Customer name (for customer-owned holdings).
-            Pass None for proprietary holdings.
+        customer_filter: deprecated since Phase 15 — ignored. Kept in the
+            signature so any external caller doesn't break.
 
     Returns: list of (holding, qty, cost_basis, acq_date, holding_days, is_long_term).
     Empty list if qty_to_sell <= 0 or no open holdings available.
@@ -64,7 +68,7 @@ def consume(
 
     sale_date = getdate(sale_date)
 
-    lock_key = f"polemarch:fifo:{security}:{classification}:{customer_filter or '_prop'}"
+    lock_key = f"polemarch:fifo:{security}:{classification}:_prop"
     if not _acquire_advisory_lock(lock_key, lock_timeout_seconds):
         frappe.throw(
             _("Could not acquire FIFO lock for {0}/{1} within {2}s.").format(
@@ -92,25 +96,9 @@ def consume(
         else "1=1"
     )
 
-    # customer_filter scopes by Holding.customer (Phase 10):
-    #   None         → proprietary pool (Holding.customer IS NULL or '')
-    #   <Customer>   → that Customer's pool (Holding.customer = <name>)
-    # On pre-v0_10_0 sites the column is missing — fall back to no filter so
-    # legacy proprietary flows keep working.
-    has_customer_col = frappe.db.has_column("Investment Holding", "customer")
-    if has_customer_col:
-        if customer_filter:
-            customer_check = "customer = %s"
-        else:
-            customer_check = "(customer IS NULL OR customer = '')"
-    else:
-        customer_check = "1=1"
-
     params = [security, company]
     if "classification" in classification_check:
         params.append(classification)
-    if has_customer_col and customer_filter:
-        params.append(customer_filter)
 
     rows = frappe.db.sql(
         f"""
@@ -122,7 +110,6 @@ def consume(
            AND company  = %s
            AND status IN ('Open', 'Partially Disposed')
            AND {classification_check}
-           AND {customer_check}
          ORDER BY creation ASC
          FOR UPDATE
         """,

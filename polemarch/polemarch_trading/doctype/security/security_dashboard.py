@@ -34,6 +34,7 @@ def get_data():
                 "label": _("Inventory"),
                 "items": [
                     "Investment Holding",
+                    "Customer Holding",
                 ],
             },
             {

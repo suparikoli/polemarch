@@ -27,6 +27,8 @@ _REQUIRED_DOCTYPES = [
     "Security Sale",
     # Phase 11 — Security Type master (Lead Source pattern)
     "Security Type",
+    # Phase 15 — Customer Holding (CRM snapshot, not part of GL ledger)
+    "Customer Holding",
 ]
 
 _REQUIRED_JE_CUSTOM_FIELDS = ["custom_source_doctype", "custom_source_name"]
@@ -38,14 +40,13 @@ _REQUIRED_ITEM_CUSTOM_FIELDS = ["custom_security"]
 #   - classification_deadline (Phase 8 — 2-working-day auto-classification timer)
 #   - qty_reserved            (Phase 8 — FIFO reservation bucket for open Sell orders)
 #   - security                (Phase 9 — standalone trading identity, no Item lookup)
-#   - customer                (Phase 10 — owner; NULL = proprietary)
-# (custom_portfolio Custom Field was dropped in v0_14_0 along with the Portfolio doctype.)
+# (custom_portfolio was dropped in v0_14_0; customer was dropped in v0_15_0 —
+#  customer holdings now live on the separate Customer Holding doctype.)
 _REQUIRED_IH_CUSTOM_FIELDS = [
     "classification",
     "classification_deadline",
     "qty_reserved",
     "security",
-    "customer",
 ]
 # Investment Disposal gets:
 #   - polemarch_security_sale      (Phase 9 — back-link → Security Sale)

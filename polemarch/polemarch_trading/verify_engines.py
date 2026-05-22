@@ -621,40 +621,42 @@ def _assert_holding_qty_disposed(holding: str, expected: float) -> dict:
 
 def _assert_customer_holding_for_sale(sale_name: str, customer: str,
                                       expected_qty: float, expected_cost: float) -> dict:
-    """Verify Security Sale.on_submit minted a customer-owned Holding."""
+    """Verify Security Sale.on_submit bumped the Customer Holding snapshot.
+
+    Phase 15: customer holdings are CRM data on the standalone Customer
+    Holding doctype, not part of the inventory ledger. expected_cost is
+    accepted for API compatibility but ignored — Polemarch doesn't track
+    customer cost basis.
+    """
+    security = frappe.db.get_value("Security Sale", sale_name, "security")
+    if not security:
+        raise AssertionError(f"Security Sale {sale_name} not found")
+    ch_name = f"{customer}-{security}"
     row = frappe.db.get_value(
-        "Investment Holding",
-        {
-            "purchase_reference": "Security Sale",
-            "purchase_reference_link": sale_name,
-            "customer": customer,
-        },
-        ("name", "qty_acquired", "cost_basis_per_unit", "classification", "security"),
+        "Customer Holding",
+        ch_name,
+        ("name", "qty", "source", "security"),
         as_dict=True,
     )
     if not row:
         raise AssertionError(
-            f"No customer Holding minted for Security Sale {sale_name} / {customer}"
+            f"No Customer Holding snapshot for {customer} / {security} "
+            f"(expected after Security Sale {sale_name})"
         )
-    if flt(row.qty_acquired) != flt(expected_qty):
+    if flt(row.qty) < flt(expected_qty):
         raise AssertionError(
-            f"Holding {row.name}: qty {row.qty_acquired} != {expected_qty}"
+            f"Customer Holding {row.name}: qty {row.qty} < expected {expected_qty} "
+            f"(snapshot should reflect the sold qty)"
         )
-    if flt(row.cost_basis_per_unit) != flt(expected_cost):
+    if row.source != "Security Sale":
         raise AssertionError(
-            f"Holding {row.name}: cost {row.cost_basis_per_unit} != {expected_cost}"
-        )
-    if row.classification != "Investment":
-        raise AssertionError(
-            f"Holding {row.name}: classification {row.classification} != Investment "
-            f"(customer-Buy mints default to Investment)"
+            f"Customer Holding {row.name}: source {row.source} != Security Sale"
         )
     return {
-        "holding": row.name,
+        "customer_holding": row.name,
         "security": row.security,
-        "qty": flt(row.qty_acquired),
-        "cost": flt(row.cost_basis_per_unit),
-        "classification": row.classification,
+        "qty": flt(row.qty),
+        "source": row.source,
     }
 
 
@@ -739,6 +741,10 @@ def _cleanup():
         (f"WAL-{test_customer}",),
     )
     frappe.db.sql("DELETE FROM `tabWallet` WHERE customer = %s", (test_customer,))
+    frappe.db.sql(
+        "DELETE FROM `tabCustomer Holding` WHERE customer = %s",
+        (test_customer,),
+    )
     frappe.db.sql("DELETE FROM `tabCustomer` WHERE name = %s", (test_customer,))
     frappe.db.sql("DELETE FROM `tabSupplier` WHERE name = %s", (test_supplier,))
 

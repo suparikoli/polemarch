@@ -28,6 +28,7 @@
 
   {"hidden": 0, "is_query_report": 0, "label": "Customers & Wallets",    "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Customer",               "link_to": "Customer",               "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Customer Holding",       "link_to": "Customer Holding",       "link_type": "DocType", "onboard": 1, "type": "Link", "description": "CRM-style snapshot of what each customer currently holds. NOT on Polemarch's books."},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet",                 "link_to": "Wallet",                 "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet Transaction",     "link_to": "Wallet Transaction",     "link_type": "DocType", "onboard": 0, "type": "Link"},
 

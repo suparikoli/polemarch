@@ -74,7 +74,7 @@ class SecuritySale(Document):
             )
 
         disposal_name = self._create_investment_disposal(plan)
-        customer_holding = self._mint_customer_holding_if_any()
+        self._upsert_customer_holding_snapshot()
         cogs_je = self._post_cogs_journal_entry(disposal_name)
         wallet_txn = self._post_wallet_transaction_if_any()
         revenue_je = self._post_revenue_journal_entry()
@@ -82,19 +82,17 @@ class SecuritySale(Document):
         self.db_set("investment_disposal_ref", disposal_name, update_modified=False)
         self.db_set("cogs_journal_entry_ref", cogs_je, update_modified=False)
         self.db_set("revenue_journal_entry_ref", revenue_je, update_modified=False)
-        if customer_holding and hasattr(self, "customer_holding_ref"):
-            self.db_set("customer_holding_ref", customer_holding, update_modified=False)
         if wallet_txn and hasattr(self, "wallet_transaction_ref"):
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
     def on_cancel(self):
         # Reverse JEs and wallet first (no inventory dependency), then
         # cancel the Disposal (its on_cancel restores qty_disposed on the
-        # consumed Holdings). Finally delete the customer Holding if any.
+        # consumed Holdings). Roll back the Customer Holding snapshot.
         self._reverse_wallet_transaction_if_any()
         self._cancel_journal_entries()
         self._cancel_investment_disposal()
-        self._delete_customer_holding_if_any()
+        self._reverse_customer_holding_snapshot()
 
     # ── validate-time ────────────────────────────────────────────────
 
@@ -206,79 +204,42 @@ class SecuritySale(Document):
         disposal.submit()
         return disposal.name
 
-    def _mint_customer_holding_if_any(self):
-        """Customer-Buy via Security Sale: mint a customer-owned Holding at
-        trade price. Supplier-side sales don't mint anything on the
-        counterparty side."""
+    def _upsert_customer_holding_snapshot(self):
+        """Bump the customer's Customer Holding snapshot by qty sold.
+
+        Side-effect only — has no GL impact. Customer Holding is purely a
+        CRM-style record so operators know who currently holds what.
+        Customers may buy/sell with third parties Polemarch never sees;
+        the snapshot may drift, and operators can hand-correct it any time.
+        """
         if self.party_type != "Customer":
-            return None
-        existing = frappe.db.get_value(
-            "Investment Holding",
-            {
-                "purchase_reference": "Security Sale",
-                "purchase_reference_link": self.name,
-                "customer": self.party,
-            },
-            "name",
-        )
-        if existing:
-            return existing
-
-        holding = frappe.get_doc({
-            "doctype": "Investment Holding",
-            "security": self.security,
-            "customer": self.party,
-            "company": self.company,
-            "acquisition_date": getdate(self.posting_date),
-            "qty_acquired": flt(self.qty),
-            "cost_basis_per_unit": flt(self.rate),
-            "purchase_reference": "Security Sale",
-            "purchase_reference_link": self.name,
-            # Customer-owned shares default to Investment classification —
-            # retail buyers hold for capital appreciation. Stamp the
-            # at-purchase decision via classified_by / classified_on.
-            "classification": "Investment",
-            "classified_on": now_datetime(),
-            "classified_by": frappe.session.user,
-        })
-        holding.flags.ignore_permissions = True
-        holding.insert(ignore_permissions=True)
-        return holding.name
-
-    def _delete_customer_holding_if_any(self):
-        if not hasattr(self, "customer_holding_ref") or not self.customer_holding_ref:
-            # Lookup by source reference as fallback (back-compat)
-            existing = frappe.db.get_value(
-                "Investment Holding",
-                {
-                    "purchase_reference": "Security Sale",
-                    "purchase_reference_link": self.name,
-                },
-                "name",
-            )
-            if not existing:
-                return
-            target = existing
-        else:
-            target = self.customer_holding_ref
-        if not frappe.db.exists("Investment Holding", target):
             return
-        # Guard: don't delete if the customer has already disposed any of it.
-        h = frappe.db.get_value(
-            "Investment Holding",
-            target,
-            ["qty_disposed", "qty_reserved"],
-            as_dict=True,
+        from polemarch.polemarch_trading.doctype.customer_holding.customer_holding import (
+            apply_delta,
         )
-        if h and (flt(h.qty_disposed) > 0 or flt(h.qty_reserved) > 0):
-            frappe.throw(
-                _(
-                    "Cannot cancel Sale {0}: customer Holding {1} already has "
-                    "qty_disposed={2} or qty_reserved={3}."
-                ).format(self.name, target, h.qty_disposed, h.qty_reserved)
-            )
-        frappe.delete_doc(
-            "Investment Holding", target, ignore_permissions=True, force=True
+        apply_delta(
+            customer=self.party,
+            security=self.security,
+            delta_qty=flt(self.qty),
+            source="Security Sale",
+            note_on_drift=f"Triggered by Security Sale {self.name}",
+        )
+
+    def _reverse_customer_holding_snapshot(self):
+        """On cancel, decrement the customer's snapshot by the same qty we
+        added on submit. Best-effort — if operators have edited the row
+        manually since submit, the rollback still applies."""
+        if self.party_type != "Customer":
+            return
+        from polemarch.polemarch_trading.doctype.customer_holding.customer_holding import (
+            apply_delta,
+        )
+        apply_delta(
+            customer=self.party,
+            security=self.security,
+            delta_qty=-flt(self.qty),
+            source="Security Sale",
+            note_on_drift=f"Reversed by Security Sale {self.name} cancel",
         )
 
     # ── on_submit — JEs ──────────────────────────────────────────────

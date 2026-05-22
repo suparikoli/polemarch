@@ -57,27 +57,23 @@ class SecurityPurchase(Document):
         self._sync_legacy_fields()
 
     def on_submit(self):
-        # Order matters: if Customer is selling to us, consume their Holdings
-        # FIRST (creates the Disposal, decrements customer's qty_remaining),
-        # THEN mint our new proprietary Holding, THEN post the JE + wallet
-        # txn. The Disposal write needs to land before the new Holding so
-        # FIFO consistency holds for any concurrent reads.
-        disposal_name = self._consume_customer_holdings_if_any()
+        # Phase 15: Customer holdings are CRM data, not Polemarch's ledger.
+        # When party_type=Customer, we side-effect their snapshot but don't
+        # consume any Investment Holding (those are proprietary-only now).
         holding_name = self._create_investment_holding()
+        self._decrement_customer_holding_snapshot()
         wallet_txn = self._post_wallet_transaction_if_any()
         je_name = self._post_journal_entry()
 
         self.db_set("journal_entry_ref", je_name, update_modified=False)
         self.db_set("investment_holding_ref", holding_name, update_modified=False)
-        if disposal_name and hasattr(self, "customer_disposal_ref"):
-            self.db_set("customer_disposal_ref", disposal_name, update_modified=False)
         if wallet_txn and hasattr(self, "wallet_transaction_ref"):
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
     def on_cancel(self):
         self._guard_holding_untouched()
         self._reverse_wallet_transaction_if_any()
-        self._cancel_customer_disposal_if_any()
+        self._restore_customer_holding_snapshot()
         self._delete_investment_holding()
         self._cancel_journal_entry()
 
@@ -161,83 +157,43 @@ class SecurityPurchase(Document):
             self.supplier = None
         self.paid_from_account = self.payment_account
 
-    # ── on_submit — Customer-Sell branch ─────────────────────────────
+    # ── on_submit — Customer Holding snapshot side-effect ─────────────
 
-    def _consume_customer_holdings_if_any(self):
-        """Only fires when party_type=Customer — the customer is the seller.
-        FIFO consumes their Investment-class Holdings, creates a customer
-        Disposal that tracks per-lot LTCG/STCG. Polemarch's books don't
-        recognise gain/loss here (that's the customer's tax issue); the
-        Disposal exists purely as the customer's audit trail."""
+    def _decrement_customer_holding_snapshot(self):
+        """When party_type=Customer (Polemarch buying from a customer),
+        decrement their Customer Holding snapshot by the purchased qty.
+
+        Side-effect only — no GL impact, no Investment Disposal. Customer
+        holdings are CRM data; Polemarch doesn't track their cost basis
+        or capital gains. The snapshot helps Polemarch decide who to
+        approach when supply is needed."""
         if self.party_type != "Customer":
-            return None
-
-        from polemarch.polemarch_trading import fifo as fifo_engine
-
-        plan = fifo_engine.consume(
+            return
+        from polemarch.polemarch_trading.doctype.customer_holding.customer_holding import (
+            apply_delta,
+        )
+        apply_delta(
+            customer=self.party,
             security=self.security,
-            company=self.company,
-            classification="Investment",
-            qty_to_sell=flt(self.qty),
-            sale_date=getdate(self.posting_date),
-            customer_filter=self.party,
+            delta_qty=-flt(self.qty),
+            source="Security Purchase",
+            note_on_drift=f"Triggered by Security Purchase {self.name}",
         )
-        if not plan:
-            frappe.throw(
-                _(
-                    "Customer {0} has no consumable Investment Holdings of {1} "
-                    "(or qty < {2}). Confirm the customer actually owns these shares."
-                ).format(self.party, self.security, self.qty),
-                title=_("Insufficient Customer Inventory"),
-            )
 
-        covered = sum(flt(p.qty) for p in plan)
-        if covered + 0.0001 < flt(self.qty):
-            frappe.throw(
-                _(
-                    "Insufficient Investment inventory under customer {0}: "
-                    "requested {1}, available {2}."
-                ).format(self.party, self.qty, covered),
-                title=_("Insufficient Customer Inventory"),
-            )
-
-        disposal = frappe.get_doc({
-            "doctype": "Investment Disposal",
-            "security": self.security,
-            "company": self.company,
-            "disposal_date": getdate(self.posting_date),
-            "sales_invoice": None,
-            "customer": self.party,
-            "polemarch_security_purchase": self.name
-                if frappe.db.has_column(
-                    "Investment Disposal", "polemarch_security_purchase"
-                )
-                else None,
-            "lots": [
-                {
-                    "holding": entry.holding,
-                    "qty_consumed": entry.qty,
-                    "sale_price_per_unit": flt(self.rate),
-                }
-                for entry in plan
-            ],
-        })
-        disposal.flags.ignore_permissions = True
-        disposal.insert(ignore_permissions=True)
-        disposal.submit()
-        return disposal.name
-
-    def _cancel_customer_disposal_if_any(self):
-        if not hasattr(self, "customer_disposal_ref") or not self.customer_disposal_ref:
+    def _restore_customer_holding_snapshot(self):
+        """On cancel, undo the snapshot decrement."""
+        if self.party_type != "Customer":
             return
-        if not frappe.db.exists("Investment Disposal", self.customer_disposal_ref):
-            return
-        disposal = frappe.get_doc(
-            "Investment Disposal", self.customer_disposal_ref
+        from polemarch.polemarch_trading.doctype.customer_holding.customer_holding import (
+            apply_delta,
         )
-        if disposal.docstatus == 1:
-            disposal.flags.ignore_permissions = True
-            disposal.cancel()
+        apply_delta(
+            customer=self.party,
+            security=self.security,
+            delta_qty=flt(self.qty),
+            source="Security Purchase",
+            note_on_drift=f"Restored by Security Purchase {self.name} cancel",
+        )
 
     # ── on_submit — Holding mint ─────────────────────────────────────
 
@@ -247,17 +203,17 @@ class SecurityPurchase(Document):
             {
                 "purchase_reference": "Security Purchase",
                 "purchase_reference_link": self.name,
-                "customer": ["in", [None, ""]],
             },
             "name",
         )
         if existing:
             return existing
 
-        # When party_type=Customer (Polemarch buying from a customer), the
-        # new Holding is proprietary Stock-in-Trade by default — we
-        # acquired this inventory to resell. The classification picker on
-        # the form still wins for Supplier-side purchases.
+        # Investment Holding is proprietary-only post-Phase-15. When
+        # party_type=Customer (Polemarch buying from a customer), the new
+        # Holding still goes onto Polemarch's books, defaulting to Stock-
+        # in-Trade (we acquired inventory to resell). The classification
+        # picker on the form wins for Supplier-side purchases.
         if self.party_type == "Customer":
             classification = "Stock in Trade"
         else:
@@ -268,7 +224,6 @@ class SecurityPurchase(Document):
         holding_fields = {
             "doctype": "Investment Holding",
             "security": self.security,
-            "customer": None,  # Proprietary — Polemarch-owned
             "company": self.company,
             "acquisition_date": getdate(self.posting_date),
             "qty_acquired": flt(self.qty),

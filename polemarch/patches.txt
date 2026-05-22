@@ -94,3 +94,10 @@ polemarch.patches.v0_13_0.clear_customer_wallet_account_type
 # its denormalised qty rollup. With nothing populating either, drop both
 # tables + the Investment Holding.custom_portfolio Custom Field.
 polemarch.patches.v0_14_0.drop_portfolio_and_position
+# v0_15_0 — Customer Holding decoupled from the inventory ledger.
+# New `Customer Holding` doctype is a per-(customer, security) snapshot
+# for CRM/outreach use, NOT on Polemarch's accounting books. Migrate
+# existing customer-owned Investment Holdings into the new doctype,
+# then drop Investment Holding.customer.
+polemarch.patches.v0_15_0.migrate_customer_holdings
+polemarch.patches.v0_15_0.drop_customer_field_on_holding
