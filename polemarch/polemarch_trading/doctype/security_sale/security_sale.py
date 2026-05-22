@@ -6,9 +6,9 @@ takes a (party_type, party) pair plus a `payment_method`. Combinations:
   party_type=Customer, payment_method=Customer Wallet
       Retail customer is buying from Polemarch through their Polemarch
       wallet. FIFO consumes Polemarch's Stock-in-Trade inventory, a
-      proprietary Investment Disposal records the gain, the customer
-      gets a new customer-owned Investment Holding at trade price, and
-      the customer's wallet is debited (Buy Settlement).
+      proprietary Investment Disposal records the gain, the customer's
+      wallet is debited (Buy Settlement), and the Customer Holding
+      snapshot is bumped (CRM side-effect, not on the books).
 
   party_type=Customer, payment_method=Bank | Cash | Default Receivable
       Same as above but the cash settles outside the wallet. Bank /
@@ -16,8 +16,8 @@ takes a (party_type, party) pair plus a `payment_method`. Combinations:
       via the customer's AR ledger.
 
   party_type=Supplier, payment_method=Bank | Cash | Default Receivable
-      Block sale back to a counterparty (rare). NO customer Holding
-      gets minted — the Sale doesn't change the counterparty's books.
+      Block sale back to a counterparty (rare). No Customer Holding
+      snapshot bumped — the buyer isn't tracked as a retail customer.
 
 Always posts:
   - One Revenue JE: DR <payment_account>, CR <revenue_account>

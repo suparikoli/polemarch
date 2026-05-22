@@ -124,35 +124,29 @@ def _wallet_section(customer: str) -> dict | None:
 
 
 def _positions_section(customer: str) -> dict | None:
-    """Roll up customer-owned Investment Holdings by security. Phase 14
-    dropped the Security Position denormalised view — this query computes
-    the same data live from the Holding table (small enough to be cheap)."""
-    if not frappe.db.table_exists("Investment Holding"):
+    """Read what the customer currently holds. Phase 15 split customer
+    ownership out of the inventory ledger — Investment Holding is now
+    proprietary-only, and per-customer snapshots live on the standalone
+    Customer Holding doctype. No cost basis is tracked there (Polemarch
+    doesn't know what the customer paid)."""
+    if not frappe.db.table_exists("Customer Holding"):
         return None
-    rows = frappe.db.sql(
-        """
-        SELECT security                                            AS security,
-               COALESCE(SUM(qty_remaining), 0)                     AS qty_held,
-               COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)  AS total_cost
-          FROM `tabInvestment Holding`
-         WHERE customer = %s
-           AND status IN ('Open', 'Partially Disposed')
-         GROUP BY security
-         HAVING qty_held > 0
-         ORDER BY security ASC
-        """,
-        (customer,),
-        as_dict=True,
+    rows = frappe.get_all(
+        "Customer Holding",
+        filters={"customer": customer, "qty": [">", 0]},
+        fields=["name", "security", "security_name", "qty", "source", "last_updated"],
+        order_by="security ASC",
     )
     return {
         "count": len(rows),
-        "total_cost": float(sum(r.total_cost or 0 for r in rows)),
+        "total_qty": float(sum(r.qty or 0 for r in rows)),
         "rows": [
             {
                 "security": r.security,
-                "qty_held": float(r.qty_held or 0),
-                "total_cost": float(r.total_cost or 0),
-                "avg_cost": float(r.total_cost / r.qty_held) if r.qty_held else 0,
+                "security_name": r.security_name,
+                "qty_held": float(r.qty or 0),
+                "source": r.source,
+                "last_updated": str(r.last_updated) if r.last_updated else None,
             }
             for r in rows
         ],

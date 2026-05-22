@@ -96,7 +96,7 @@
    "default": "Supplier",
    "reqd": 1,
    "in_standard_filter": 1,
-   "description": "Who is Polemarch buying from? Supplier = off-market acquisition. Customer = a Polemarch customer is selling shares back to us (their Investment Holdings get consumed via FIFO; proprietary Stock-in-Trade inventory gets minted)."
+   "description": "Who is Polemarch buying from? Supplier = off-market acquisition. Customer = a Polemarch customer is selling shares back to us (proprietary Stock-in-Trade inventory gets minted; their Customer Holding snapshot is decremented as a CRM side-effect)."
   },
   {
    "fieldname": "party",

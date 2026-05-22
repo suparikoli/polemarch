@@ -13,11 +13,13 @@ combinations the operator typically picks:
       bank / cash account immediately.
 
   party_type=Customer, payment_method=Customer Wallet
-      A Polemarch customer is selling shares back to us. FIFO consumes
-      the customer's Investment Holdings (their Disposal records their
-      capital gains). Polemarch mints proprietary Stock-in-Trade
-      inventory at trade price. A Wallet Transaction credits the
-      customer's wallet (Sell Payout) for the trade value.
+      A Polemarch customer is selling shares back to us. Polemarch mints
+      proprietary Stock-in-Trade inventory at trade price. A Wallet
+      Transaction credits the customer's wallet (Sell Payout) for the
+      trade value. The Customer Holding snapshot is decremented as a
+      side-effect (CRM-only, no GL impact) — Phase 15 split customer
+      holdings out of the inventory ledger; we don't track their cost
+      basis or capital gains.
 
   party_type=Customer, payment_method=Bank | Cash | Default Payable
       Same as above but Polemarch settles cash outside the wallet —
