@@ -174,21 +174,17 @@ def execute(verbose: bool = False) -> dict:
         else:
             warnings.append(f"ITT MISSING: {candidate} (Polemarch share items will fail GST routing)")
 
-    # 7) Hourly + daily scheduler entries (smoke check — read hooks at import time).
+    # 7) Daily scheduler entries (smoke check — read hooks at import time).
+    # The hourly settlement.run_pending scheduler was dropped in v0_13_0
+    # along with Trade Order.
     try:
         from polemarch import hooks as polemarch_hooks  # noqa: F401
-        required_hourly = [
-            "polemarch.polemarch_trading.settlement.run_pending",
-        ]
         required_daily = [
             "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
             "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         ]
-        hourly = getattr(polemarch_hooks, "scheduler_events", {}).get("hourly", [])
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])
-        for entry in required_hourly:
-            (ok if entry in hourly else errors).append(f"scheduler.hourly {'present' if entry in hourly else 'MISSING'}: {entry}")
         for entry in required_daily:
             (ok if entry in daily else errors).append(f"scheduler.daily {'present' if entry in daily else 'MISSING'}: {entry}")
     except Exception as exc:
