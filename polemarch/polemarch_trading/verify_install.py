@@ -34,17 +34,18 @@ _REQUIRED_JE_CUSTOM_FIELDS = ["custom_source_doctype", "custom_source_name"]
 # Disposal backfills can run on existing sites. Future phases may drop it.
 _REQUIRED_ITEM_CUSTOM_FIELDS = ["custom_security"]
 # Investment Holding gets:
-#   - custom_portfolio        (Phase 2 — Trading vs Investment portfolio routing)
 #   - classification          (Phase 8 — Unallocated / Stock in Trade / Investment)
 #   - classification_deadline (Phase 8 — 2-working-day auto-classification timer)
 #   - qty_reserved            (Phase 8 — FIFO reservation bucket for open Sell orders)
 #   - security                (Phase 9 — standalone trading identity, no Item lookup)
+#   - customer                (Phase 10 — owner; NULL = proprietary)
+# (custom_portfolio Custom Field was dropped in v0_14_0 along with the Portfolio doctype.)
 _REQUIRED_IH_CUSTOM_FIELDS = [
-    "custom_portfolio",
     "classification",
     "classification_deadline",
     "qty_reserved",
     "security",
+    "customer",
 ]
 # Investment Disposal gets:
 #   - polemarch_security_sale      (Phase 9 — back-link → Security Sale)
