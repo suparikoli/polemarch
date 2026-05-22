@@ -72,12 +72,12 @@ function build_panel_html(data, security) {
         return value / units;
     }
 
-    // 2-line cell: per-unit on top (large, bold), total below (muted, smaller).
-    // Each line is a div with nowrap so the table cell can't break inside a line.
+    // 2-line cell: per-unit on top, total muted below.
+    // Column header already says "per unit · total" — no need for a /u suffix.
     function dual(perUnit, total) {
         const top = (perUnit == null)
             ? '<div>—</div>'
-            : `<div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="color: var(--text-muted); font-size: 0.85em;">&nbsp;/ unit</span></div>`;
+            : `<div style="white-space: nowrap; font-weight: 500;">${fmt_c(perUnit)}</div>`;
         const bot = (total == null)
             ? ''
             : `<div style="white-space: nowrap; color: var(--text-muted); font-size: 0.85em; margin-top: 2px;">${fmt_c(total)}</div>`;
@@ -89,28 +89,24 @@ function build_panel_html(data, security) {
     function lcm_dual(cost, fair, lcm, units) {
         if (lcm == null) return '<div>—</div>';
         const perUnit = unit(lcm, units);
+        const baseCell = `
+            <div style="white-space: nowrap; font-weight: 500;">${fmt_c(perUnit)}</div>
+            <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px; opacity: 0.85;">${fmt_c(lcm)}</div>
+        `;
         if (fair == null) {
-            // No price — LCM = cost by fallback. Show muted with footnote.
             return `<div style="color: var(--text-muted);">
-                <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
-                <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
+                ${baseCell}
                 <div style="font-size: 0.8em; margin-top: 1px; font-style: italic;">no price</div>
             </div>`;
         }
         if (fair < cost) {
-            // Write-down: LCM = fair, less than cost. Amber with delta annotation.
             const writedown = cost - lcm;
             return `<div style="color: var(--orange-500, #d97706);">
-                <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
-                <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
-                <div style="white-space: nowrap; font-size: 0.8em; margin-top: 1px;">↓ ${fmt_c(writedown)} write-down</div>
+                ${baseCell}
+                <div style="white-space: nowrap; font-size: 0.8em; margin-top: 1px;">↓ ${fmt_c(writedown)}</div>
             </div>`;
         }
-        // Healthy: LCM = cost, fair ≥ cost. Green.
-        return `<div style="color: var(--green-500, #16a34a);">
-            <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
-            <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
-        </div>`;
+        return `<div style="color: var(--green-500, #16a34a);">${baseCell}</div>`;
     }
 
     function row(label, units, cost, fair, lcm, opts = {}) {
