@@ -100,13 +100,15 @@ function build_panel_html(data, security) {
             </div>`;
         }
         if (fair < cost) {
+            // Amber write-down. Use a brighter orange that survives dark mode.
             const writedown = cost - lcm;
-            return `<div style="color: var(--orange-500, #d97706);">
+            return `<div style="color: #f59e0b; font-weight: 500;">
                 ${baseCell}
                 <div style="white-space: nowrap; font-size: 0.8em; margin-top: 1px;">↓ ${fmt_c(writedown)}</div>
             </div>`;
         }
-        return `<div style="color: var(--green-500, #16a34a);">${baseCell}</div>`;
+        // Healthy green — pick a vivid shade that reads on both themes.
+        return `<div style="color: #22c55e; font-weight: 500;">${baseCell}</div>`;
     }
 
     function row(label, units, cost, fair, lcm, opts = {}) {
@@ -140,9 +142,14 @@ function build_panel_html(data, security) {
     rows.push(row('TOTAL', data.total_units, data.total_cost, data.total_market, data.total_lcm,
                   { bold: true, topBorder: true }));
 
+    // Plain-string INR formatter for the subtitle (frappe.format returns
+    // a block-floated element for Currency that breaks inline flow).
+    const inrPlain = (v) => '₹ ' + Number(v).toLocaleString('en-IN', {
+        maximumFractionDigits: 2, minimumFractionDigits: 2,
+    });
     const ltp = data.last_traded_price;
     const subtitle = ltp
-        ? `Latest Price <b>${fmt_c(ltp)}</b> · per-unit values are weighted averages within each classification.`
+        ? `Latest Price: <b style="color: var(--text-color);">${inrPlain(ltp)}</b> &nbsp;·&nbsp; per-unit values are weighted averages within each classification.`
         : `Latest Price not set — fair value unknown, LCM defaults to cost. <a href="#" onclick="cur_frm.scroll_to_field('last_traded_price'); return false;">Set price ↓</a>`;
 
     return `
