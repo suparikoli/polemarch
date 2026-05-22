@@ -60,9 +60,8 @@ function build_panel_html(data, security) {
         `;
     }
 
-    const fmt_n  = (v) => (v == null) ? '—' : frappe.format(v, { fieldtype: 'Float',    precision: 0 });
-    const fmt_c  = (v) => (v == null) ? '—' : frappe.format(v, { fieldtype: 'Currency' });
-    const fmt_cu = (v) => (v == null) ? '—' : frappe.format(v, { fieldtype: 'Currency' }) + '<small style="color: var(--text-muted)"> / u</small>';
+    const fmt_n = (v) => (v == null) ? '—' : frappe.format(v, { fieldtype: 'Float',    precision: 0 });
+    const fmt_c = (v) => (v == null) ? '—' : frappe.format(v, { fieldtype: 'Currency' });
 
     // Weighted-average unit price for a classification:
     //   avg_cost  = cost_value / units    (Σ qty×basis / Σ qty)
@@ -73,30 +72,45 @@ function build_panel_html(data, security) {
         return value / units;
     }
 
-    // 2-line cell: per-unit on top, total below.
+    // 2-line cell: per-unit on top (large, bold), total below (muted, smaller).
+    // Each line is a div with nowrap so the table cell can't break inside a line.
     function dual(perUnit, total) {
-        const top = (perUnit == null) ? '—' : fmt_cu(perUnit);
-        const bot = (total   == null) ? '—' : `<small style="color: var(--text-muted)">${fmt_c(total)} total</small>`;
-        return `${top}<br>${bot}`;
+        const top = (perUnit == null)
+            ? '<div>—</div>'
+            : `<div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="color: var(--text-muted); font-size: 0.85em;">&nbsp;/ unit</span></div>`;
+        const bot = (total == null)
+            ? ''
+            : `<div style="white-space: nowrap; color: var(--text-muted); font-size: 0.85em; margin-top: 2px;">${fmt_c(total)}</div>`;
+        return `${top}${bot}`;
     }
 
     // LCM cell with colour semantics: green = LCM=cost (healthy);
     // amber = LCM=fair (write-down); muted = no price (LCM defaults to cost).
     function lcm_dual(cost, fair, lcm, units) {
-        if (lcm == null) return '—';
+        if (lcm == null) return '<div>—</div>';
         const perUnit = unit(lcm, units);
-        const inner = dual(perUnit, lcm);
         if (fair == null) {
-            return `<span style="color: var(--text-muted)">${inner}<br><small>(no price)</small></span>`;
+            // No price — LCM = cost by fallback. Show muted with footnote.
+            return `<div style="color: var(--text-muted);">
+                <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
+                <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
+                <div style="font-size: 0.8em; margin-top: 1px; font-style: italic;">no price</div>
+            </div>`;
         }
         if (fair < cost) {
+            // Write-down: LCM = fair, less than cost. Amber with delta annotation.
             const writedown = cost - lcm;
-            return `<span style="color: var(--orange-500, #d97706)">
-                ${inner}<br>
-                <small>↓ ${fmt_c(writedown)} write-down</small>
-            </span>`;
+            return `<div style="color: var(--orange-500, #d97706);">
+                <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
+                <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
+                <div style="white-space: nowrap; font-size: 0.8em; margin-top: 1px;">↓ ${fmt_c(writedown)} write-down</div>
+            </div>`;
         }
-        return `<span style="color: var(--green-500, #16a34a)">${inner}</span>`;
+        // Healthy: LCM = cost, fair ≥ cost. Green.
+        return `<div style="color: var(--green-500, #16a34a);">
+            <div style="white-space: nowrap;">${fmt_c(perUnit)}<span style="font-size: 0.85em;">&nbsp;/ unit</span></div>
+            <div style="white-space: nowrap; font-size: 0.85em; margin-top: 2px;">${fmt_c(lcm)}</div>
+        </div>`;
     }
 
     function row(label, units, cost, fair, lcm, opts = {}) {
@@ -159,11 +173,20 @@ function build_panel_html(data, security) {
         <table style="width: 100%; border-collapse: collapse; margin: 0;">
           <thead>
             <tr style="background: var(--bg-color); color: var(--text-color);">
-              <th style="padding: 8px 12px; text-align: left;  font-weight: 600;">Classification</th>
-              <th style="padding: 8px 12px; text-align: right; font-weight: 600;">Units</th>
-              <th style="padding: 8px 12px; text-align: right; font-weight: 600;">Cost <small style="color: var(--text-muted); font-weight: normal;">(per unit · total)</small></th>
-              <th style="padding: 8px 12px; text-align: right; font-weight: 600;">Fair Value <small style="color: var(--text-muted); font-weight: normal;">(per unit · total)</small></th>
-              <th style="padding: 8px 12px; text-align: right; font-weight: 600;">LCM <small style="color: var(--text-muted); font-weight: normal;">(lower of cost / fair)</small></th>
+              <th style="padding: 8px 12px; text-align: left;  font-weight: 600; white-space: nowrap;">Classification</th>
+              <th style="padding: 8px 12px; text-align: right; font-weight: 600; white-space: nowrap;">Units</th>
+              <th style="padding: 8px 12px; text-align: right; font-weight: 600; white-space: nowrap;">
+                Cost<br>
+                <span style="color: var(--text-muted); font-weight: normal; font-size: 0.85em;">per unit · total</span>
+              </th>
+              <th style="padding: 8px 12px; text-align: right; font-weight: 600; white-space: nowrap;">
+                Fair Value<br>
+                <span style="color: var(--text-muted); font-weight: normal; font-size: 0.85em;">per unit · total</span>
+              </th>
+              <th style="padding: 8px 12px; text-align: right; font-weight: 600; white-space: nowrap;">
+                LCM<br>
+                <span style="color: var(--text-muted); font-weight: normal; font-size: 0.85em;">lower of cost / fair</span>
+              </th>
             </tr>
           </thead>
           <tbody>${rows.join('')}</tbody>
