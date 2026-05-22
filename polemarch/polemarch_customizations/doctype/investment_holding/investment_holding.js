@@ -20,6 +20,10 @@ frappe.ui.form.on('Investment Holding', {
         // classify before deadline or accept the auto-SiT default.
         render_classification_deadline_banner(frm);
 
+        // Phase 24B-1 classification breakdown — always visible. Shows the
+        // SiT / Investment / Unclassified split at a glance.
+        render_classification_breakdown(frm);
+
         // Phase 24B-1 "Classify Qty" button — only meaningful while there's
         // Unclassified qty to assign and the window hasn't expired. Lets
         // operators classify a partial qty without forking a new Holding
@@ -52,6 +56,65 @@ frappe.ui.form.on('Investment Holding', {
         );
     },
 });
+
+// ── Phase 24B-1: classification breakdown panel ──────────────────────────
+function render_classification_breakdown(frm) {
+    const d = frm.dashboard || {};
+    const mount = (d.wrapper && d.wrapper.length) ? d.wrapper
+        : (d.parent && d.parent.length) ? d.parent
+        : $(frm.wrapper).find('.layout-main-section, .form-page').first();
+    mount.find('.polemarch-classification-breakdown').remove();
+
+    // Skip if the Phase 24B Custom Fields aren't installed yet.
+    if (frm.doc.qty_unclassified === undefined) return;
+
+    const sit  = Number(frm.doc.qty_classified_sit || 0);
+    const inv  = Number(frm.doc.qty_classified_investment || 0);
+    const unc  = Number(frm.doc.qty_unclassified || 0);
+    const total = sit + inv + unc;
+    if (total === 0) return;  // empty Holdings get no panel
+
+    const cost = Number(frm.doc.cost_basis_per_unit || 0);
+    const fmt_n = (v) => frappe.format(v, { fieldtype: 'Float', precision: 0 });
+    const fmt_c = (v) => frappe.format(v * cost, { fieldtype: 'Currency' });
+    const pct = (v) => total ? ((v / total) * 100).toFixed(1) + '%' : '0%';
+
+    // Each cell: large qty, then small total cost + percentage.
+    // Color cues mirror the workspace Number Cards: SiT cyan, Inv green,
+    // Unclassified grey-muted, Total bold.
+    function cell(label, qty, color) {
+        const muted = qty === 0;
+        return `
+          <td style="padding: 10px 14px; vertical-align: top; ${muted ? 'opacity: 0.5;' : ''}">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">${label}</div>
+            <div style="font-size: 20px; font-weight: 600; color: ${color}; margin-top: 2px; white-space: nowrap;">${fmt_n(qty)}</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${fmt_c(qty)} · ${pct(qty)}</div>
+          </td>
+        `;
+    }
+
+    const html = `
+      <div class="polemarch-classification-breakdown" style="
+          margin: 0 0 12px 0;
+          background: var(--card-bg);
+          border: 1px solid var(--border-color);
+          border-radius: 6px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; margin: 0;">
+          <tr>
+            ${cell('Stock in Trade', sit, '#0ea5e9')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Investment', inv, '#22c55e')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Unclassified', unc, '#9ca3af')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Total Remaining', total, 'var(--text-color)')}
+          </tr>
+        </table>
+      </div>
+    `;
+    mount.prepend(html);
+}
+
 
 // ── Phase 24B-1: Classify Qty dialog ─────────────────────────────────────
 function open_classify_dialog(frm, max_qty) {
