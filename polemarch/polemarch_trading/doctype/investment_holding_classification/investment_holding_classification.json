@@ -25,6 +25,7 @@
    "options": "Stock in Trade\nInvestment",
    "reqd": 1,
    "in_list_view": 1,
+   "read_only": 1,
    "description": "Where these shares go. SiT = P&L treatment on sale; Investment = LTCG/STCG via Capital Gains."
   },
   {
@@ -35,6 +36,7 @@
    "in_list_view": 1,
    "non_negative": 1,
    "precision": 0,
+   "read_only": 1,
    "description": "Number of shares being assigned to this classification. Must come from the parent Holding's Unclassified pool."
   },
   {"fieldname": "column_break_1", "fieldtype": "Column Break"},

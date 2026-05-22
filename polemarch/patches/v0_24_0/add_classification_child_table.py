@@ -46,6 +46,17 @@ def execute():
                 "fieldtype": "Table",
                 "options": "Investment Holding Classification",
                 "insert_after": "section_classifications",
+                # Operators add rows ONLY through the 'Classify Qty' button
+                # in the Actions menu (which calls the whitelisted
+                # classify_qty API). That path enforces the deadline,
+                # the append-only guarantee, the qty cap (≤ qty_unclassified),
+                # and the immutable classified_on / classified_by stamps.
+                # A raw editable grid would let operators bypass all of
+                # that. Read-only hides the +Add Row / inline-edit
+                # controls but doesn't prevent the controller from
+                # appending rows server-side via `self.append('classifications', ...)`.
+                "read_only": 1,
+                "no_copy": 1,
             },
             {
                 "fieldname": "section_classification_rollup",
