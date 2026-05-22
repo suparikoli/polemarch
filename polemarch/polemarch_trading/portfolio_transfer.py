@@ -182,19 +182,21 @@ def _post_je(pt) -> Optional[str]:
     )
     je.custom_source_doctype = "Portfolio Transfer"
     je.custom_source_name = pt.name
+    # Note: JE Account.reference_type is a stock ERPNext Select with a hard-
+    # coded list (Sales Invoice / Purchase Invoice / Journal Entry / etc.) —
+    # Polemarch doctypes aren't in the allowlist. The PT linkage lives on
+    # the JE header (custom_source_doctype + custom_source_name) and on the
+    # `polemarch_portfolio_transfer` link in dashboards, so leaving the
+    # per-row reference empty is fine and avoids the stock validation throw.
     je.append("accounts", {
         "account": to_account,
         "debit_in_account_currency": total_cost,
         "cost_center": cost_center,
-        "reference_type": "Portfolio Transfer",
-        "reference_name": pt.name,
     })
     je.append("accounts", {
         "account": from_account,
         "credit_in_account_currency": total_cost,
         "cost_center": cost_center,
-        "reference_type": "Portfolio Transfer",
-        "reference_name": pt.name,
     })
     je.flags.ignore_permissions = True
     je.insert(ignore_permissions=True)
