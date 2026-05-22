@@ -23,8 +23,22 @@ frappe.ui.form.on('Security', {
 });
 
 function render_holdings_panel(frm) {
-    const wrapper = frm.dashboard.wrapper.find('.polemarch-holdings-panel');
-    if (wrapper.length) wrapper.remove();
+    // Frappe versions differ on where the dashboard exposes its wrapper:
+    //  - v13–15:   frm.dashboard.wrapper (jQuery)
+    //  - v16:      frm.dashboard.parent  (jQuery)  — wrapper is undefined
+    // Fall back to the form's main layout section so the panel always lands
+    // in a visible spot, even if both dashboard accessors change.
+    function get_mount() {
+        const d = frm.dashboard || {};
+        if (d.wrapper && d.wrapper.length) return d.wrapper;
+        if (d.parent  && d.parent.length)  return d.parent;
+        // Last-resort: prepend to the form layout's main section.
+        const $layout = $(frm.wrapper).find('.layout-main-section, .form-page').first();
+        return $layout.length ? $layout : $(frm.wrapper);
+    }
+
+    const mount = get_mount();
+    mount.find('.polemarch-holdings-panel').remove();
 
     frappe.call({
         method: 'polemarch.api.holdings_summary.get_security_rollup',
@@ -33,8 +47,8 @@ function render_holdings_panel(frm) {
         if (!r || !r.message) return;
         const data = r.message;
         const html = build_panel_html(data, frm.doc.name);
-        frm.dashboard.wrapper.prepend(
-            `<div class="polemarch-holdings-panel" style="margin-bottom: 12px">${html}</div>`,
+        mount.prepend(
+            `<div class="polemarch-holdings-panel" style="margin: 0 0 12px 0">${html}</div>`,
         );
     });
 }
