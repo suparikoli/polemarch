@@ -7,6 +7,43 @@ def validate(doc, method=None):
     has_dp = bool(doc.get("custom_dp_details"))
     in_polemarch_group = doc.customer_group == POLEMARCH_CUSTOMER_GROUP
     doc.custom_is_polemarch_customer = 1 if (has_dp or in_polemarch_group) else 0
+    _sync_customer_name_from_primary_contact(doc)
+
+
+def _sync_customer_name_from_primary_contact(doc):
+    """If the Customer has a primary Contact linked, set `customer_name`
+    to the Contact's full name. Operators set name + email + phone once on
+    the standard Contact; the Customer's display name follows automatically.
+
+    Only fires for Individual customers — Company customers usually have a
+    legal name distinct from any human contact. Skipped silently when the
+    customer_primary_contact link isn't set yet (e.g. brand-new Customer
+    being created before a Contact exists).
+    """
+    if doc.customer_type and doc.customer_type != "Individual":
+        return
+    primary_contact = doc.get("customer_primary_contact")
+    if not primary_contact:
+        return
+    if not frappe.db.exists("Contact", primary_contact):
+        return
+
+    full_name = frappe.db.get_value("Contact", primary_contact, "full_name")
+    if not full_name:
+        # Compose from first/middle/last if full_name isn't denormalised yet.
+        c = frappe.db.get_value(
+            "Contact",
+            primary_contact,
+            ("first_name", "middle_name", "last_name"),
+            as_dict=True,
+        )
+        if not c:
+            return
+        full_name = " ".join(
+            part for part in (c.first_name, c.middle_name, c.last_name) if part
+        ).strip()
+    if full_name and full_name != doc.customer_name:
+        doc.customer_name = full_name
 
 
 def on_update(doc, method=None):

@@ -128,31 +128,16 @@ def _create_custom_fields():
                 "depends_on": "eval:doc.custom_kyc_status === 'Verified'",
                 "insert_after": "custom_kyc_status_reason",
             },
-            # Registered name (as per PAN) — split form so the
-            # Medusa-side mapper can write each part separately.
-            {
-                "fieldname": "custom_first_name",
-                "label": "First Name (PAN)",
-                "fieldtype": "Data",
-                "insert_after": "custom_kyc_verified_on",
-            },
-            {
-                "fieldname": "custom_middle_name",
-                "label": "Middle Name (PAN)",
-                "fieldtype": "Data",
-                "insert_after": "custom_first_name",
-            },
-            {
-                "fieldname": "custom_last_name",
-                "label": "Last Name (PAN)",
-                "fieldtype": "Data",
-                "insert_after": "custom_middle_name",
-            },
+            # Customer name + contact details (first / middle / last name,
+            # email, phone) live on the standard ERPNext Contact linked to
+            # this Customer — see the Contacts panel in the Desk sidebar.
+            # The old custom_first_name / custom_middle_name / custom_last_name
+            # fields were dropped in v0_16_0; use the Contact instead.
             {
                 "fieldname": "custom_dob",
                 "label": "Date of Birth",
                 "fieldtype": "Date",
-                "insert_after": "custom_last_name",
+                "insert_after": "custom_kyc_verified_on",
             },
             # Aadhaar — store last-4 + SHA-256 hash, never the raw
             # 12-digit number. Mapper transforms (`Mask Aadhaar`)

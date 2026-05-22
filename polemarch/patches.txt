@@ -101,3 +101,9 @@ polemarch.patches.v0_14_0.drop_portfolio_and_position
 # then drop Investment Holding.customer.
 polemarch.patches.v0_15_0.migrate_customer_holdings
 polemarch.patches.v0_15_0.drop_customer_field_on_holding
+# v0_16_0 — Customer name + email + phone live on the standard Contact.
+# Drop the polemarch custom_first_name / custom_middle_name / custom_last_name
+# Custom Fields (Medusa-era residue). install.py stops creating them; the
+# Customer.validate hook auto-syncs customer_name from the primary Contact
+# for Individual customers.
+polemarch.patches.v0_16_0.drop_customer_pan_name_fields
