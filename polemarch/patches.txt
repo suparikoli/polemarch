@@ -80,3 +80,9 @@ polemarch.patches.v0_11_0.import_polemarch_workspace
 # quad. Backfill existing rows from the old (supplier|customer, paid_from
 # |paid_to_account) pair so legacy data keeps rendering.
 polemarch.patches.v0_12_0.backfill_party_payment_fields
+# v0_13_0 — Drop Trade Order entirely. The customer-mediated lifecycle
+# (Trade Order + Settlement Instruction + Settlement Run + Settlement Run
+# Item) was replaced by instant Security Purchase / Sale flows with
+# payment_method=Customer Wallet. Drops all four doctypes' tables + the
+# polemarch_trade_order back-link Custom Field on Investment Disposal.
+polemarch.patches.v0_13_0.drop_trade_order_doctypes

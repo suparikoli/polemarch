@@ -52,12 +52,10 @@ class Portfolio(Document):
             )
 
     def _block_delete_if_referenced(self):
-        # Post-Phase-8: Security Lot is gone, and Portfolio Transfer migrated to
-        # `from_classification` / `to_classification` (no longer Portfolio links).
-        # `table_exists` short-circuits cleanly if a doctype is absent at call time
-        # (e.g. fresh install before later patches land).
+        # Post-Phase-13: Trade Order is gone too. Only Security Position
+        # still carries a portfolio link. table_exists short-circuits cleanly
+        # if the doctype is absent at call time.
         for doctype, field in (
-            ("Trade Order", "portfolio"),
             ("Security Position", "portfolio"),
         ):
             if not frappe.db.table_exists(doctype):

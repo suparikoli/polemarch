@@ -108,7 +108,7 @@
    "label": "Qty Reserved",
    "read_only": 1,
    "default": "0",
-   "description": "Reserved against open Sell Trade Orders."
+   "description": "Reserved against open Security Sale FIFO plans (qty_reserved on Investment Holding rolls up here)."
   },
   {
    "fieldname": "column_break_2",

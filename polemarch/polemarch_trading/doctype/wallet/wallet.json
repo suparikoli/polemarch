@@ -112,7 +112,7 @@
    "options": "currency",
    "read_only": 1,
    "default": "0",
-   "description": "Held against open Trade Order reservations."
+   "description": "Reserved wallet balance held against in-flight transactions."
   },
   {
    "fieldname": "balance_pending",

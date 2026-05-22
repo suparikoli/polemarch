@@ -21,11 +21,8 @@ _REQUIRED_DOCTYPES = [
     "Security", "Portfolio",
     "Wallet", "Wallet Transaction",
     "Security Position",
-    "Trade Order",
-    "Settlement Instruction",
     "Portfolio Transfer", "Portfolio Transfer Lot",
     "Polemarch Audit Log",
-    "Settlement Run", "Settlement Run Item",
     # Phase 9 — standalone Security purchase + sale doctypes
     "Security Purchase",
     "Security Sale",
@@ -51,11 +48,11 @@ _REQUIRED_IH_CUSTOM_FIELDS = [
     "security",
 ]
 # Investment Disposal gets:
-#   - polemarch_trade_order        (Phase 8 — back-link → Trade Order)
 #   - polemarch_security_sale      (Phase 9 — back-link → Security Sale)
 #   - security                     (Phase 9 — standalone trading identity)
+# (polemarch_trade_order Custom Field was dropped in v0_13_0 along with the
+# Trade Order doctype itself.)
 _REQUIRED_ID_CUSTOM_FIELDS = [
-    "polemarch_trade_order",
     "polemarch_security_sale",
     "security",
 ]

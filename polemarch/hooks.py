@@ -66,21 +66,15 @@ doc_events = {
 }
 
 scheduler_events = {
-    "hourly": [
-        "polemarch.polemarch_trading.settlement.run_pending",
-        # Phase 6 — auto-spawn a Fund-Only Settlement Run if Pending due exist
-        # and no live run is executing. Defensive; safe on every tick.
-        "polemarch.polemarch_trading.doctype.settlement_run.settlement_run.run_daily_batch",
-    ],
     "daily": [
-        # Phase 1+ reconciliation. Each job detects mismatches and logs them;
+        # Reconciliation jobs — each detects mismatches and logs them;
         # none of them auto-heal.
         "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
         "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
     ],
     "cron": {
-        # Phase 6 — mark-to-market at 06:00 IST (00:30 UTC).
+        # Mark-to-market at 06:00 IST (00:30 UTC).
         "30 0 * * *": [
             "polemarch.polemarch_trading.positions.mark_to_market_unrealized_pnl",
         ],
@@ -96,8 +90,6 @@ scheduler_events = {
 permission_query_conditions = {
     "Wallet":                "polemarch.polemarch_trading.permissions.wallet_perm_query",
     "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_perm_query",
-    "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_perm_query",
-    "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_perm_query",
     "Security Position":     "polemarch.polemarch_trading.permissions.security_position_perm_query",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_perm_query",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_perm_query",
@@ -106,8 +98,6 @@ permission_query_conditions = {
 has_permission = {
     "Wallet":                "polemarch.polemarch_trading.permissions.wallet_has_permission",
     "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_has_permission",
-    "Trade Order":           "polemarch.polemarch_trading.permissions.trade_order_has_permission",
-    "Settlement Instruction": "polemarch.polemarch_trading.permissions.settlement_has_permission",
     "Security Position":     "polemarch.polemarch_trading.permissions.security_position_has_permission",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_has_permission",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_has_permission",

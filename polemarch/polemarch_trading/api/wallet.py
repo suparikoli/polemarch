@@ -173,39 +173,6 @@ def withdraw(
     }
 
 
-@frappe.whitelist()
-@rate_limit(per_min=30, scope="customer")
-def reserve(
-    customer: Optional[str] = None,
-    amount: float = 0,
-    trade_order: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
-):
-    """Internal-facing — the Trade Order submit path already calls this via
-    the matching engine. Exposed for back-office reconciliation/repair flows."""
-    frappe.only_for(
-        ["System Manager", "Accounts Manager", "Polemarch Settlement Officer", "Polemarch Trader"],
-        message=_("Not allowed to reserve wallet funds."),
-    )
-    customer = _resolve_customer(customer)
-    amount = float(amount)
-
-    from polemarch.polemarch_trading import wallet as wallet_engine
-    wt_name = wallet_engine.apply_delta(
-        wallet=f"WAL-{customer}",
-        txn_type="Reservation",
-        direction="Debit",
-        amount=amount,
-        reference_doctype="Trade Order" if trade_order else None,
-        reference_name=trade_order,
-        idempotency_key=f"api-reserve:{idempotency_key}" if idempotency_key else None,
-        remarks=f"Reserved for Trade Order {trade_order or '-'}",
-    )
-    return {
-        "wallet_transaction": wt_name,
-        "balance": _balance_snapshot(customer),
-    }
-
 
 @frappe.whitelist()
 @rate_limit(per_min=30, scope="customer")

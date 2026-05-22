@@ -70,7 +70,6 @@ def get_dashboard(customer: str) -> dict:
         # trading subsystem has migrated. Each section is best-effort and
         # returns None if the doctypes / data aren't there yet.
         "wallet": _wallet_section(customer),
-        "open_trade_orders": _open_trade_orders_section(customer),
         "positions": _positions_section(customer),
     }
 
@@ -122,48 +121,6 @@ def _wallet_section(customer: str) -> dict | None:
             else None
         ),
     }
-
-
-def _open_trade_orders_section(customer: str) -> list:
-    if not frappe.db.table_exists("Trade Order"):
-        return []
-    rows = frappe.get_all(
-        "Trade Order",
-        filters={
-            "customer": customer,
-            "order_state": ["in", ["Submitted", "Matched", "Settling"]],
-            "docstatus": ["!=", 2],
-        },
-        fields=[
-            "name",
-            "side",
-            "security",
-            "security_name",
-            "qty",
-            "price",
-            "net_amount",
-            "order_state",
-            "settlement_status",
-            "expected_settlement_date",
-        ],
-        order_by="modified DESC",
-        limit_page_length=10,
-    )
-    return [
-        {
-            "name": r.name,
-            "side": r.side,
-            "security": r.security,
-            "security_name": r.security_name,
-            "qty": float(r.qty or 0),
-            "price": float(r.price or 0),
-            "net_amount": float(r.net_amount or 0),
-            "order_state": r.order_state,
-            "settlement_status": r.settlement_status,
-            "expected_settlement_date": str(r.expected_settlement_date) if r.expected_settlement_date else None,
-        }
-        for r in rows
-    ]
 
 
 def _positions_section(customer: str) -> dict | None:

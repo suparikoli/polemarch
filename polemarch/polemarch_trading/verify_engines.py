@@ -169,28 +169,23 @@ def execute(verbose: bool = False) -> dict:
         step("31_assert_classification_investment",
              lambda: _assert_classification(holding_c, "Investment"))
 
-        # 9) Customer-Buy Trade Order lifecycle — exercises wallet reservation,
-        # matching, settlement.fund (wallet final-debit), settlement.clear
-        # (proprietary Disposal + customer Holding mint).
-        #
-        # The wallet was deposited 100k earlier and is currently restored to
-        # 100k balance after the reserve/release cycle. Top up another 50k so
-        # the customer-Buy of 10 units @ 750 = 7,500 has clean headroom and
-        # the asserts stay easy to reason about.
+        # 9) Customer-Buy via Security Sale + Customer Wallet — exercises
+        # the instant flow that replaced the Trade Order lifecycle in
+        # Phase 12 / 13. The customer pays from their Polemarch wallet,
+        # Polemarch's Stock-in-Trade is FIFO-consumed, and a new customer
+        # Holding mints at the trade price.
         step("32_wallet_topup_50k", lambda: wallet_engine.apply_delta(
             wallet=wallet, txn_type="Deposit", direction="Credit", amount=50000,
             reference_doctype=None, reference_name=None,
             idempotency_key=f"{_FIXTURE_PREFIX}deposit-2",
-            remarks="Smoke top-up for Trade Order",
+            remarks="Smoke top-up for Wallet Sale",
         ))
         step("33_assert_balance_150k",
              lambda: _assert_balance(wallet, available=150000, reserved=0, total=150000))
 
-        # Mint 10 more proprietary Stock-in-Trade units that the customer's
-        # buy will consume. holding_a/holding_b were already depleted by step
-        # 24's Security Sale (80 of 100 from holding_a). Add a clean lot.
+        # Mint 10 more proprietary Stock-in-Trade units to consume.
         sp_d = step(
-            "34_security_purchase_D_10u_at_650_for_trade_order",
+            "34_security_purchase_D_10u_at_650",
             lambda: _create_security_purchase(security, company, supplier, qty=10, rate=650),
         )
         holding_d = step(
@@ -200,46 +195,23 @@ def execute(verbose: bool = False) -> dict:
         step("36_force_classify_D_stock_in_trade",
              lambda: _force_classification(holding_d, "Stock in Trade"))
 
-        order_name = step(
-            "37_create_customer_buy_trade_order_10u_at_750",
-            lambda: _create_customer_buy_trade_order(
-                security, company, customer, qty=10, price=750,
+        ss_wallet = step(
+            "37_security_sale_wallet_10u_at_750",
+            lambda: _create_security_sale(
+                security, company, customer, qty=10, rate=750,
+                from_classification="Stock in Trade",
+                party_type="Customer",
+                payment_method="Customer Wallet",
             ),
         )
-        step("38_assert_order_state_Submitted",
-             lambda: _assert_order_state(order_name, "Submitted"))
-        # 10 × 750 = 7,500 reserved; remaining available = 150,000 - 7,500.
-        step("39_assert_wallet_after_buy_submit",
-             lambda: _assert_balance(wallet, available=142500, reserved=7500, total=150000))
-
-        from polemarch.polemarch_trading import matching as matching_engine
-        from polemarch.polemarch_trading import settlement as settlement_engine
-
-        si_name = step(
-            "40_match_order",
-            lambda: matching_engine.match(order_name) and _resolve_si(order_name),
-        )
-        step("41_assert_order_state_Matched",
-             lambda: _assert_order_state(order_name, "Matched"))
-
-        step("42_fund_settlement",
-             lambda: settlement_engine.fund(si_name))
-        # Buy-side fund: reservation → final debit. Reserved goes to 0,
-        # available stays where it landed after the reservation moved out
-        # of the reserved bucket. Net wallet total drops by 7,500.
-        step("43_assert_wallet_after_fund",
+        step("38_assert_wallet_after_sale",
              lambda: _assert_balance(wallet, available=142500, reserved=0, total=142500))
-
-        step("44_clear_settlement",
-             lambda: settlement_engine.clear(si_name))
-        step("45_assert_order_state_Settled",
-             lambda: _assert_order_state(order_name, "Settled"))
-        step("46_assert_customer_holding_minted",
-             lambda: _assert_customer_holding_for_order(
-                 order_name, customer, expected_qty=10, expected_cost=750,
+        step("39_assert_sale_disposal_created",
+             lambda: _assert_disposal_for_sale(ss_wallet))
+        step("40_assert_customer_holding_from_sale",
+             lambda: _assert_customer_holding_for_sale(
+                 ss_wallet, customer, expected_qty=10, expected_cost=750,
              ))
-        step("47_assert_proprietary_disposal_created",
-             lambda: _assert_disposal_for_trade_order(order_name))
 
         # 10) Cleanup.
         step("99_post_cleanup", _cleanup)
@@ -476,43 +448,6 @@ def _create_security_sale(security: str, company: str, customer: str,
     return ss.name
 
 
-def _create_customer_buy_trade_order(security: str, company: str, customer: str,
-                                     qty: float, price: float) -> str:
-    """Insert + submit a customer-Buy Trade Order. on_submit places the
-    wallet reservation; the returned name is used by subsequent match /
-    fund / clear steps."""
-    order = frappe.get_doc({
-        "doctype": "Trade Order",
-        "side": "Buy",
-        "book": "Customer",
-        "posting_date": frappe.utils.today(),
-        "security": security,
-        "customer": customer,
-        "company": company,
-        "qty": qty,
-        "price": price,
-        # net_amount default = qty * price; the controller's validate
-        # recomputes if fees are present (none here).
-    })
-    order.flags.ignore_permissions = True
-    order.insert(ignore_permissions=True)
-    order.submit()
-    return order.name
-
-
-def _resolve_si(order_name: str) -> str:
-    """Trade Order.match() doesn't return the Settlement Instruction name —
-    pull it back via the order's settlement_instruction field."""
-    si = frappe.db.get_value(
-        "Trade Order", order_name, "settlement_instruction"
-    )
-    if not si:
-        raise AssertionError(
-            f"Trade Order {order_name}: no Settlement Instruction linked after match"
-        )
-    return si
-
-
 def _force_classification(holding: str, classification: str) -> dict:
     """Smoke shortcut: skip the 2-working-day timer and slam a Holding
     into the requested classification. Production flow would go through
@@ -684,23 +619,14 @@ def _assert_holding_qty_disposed(holding: str, expected: float) -> dict:
     return {"holding": holding, "qty_disposed": flt(actual)}
 
 
-def _assert_order_state(order_name: str, expected: str) -> dict:
-    actual = frappe.db.get_value("Trade Order", order_name, "order_state")
-    if actual != expected:
-        raise AssertionError(
-            f"Trade Order {order_name}: expected state={expected}, got {actual}"
-        )
-    return {"order": order_name, "state": actual}
-
-
-def _assert_customer_holding_for_order(order_name: str, customer: str,
-                                       expected_qty: float, expected_cost: float) -> dict:
-    """Verify settlement.clear minted a customer-owned Holding for this order."""
+def _assert_customer_holding_for_sale(sale_name: str, customer: str,
+                                      expected_qty: float, expected_cost: float) -> dict:
+    """Verify Security Sale.on_submit minted a customer-owned Holding."""
     row = frappe.db.get_value(
         "Investment Holding",
         {
-            "purchase_reference": "Trade Order",
-            "purchase_reference_link": order_name,
+            "purchase_reference": "Security Sale",
+            "purchase_reference_link": sale_name,
             "customer": customer,
         },
         ("name", "qty_acquired", "cost_basis_per_unit", "classification", "security"),
@@ -708,7 +634,7 @@ def _assert_customer_holding_for_order(order_name: str, customer: str,
     )
     if not row:
         raise AssertionError(
-            f"No customer Holding minted for Trade Order {order_name} / {customer}"
+            f"No customer Holding minted for Security Sale {sale_name} / {customer}"
         )
     if flt(row.qty_acquired) != flt(expected_qty):
         raise AssertionError(
@@ -732,25 +658,6 @@ def _assert_customer_holding_for_order(order_name: str, customer: str,
     }
 
 
-def _assert_disposal_for_trade_order(order_name: str) -> dict:
-    """Verify settlement.clear created a proprietary Disposal for the order."""
-    row = frappe.db.get_value(
-        "Investment Disposal",
-        {"polemarch_trade_order": order_name, "docstatus": 1},
-        ("name", "total_qty_sold", "security"),
-        as_dict=True,
-    )
-    if not row:
-        raise AssertionError(
-            f"No submitted Investment Disposal found for Trade Order {order_name}"
-        )
-    return {
-        "disposal": row.name,
-        "qty_sold": flt(row.total_qty_sold),
-        "security": row.security,
-    }
-
-
 # ── cleanup ──────────────────────────────────────────────────────────────
 
 
@@ -763,49 +670,6 @@ def _cleanup():
     """
     test_customer = _TEST_CUSTOMER
     test_supplier = f"{_FIXTURE_PREFIX}supplier-001"
-
-    # --- Cancel + delete smoke Trade Orders (and their Settlement Instructions
-    #     + linked customer/proprietary Holdings minted on settle).
-    smoke_orders = [
-        r[0] for r in frappe.db.sql(
-            "SELECT name FROM `tabTrade Order` WHERE customer = %s",
-            (test_customer,),
-        )
-    ]
-    for name in smoke_orders:
-        # Cancel any linked Settlement Instructions first so their on_cancel
-        # releases reservations cleanly; then cancel + delete the order.
-        for si in frappe.db.sql(
-            "SELECT name FROM `tabSettlement Instruction` WHERE trade_order = %s",
-            (name,),
-        ):
-            si_doc = frappe.get_doc("Settlement Instruction", si[0])
-            if si_doc.docstatus == 1:
-                try:
-                    si_doc.flags.ignore_permissions = True
-                    si_doc.cancel()
-                except Exception:
-                    pass
-            try:
-                frappe.delete_doc(
-                    "Settlement Instruction", si[0],
-                    force=True, ignore_permissions=True,
-                )
-            except Exception:
-                pass
-        order_doc = frappe.get_doc("Trade Order", name)
-        if order_doc.docstatus == 1:
-            try:
-                order_doc.flags.ignore_permissions = True
-                order_doc.cancel()
-            except Exception:
-                pass
-        try:
-            frappe.delete_doc(
-                "Trade Order", name, force=True, ignore_permissions=True
-            )
-        except Exception:
-            pass
 
     # --- Cancel + delete Security Sales (cancels Disposal + JEs via on_cancel)
     ss_names = [

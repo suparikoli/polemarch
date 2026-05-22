@@ -28,7 +28,6 @@ def get_data():
                 "items": [
                     "Security Purchase",
                     "Security Sale",
-                    "Trade Order",
                 ],
             },
             {
@@ -45,9 +44,8 @@ def get_data():
                 ],
             },
             {
-                "label": _("Settlement"),
+                "label": _("Transfers"),
                 "items": [
-                    "Settlement Instruction",
                     "Portfolio Transfer",
                 ],
             },
