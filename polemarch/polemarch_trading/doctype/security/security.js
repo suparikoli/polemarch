@@ -34,7 +34,7 @@ function render_holdings_panel(frm) {
     }
 
     const mount = get_mount();
-    mount.find('.polemarch-holdings-panel').remove();
+    mount.find('.polemarch-holdings-panel, .polemarch-security-breakdown').remove();
 
     frappe.call({
         method: 'polemarch.api.holdings_summary.get_security_rollup',
@@ -42,9 +42,68 @@ function render_holdings_panel(frm) {
     }).then((r) => {
         if (!r || !r.message) return;
         const data = r.message;
-        const html = build_panel_html(data, frm.doc.name);
-        mount.prepend(html);
+        // LCM table goes first into the mount so it lands BELOW the
+        // breakdown cards (prepend reverses insertion order).
+        const lcm_html = build_panel_html(data, frm.doc.name);
+        mount.prepend(lcm_html);
+        // Then breakdown cards (4-cell summary) — prepended ABOVE the LCM
+        // table. Mirrors the Investment Holding form's at-a-glance panel.
+        const cards_html = build_security_breakdown_html(data, frm.doc.name);
+        if (cards_html) mount.prepend(cards_html);
     });
+}
+
+// Mirrors the IH form's render_classification_breakdown — 4 colored cards
+// showing per-classification qty + book value + percentage, summed across
+// all open Investment Holdings for this security.
+function build_security_breakdown_html(data, security) {
+    if (!data.has_holdings) return '';
+
+    const sit = Number(data.sit_units || 0);
+    const inv = Number(data.inv_units || 0);
+    const unc = Number(data.unalloc_units || 0);
+    const total = Number(data.total_units || 0);
+    if (total === 0) return '';
+
+    const sit_cost = Number(data.sit_cost || 0);
+    const inv_cost = Number(data.inv_cost || 0);
+    const unc_cost = Number(data.unalloc_cost || 0);
+    const tot_cost = Number(data.total_cost || 0);
+
+    const fmt_n = (v) => frappe.format(v, { fieldtype: 'Float', precision: 0 });
+    const fmt_c = (v) => frappe.format(v, { fieldtype: 'Currency' });
+    const pct = (v) => total ? ((v / total) * 100).toFixed(1) + '%' : '0%';
+
+    function cell(label, qty, cost, color) {
+        const muted = qty === 0;
+        return `
+          <td style="padding: 10px 14px; vertical-align: top; ${muted ? 'opacity: 0.5;' : ''}">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">${label}</div>
+            <div style="font-size: 20px; font-weight: 600; color: ${color}; margin-top: 2px; white-space: nowrap;">${fmt_n(qty)}</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${fmt_c(cost)} · ${pct(qty)}</div>
+          </td>
+        `;
+    }
+
+    return `
+      <div class="polemarch-security-breakdown" style="
+          margin: 0 0 12px 0;
+          background: var(--card-bg);
+          border: 1px solid var(--border-color);
+          border-radius: 6px; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; margin: 0;">
+          <tr>
+            ${cell('Stock in Trade', sit, sit_cost, '#0ea5e9')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Investment',     inv, inv_cost, '#22c55e')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Unclassified',   unc, unc_cost, '#9ca3af')}
+            <td style="width:1px; background: var(--border-color);"></td>
+            ${cell('Total Holdings', total, tot_cost, 'var(--text-color)')}
+          </tr>
+        </table>
+      </div>
+    `;
 }
 
 // Convert a classification_deadline timestamp into a human-readable
