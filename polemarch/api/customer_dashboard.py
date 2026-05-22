@@ -124,42 +124,35 @@ def _wallet_section(customer: str) -> dict | None:
 
 
 def _positions_section(customer: str) -> dict | None:
-    if not frappe.db.table_exists("Security Position"):
+    """Roll up customer-owned Investment Holdings by security. Phase 14
+    dropped the Security Position denormalised view — this query computes
+    the same data live from the Holding table (small enough to be cheap)."""
+    if not frappe.db.table_exists("Investment Holding"):
         return None
-    rows = frappe.get_all(
-        "Security Position",
-        filters={"customer": customer, "qty_held": [">", 0]},
-        fields=[
-            "name",
-            "security",
-            "isin",
-            "portfolio",
-            "qty_held",
-            "qty_available",
-            "avg_cost",
-            "total_cost",
-            "market_value",
-            "unrealized_pnl",
-        ],
-        order_by="security ASC",
-        limit_page_length=50,
+    rows = frappe.db.sql(
+        """
+        SELECT security                                            AS security,
+               COALESCE(SUM(qty_remaining), 0)                     AS qty_held,
+               COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)  AS total_cost
+          FROM `tabInvestment Holding`
+         WHERE customer = %s
+           AND status IN ('Open', 'Partially Disposed')
+         GROUP BY security
+         HAVING qty_held > 0
+         ORDER BY security ASC
+        """,
+        (customer,),
+        as_dict=True,
     )
     return {
         "count": len(rows),
         "total_cost": float(sum(r.total_cost or 0 for r in rows)),
-        "total_market_value": float(sum(r.market_value or 0 for r in rows)),
-        "total_unrealized_pnl": float(sum(r.unrealized_pnl or 0 for r in rows)),
         "rows": [
             {
                 "security": r.security,
-                "isin": r.isin,
-                "portfolio": r.portfolio,
                 "qty_held": float(r.qty_held or 0),
-                "qty_available": float(r.qty_available or 0),
-                "avg_cost": float(r.avg_cost or 0),
                 "total_cost": float(r.total_cost or 0),
-                "market_value": float(r.market_value or 0),
-                "unrealized_pnl": float(r.unrealized_pnl or 0),
+                "avg_cost": float(r.total_cost / r.qty_held) if r.qty_held else 0,
             }
             for r in rows
         ],

@@ -163,20 +163,20 @@ def _build_cost_lines_for_disposal(disposal) -> dict:
         "Long-Term Investments": 0.0,
     }
 
+    # Phase 14: route by Investment Holding.classification directly. The old
+    # Portfolio link is gone — Stock in Trade → Securities Inventory,
+    # Investment → Long-Term Investments. Unallocated rows shouldn't reach
+    # disposal (you can't sell Unallocated inventory by design), but if one
+    # slips through, treat it as Stock in Trade so the math doesn't blow up.
     for lot in disposal.lots or []:
         if not lot.holding or not lot.qty_consumed:
             continue
-        portfolio = frappe.db.get_value(
-            "Investment Holding", lot.holding, "custom_portfolio"
-        )
-        portfolio_type = (
-            frappe.db.get_value("Portfolio", portfolio, "portfolio_type")
-            if portfolio
-            else "Trading"
-        ) or "Trading"
+        classification = frappe.db.get_value(
+            "Investment Holding", lot.holding, "classification"
+        ) or "Stock in Trade"
 
         bucket = (
-            "Long-Term Investments" if portfolio_type == "Investment"
+            "Long-Term Investments" if classification == "Investment"
             else "Securities Inventory - Trading"
         )
         by_bucket[bucket] += flt(lot.cost_basis_amount)

@@ -87,3 +87,10 @@ polemarch.patches.v0_12_0.backfill_party_payment_fields
 # polemarch_trade_order back-link Custom Field on Investment Disposal.
 polemarch.patches.v0_13_0.drop_trade_order_doctypes
 polemarch.patches.v0_13_0.clear_customer_wallet_account_type
+# v0_14_0 — Drop Portfolio + Security Position. The Phase 0 routing
+# master (Portfolio = Trading vs Investment × Proprietary vs Customer)
+# was already replaced by Investment Holding.classification +
+# Investment Holding.customer in Phases 8/10. Security Position was
+# its denormalised qty rollup. With nothing populating either, drop both
+# tables + the Investment Holding.custom_portfolio Custom Field.
+polemarch.patches.v0_14_0.drop_portfolio_and_position

@@ -18,9 +18,8 @@ import frappe
 
 
 _REQUIRED_DOCTYPES = [
-    "Security", "Portfolio",
+    "Security",
     "Wallet", "Wallet Transaction",
-    "Security Position",
     "Portfolio Transfer", "Portfolio Transfer Lot",
     "Polemarch Audit Log",
     # Phase 9 — standalone Security purchase + sale doctypes
@@ -181,7 +180,6 @@ def execute(verbose: bool = False) -> dict:
         from polemarch import hooks as polemarch_hooks  # noqa: F401
         required_daily = [
             "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
-            "polemarch.polemarch_trading.audit.verify_security_position_matches_lots",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         ]
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])

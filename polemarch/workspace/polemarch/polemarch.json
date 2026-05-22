@@ -20,7 +20,6 @@
   {"hidden": 0, "is_query_report": 0, "label": "Inventory & Holdings",   "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Investment Holding",     "link_to": "Investment Holding",     "link_type": "DocType", "onboard": 1, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Investment Disposal",    "link_to": "Investment Disposal",    "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Security Position",      "link_to": "Security Position",      "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Portfolio Transfer",     "link_to": "Portfolio Transfer",     "link_type": "DocType", "onboard": 0, "type": "Link"},
 
   {"hidden": 0, "is_query_report": 0, "label": "Securities",             "link_count": 0, "onboard": 0, "type": "Card Break"},
@@ -31,7 +30,6 @@
   {"hidden": 0, "is_query_report": 0, "label": "Customer",               "link_to": "Customer",               "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet",                 "link_to": "Wallet",                 "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet Transaction",     "link_to": "Wallet Transaction",     "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Portfolio",              "link_to": "Portfolio",              "link_type": "DocType", "onboard": 0, "type": "Link"},
 
   {"hidden": 0, "is_query_report": 0, "label": "Audit",                  "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Polemarch Audit Log",    "link_to": "Polemarch Audit Log",    "link_type": "DocType", "onboard": 0, "type": "Link"},

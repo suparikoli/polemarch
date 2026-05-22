@@ -43,10 +43,6 @@ def wallet_transaction_perm_query(user=None):
     return _perm_query("Wallet Transaction", "customer", user)
 
 
-def security_position_perm_query(user=None):
-    return _perm_query("Security Position", "customer", user)
-
-
 def investment_disposal_perm_query(user=None):
     return _perm_query("Investment Disposal", "customer", user)
 
@@ -70,10 +66,6 @@ def wallet_has_permission(doc, user=None, permission_type=None):
 
 
 def wallet_transaction_has_permission(doc, user=None, permission_type=None):
-    return _has_permission(doc, user, "customer")
-
-
-def security_position_has_permission(doc, user=None, permission_type=None):
     return _has_permission(doc, user, "customer")
 
 

@@ -54,63 +54,6 @@ def verify_wallet_balance_matches_ledger():
     _log_audit("verify_wallet_balance_matches_ledger", len(wallets), mismatches)
 
 
-def verify_security_position_matches_lots():
-    """Verify each Security Position row matches a fresh Investment Holding rollup.
-
-    Queries Investment Holdings keyed by `security` (Phase 9). Portfolio
-    match is via the legacy custom_portfolio Custom Field on Investment
-    Holding — those rows that pre-date Phase 9 stay keyed by portfolio
-    name; Holdings minted by Security Purchase carry no portfolio (the
-    classification engine routes them via Stock-in-Trade ↔ Investment
-    instead). The audit only flags positions whose Holdings actually
-    populate custom_portfolio — pure classification-routed positions are
-    audited by `verify_holding_disposal_chain` below.
-    """
-    if not frappe.db.table_exists("Security Position"):
-        return
-    if not frappe.db.has_column("Investment Holding", "security"):
-        # v0_9_0 migration hasn't landed; bail gracefully.
-        return
-
-    positions = frappe.get_all(
-        "Security Position",
-        fields=["name", "portfolio", "security", "qty_held", "qty_reserved", "total_cost"],
-    )
-
-    mismatches = []
-    for p in positions:
-        rollup = frappe.db.sql(
-            """
-            SELECT COALESCE(SUM(qty_remaining), 0)                              AS qty_held,
-                   COALESCE(SUM(COALESCE(qty_reserved, 0)), 0)                  AS qty_reserved,
-                   COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)        AS total_cost
-              FROM `tabInvestment Holding`
-             WHERE security = %s
-               AND custom_portfolio = %s
-               AND status IN ('Open', 'Partially Disposed')
-            """,
-            (p.security, p.portfolio),
-            as_dict=True,
-        )[0]
-
-        if (
-            abs(flt(p.qty_held) - flt(rollup.qty_held)) > _DELTA_TOLERANCE
-            or abs(flt(p.qty_reserved) - flt(rollup.qty_reserved)) > _DELTA_TOLERANCE
-            or abs(flt(p.total_cost) - flt(rollup.total_cost)) > _DELTA_TOLERANCE
-        ):
-            mismatches.append({
-                "position": p.name,
-                "stored": {
-                    "qty_held": flt(p.qty_held),
-                    "qty_reserved": flt(p.qty_reserved),
-                    "total_cost": flt(p.total_cost),
-                },
-                "rollup": dict(rollup),
-            })
-
-    _log_audit("verify_security_position_matches_lots", len(positions), mismatches)
-
-
 def verify_holding_disposal_chain():
     """Investment Holding qty_disposed must equal SUM(Investment Disposal Lot.qty_consumed)."""
     if not frappe.db.table_exists("Investment Holding"):
