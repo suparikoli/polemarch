@@ -383,10 +383,22 @@ class SecuritySale(Document):
         if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
             return
         from polemarch.polemarch_trading import wallet as wallet_engine
-        wallet_engine.reverse(
-            self.wallet_transaction_ref,
+        original_wt = self.wallet_transaction_ref
+        reversing_wt = wallet_engine.reverse(
+            original_wt,
             remarks=f"Reversed on Security Sale {self.name} cancel",
         )
+        # Sever the WT → Security Sale link on BOTH rows so Frappe's
+        # link check doesn't block the Sale cancel. The audit trail
+        # survives via Wallet Transaction.reverses (original ↔ reversal
+        # chain) plus the remarks above. Same pattern as Security Purchase.
+        for wt in (original_wt, reversing_wt):
+            if wt and frappe.db.exists("Wallet Transaction", wt):
+                frappe.db.set_value(
+                    "Wallet Transaction", wt,
+                    {"reference_doctype": "", "reference_name": ""},
+                    update_modified=False,
+                )
 
     # ── on_cancel ────────────────────────────────────────────────────
 

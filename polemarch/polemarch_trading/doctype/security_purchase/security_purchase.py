@@ -330,10 +330,26 @@ class SecurityPurchase(Document):
         if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
             return
         from polemarch.polemarch_trading import wallet as wallet_engine
-        wallet_engine.reverse(
-            self.wallet_transaction_ref,
+        original_wt = self.wallet_transaction_ref
+        reversing_wt = wallet_engine.reverse(
+            original_wt,
             remarks=f"Reversed on Security Purchase {self.name} cancel",
         )
+        # Sever the WT → Security Purchase link on BOTH rows so Frappe's
+        # `check_if_doc_is_dynamically_linked` doesn't block the SP cancel.
+        # The audit trail survives via Wallet Transaction.reverses (which
+        # chains original ↔ reversal) plus the remarks above. The reference
+        # change preserves docstatus=1 and the append-only guarantee — we
+        # only edit reference_doctype/_name, not amounts or buckets.
+        # Use db_set with update_modified=False to bypass the doctype's
+        # validate-time append-only guard.
+        for wt in (original_wt, reversing_wt):
+            if wt and frappe.db.exists("Wallet Transaction", wt):
+                frappe.db.set_value(
+                    "Wallet Transaction", wt,
+                    {"reference_doctype": "", "reference_name": ""},
+                    update_modified=False,
+                )
 
     # ── on_submit — Journal Entry ────────────────────────────────────
 

@@ -228,3 +228,110 @@ def _log_audit(job: str, checked: int, mismatches: list):
         f"{job}: {len(mismatches)}/{checked} mismatches. First 20: {mismatches[:20]}",
         f"Polemarch Audit: {job}",
     )
+
+
+
+# ── Inventory account vs Investment Holdings (Phase 26 follow-up) ───────────
+
+
+def verify_inventory_account_matches_holdings():
+    """Compare Securities Inventory + Long-Term Investments GL balances
+    against the sum of open Investment Holdings, broken down by
+    classification. Any drift > ₹100 lands in Polemarch Audit Log so
+    it doesn't sit unnoticed (as it did before Phase 26).
+
+    Does NOT auto-heal — Phase 26 cleaned up smoke-test residue manually
+    after rooting it out, and the verify_engines cleanup was hardened to
+    cancel JEs properly. If new drift appears, it points at a real bug
+    (e.g. a hook that posts a JE but skips on cancel), and self-healing
+    would mask the underlying issue.
+    """
+    if not frappe.db.exists("DocType", "Polemarch Audit Log"):
+        return
+
+    companies = frappe.get_all("Company", fields=["name", "abbr"])
+    drift_rows = []
+    checked = 0
+
+    for company in companies:
+        if not company.abbr:
+            continue
+        # Expected balances per classification from the live Holdings.
+        expected_by_cls = {}
+        for cls in ("Stock in Trade", "Investment", "Unallocated"):
+            row = frappe.db.sql(
+                """
+                SELECT COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0)
+                  FROM `tabInvestment Holding`
+                 WHERE company        = %s
+                   AND classification = %s
+                   AND status         IN ('Open', 'Partially Disposed')
+                """,
+                (company.name, cls),
+            )
+            expected_by_cls[cls] = flt(row[0][0]) if row else 0
+
+        # GL balances on the two inventory accounts.
+        # Today Unallocated cost sits in Securities Inventory (changes in Phase 24B
+        # when the Pending Classification suspense account ships).
+        sit_acct = frappe.db.get_value(
+            "Account",
+            {"company": company.name, "account_name": "Securities Inventory - Trading", "disabled": 0},
+            "name",
+        )
+        inv_acct = frappe.db.get_value(
+            "Account",
+            {"company": company.name, "account_name": "Long-Term Investments", "disabled": 0},
+            "name",
+        )
+        if not (sit_acct and inv_acct):
+            continue
+        checked += 1
+
+        sit_gl = _account_balance(sit_acct)
+        inv_gl = _account_balance(inv_acct)
+
+        # SiT account holds SiT + Unallocated; Investment account holds Investment.
+        sit_expected = expected_by_cls["Stock in Trade"] + expected_by_cls["Unallocated"]
+        inv_expected = expected_by_cls["Investment"]
+
+        sit_delta = sit_gl - sit_expected
+        inv_delta = inv_gl - inv_expected
+
+        if abs(sit_delta) > 100:
+            drift_rows.append(
+                f"{company.abbr}: {sit_acct} GL=₹{sit_gl:,.2f} vs expected ₹{sit_expected:,.2f} (Δ ₹{sit_delta:+,.2f})"
+            )
+        if abs(inv_delta) > 100:
+            drift_rows.append(
+                f"{company.abbr}: {inv_acct} GL=₹{inv_gl:,.2f} vs expected ₹{inv_expected:,.2f} (Δ ₹{inv_delta:+,.2f})"
+            )
+
+    try:
+        frappe.get_doc({
+            "doctype": "Polemarch Audit Log",
+            "job": "verify_inventory_account_matches_holdings",
+            "ran_at": now_datetime(),
+            "checked_count": checked,
+            "mismatch_count": len(drift_rows),
+            "details": (
+                "\n".join(drift_rows)
+                if drift_rows
+                else "All inventory account balances reconcile cleanly with live Holdings."
+            ),
+            "notes": "Detects drift > ₹100. Does NOT auto-heal — drift points at a real bug (e.g. JE posted but cancel skipped).",
+        }).insert(ignore_permissions=True)
+        frappe.db.commit()
+    except Exception:
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Polemarch Inventory Account audit log write",
+        )
+
+
+def _account_balance(account: str) -> float:
+    row = frappe.db.sql(
+        "SELECT COALESCE(SUM(debit - credit), 0) FROM `tabGL Entry` WHERE account=%s AND is_cancelled=0",
+        (account,),
+    )
+    return flt(row[0][0]) if row else 0.0

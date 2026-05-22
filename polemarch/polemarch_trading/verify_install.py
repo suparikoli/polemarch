@@ -212,6 +212,7 @@ def execute(verbose: bool = False) -> dict:
             "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
             "polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache",
+            "polemarch.polemarch_trading.audit.verify_inventory_account_matches_holdings",
         ]
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])
         for entry in required_daily:

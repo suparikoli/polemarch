@@ -86,6 +86,11 @@ scheduler_events = {
         # Phase 22 — recompute Security.qty_sit/qty_investment/cost_total
         # cache and log any drift. Self-healing (re-persists the truth).
         "polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache",
+        # Phase 26 — Securities Inventory + Long-Term Investments GL balance
+        # vs sum of open Investment Holdings (per classification). Detects
+        # the kind of orphan-JE drift that accumulated until the manual
+        # cleanup in Phase 26. Does NOT auto-heal.
+        "polemarch.polemarch_trading.audit.verify_inventory_account_matches_holdings",
     ],
 }
 

@@ -719,16 +719,29 @@ def _cleanup():
         "DELETE FROM `tabInvestment Disposal` WHERE customer = %s",
         (test_customer,),
     )
-    frappe.db.sql(
-        "DELETE FROM `tabJournal Entry Account` "
-        "WHERE parent IN (SELECT name FROM (SELECT name FROM `tabJournal Entry` "
-        "                                    WHERE user_remark LIKE %s) AS x)",
+    # Cancel + delete leftover JEs properly so GL Entries get is_cancelled=1
+    # rather than orphaned. Raw-SQL delete on tabJournal Entry leaves GL Entry
+    # rows pointing at a vanished voucher, drifting account balances over time
+    # (Phase 26 had to clean up ₹10L of such drift). Always go through the
+    # controller path.
+    leftover_je = frappe.db.sql_list(
+        "SELECT name FROM `tabJournal Entry` WHERE user_remark LIKE %s",
         (f"%{_FIXTURE_PREFIX}smoke%",),
     )
-    frappe.db.sql(
-        "DELETE FROM `tabJournal Entry` WHERE user_remark LIKE %s",
-        (f"%{_FIXTURE_PREFIX}smoke%",),
-    )
+    for name in leftover_je:
+        try:
+            doc = frappe.get_doc("Journal Entry", name)
+            if doc.docstatus == 1:
+                doc.flags.ignore_permissions = True
+                doc.cancel()
+            frappe.delete_doc(
+                "Journal Entry", name, force=True, ignore_permissions=True,
+                ignore_on_trash=True,
+            )
+        except Exception:
+            # If a JE fails to cancel/delete (e.g. linked to something we
+            # haven't cleaned yet), leave it and let the next pass handle it.
+            pass
     frappe.db.sql(
         "DELETE FROM `tabInvestment Holding` "
         "WHERE notes LIKE %s OR purchase_reference_link IN (%s) OR security = %s",

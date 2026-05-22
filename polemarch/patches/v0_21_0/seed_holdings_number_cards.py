@@ -72,6 +72,11 @@ def execute():
             nc.color = spec["color"]
             nc.is_public = 1
             nc.show_percentage_stats = 0
+            # Frappe v16's Number Card form-renderer chokes when filters_json
+            # is NULL on type=Custom cards (TypeError on
+            # render_filters_table.length). Set an empty array so the form
+            # renders and the workspace's number_card content block evaluates.
+            nc.filters_json = "[]"
             nc.flags.ignore_permissions = True
             nc.save(ignore_permissions=True)
             continue
@@ -83,6 +88,7 @@ def execute():
             "method": spec["method"],
             "is_public": 1,
             "show_percentage_stats": 0,
+            "filters_json": "[]",
             "color": spec["color"],
         })
         nc.flags.ignore_permissions = True
