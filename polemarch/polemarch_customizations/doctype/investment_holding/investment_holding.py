@@ -67,15 +67,23 @@ class InvestmentHolding(Document):
                     title=_("Invalid Classification"),
                 )
 
-        # Σ qty ≤ qty_remaining
-        total = sum(flt(r.qty) for r in rows)
+        # Σ qty (NET of per-class disposals) ≤ qty_remaining.
+        # Phase 24B-2: Portfolio Transfer bumps qty_disposed_<class> when
+        # shares move out, so the appropriate check is NET, not gross.
+        # Example: 100 SiT row + 60 Investment row + qty_disposed_sit=60
+        # → net = (100-60) + 60 = 100 ≤ qty_remaining (still 100). OK.
+        sit_total = sum(flt(r.qty) for r in rows if r.classification == "Stock in Trade")
+        inv_total = sum(flt(r.qty) for r in rows if r.classification == "Investment")
+        sit_net = sit_total - flt(getattr(self, "qty_disposed_sit", 0) or 0)
+        inv_net = inv_total - flt(getattr(self, "qty_disposed_investment", 0) or 0)
+        net_total = max(0, sit_net) + max(0, inv_net)
         cap = flt(self.qty_remaining or self.qty_acquired)
-        if total > cap + 0.0001:
+        if net_total > cap + 0.0001:
             frappe.throw(
                 _(
-                    "Total classified qty ({0}) exceeds available {1}. "
+                    "Net classified qty ({0}) exceeds available {1}. "
                     "Only Unclassified shares can be classified."
-                ).format(total, cap),
+                ).format(net_total, cap),
                 title=_("Classification Exceeds Available"),
             )
 
@@ -178,30 +186,43 @@ class InvestmentHolding(Document):
 
     def _compute_classification_rollup(self):
         """Aggregate the classifications child table into the rollup fields.
-        Keeps the legacy `classification` Select in sync as a back-compat
-        shim so existing readers (FIFO, list views, reports) keep working
-        until Phase 24C cuts them over to the child-table directly."""
-        sit_q = 0.0
-        inv_q = 0.0
+
+        Phase 24B-2: each per-class total is NET of per-class disposals.
+        qty_disposed_sit / qty_disposed_investment are bumped by
+        Portfolio Transfer when shares move between classifications
+        (and will be bumped by FIFO sales once Phase 24C lands), so
+        the displayed qty_classified_* reflects what's still HELD in
+        that class — not the cumulative ever-classified total.
+
+        Keeps the legacy `classification` Select in sync as a
+        back-compat shim so existing readers (FIFO, list views,
+        holdings_summary report) keep working until Phase 24C cuts
+        them over to the child-table directly.
+        """
+        sit_total = 0.0
+        inv_total = 0.0
         for row in (self.classifications or []):
             if row.classification == "Stock in Trade":
-                sit_q += flt(row.qty)
+                sit_total += flt(row.qty)
             elif row.classification == "Investment":
-                inv_q += flt(row.qty)
-        self.qty_classified_sit = sit_q
-        self.qty_classified_investment = inv_q
-        self.qty_unclassified = max(0, flt(self.qty_remaining) - sit_q - inv_q)
+                inv_total += flt(row.qty)
+
+        # Subtract per-class disposals (set by Portfolio Transfer when
+        # shares get reclassified out of this class, and by FIFO sales
+        # in Phase 24C).
+        sit_net = max(0, sit_total - flt(getattr(self, "qty_disposed_sit", 0) or 0))
+        inv_net = max(0, inv_total - flt(getattr(self, "qty_disposed_investment", 0) or 0))
+
+        self.qty_classified_sit = sit_net
+        self.qty_classified_investment = inv_net
+        self.qty_unclassified = max(0, flt(self.qty_remaining) - sit_net - inv_net)
 
         # Back-compat: derive the legacy single `classification` field.
-        # A holding that's fully classified one way stays that way; mixed
-        # holdings become "Stock in Trade" by convention (FIFO will tag
-        # the right portion via classifications); unclassified stays as
-        # "Unallocated".
-        if sit_q > 0 and inv_q == 0:
+        if sit_net > 0 and inv_net == 0:
             self.classification = "Stock in Trade"
-        elif inv_q > 0 and sit_q == 0:
+        elif inv_net > 0 and sit_net == 0:
             self.classification = "Investment"
-        elif sit_q > 0 and inv_q > 0:
+        elif sit_net > 0 and inv_net > 0:
             # Mixed — keep whatever was set originally (if any) so we don't
             # silently flip a previously-classified record.
             self.classification = self.classification or "Stock in Trade"

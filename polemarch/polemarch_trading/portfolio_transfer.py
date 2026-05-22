@@ -77,7 +77,31 @@ def post_transfer(name: str) -> str:
 
 
 def _transfer_holdings(pt) -> None:
-    """Consume from source Holdings, mint new Holdings on target classification."""
+    """Move qty between classifications on the SAME Investment Holding.
+
+    Phase 24B-2: instead of minting a new IH for the target classification
+    (which fragmented one Purchase into many docs over time), this:
+
+      1. Bumps `qty_disposed_<source_class>` on the source IH — subtracts
+         the moved qty from the net source classification.
+      2. Appends a new classification child row tagged with the target
+         classification — adds the moved qty to the net target.
+      3. The IH's cost_basis_per_unit + acquisition_date stay on the
+         single doc, so LTCG/STCG holding-period clock is preserved.
+
+    `Portfolio Transfer Lot.new_lot` points at the SAME source_lot now (no
+    new doc to point at) so existing reports + audits keep working with
+    the same data shape. We tag the back-link in `notes` for clarity.
+
+    Skips silently when the Phase 24B Custom Fields aren't installed yet —
+    falls back to legacy per-row qty_disposed bump only. Operators on a
+    pre-24B site keep getting fragmentation; once they migrate, every
+    new PT routes through this in-place path.
+    """
+    has_child_table = frappe.db.has_column(
+        "Investment Holding", "qty_disposed_sit"
+    )
+
     for lot in pt.lots_consumed or []:
         if lot.get("new_lot"):
             continue
@@ -89,16 +113,52 @@ def _transfer_holdings(pt) -> None:
         if qty <= 0:
             continue
 
+        # Always bump the legacy qty_disposed (used by FIFO + status logic).
         source.qty_disposed = flt(source.qty_disposed or 0) + qty
+
+        if has_child_table:
+            # ── Phase 24B-2 in-place reclassification ───────────────────
+            # Bump the per-class disposal counter for the source class.
+            from_class = pt.from_classification
+            if from_class == "Stock in Trade":
+                source.qty_disposed_sit = flt(source.qty_disposed_sit or 0) + qty
+            elif from_class == "Investment":
+                source.qty_disposed_investment = flt(source.qty_disposed_investment or 0) + qty
+            # (Unallocated source isn't supported by PT today — the
+            # workflow validates same-classification + non-Unallocated.)
+
+            # Append a new classification child row for the target side.
+            # The parent's _validate_classification_rows enforces append-
+            # only + qty caps; we set flags.allow_classification_edit only
+            # for delete-row tampering — appending new rows is always OK.
+            source.append("classifications", {
+                "classification": pt.to_classification,
+                "qty": qty,
+                "classified_on": now_datetime(),
+                "classified_by": frappe.session.user,
+                "auto_classified": 0,
+                "notes": (
+                    f"Added by Portfolio Transfer {pt.name} "
+                    f"(reclassified from {from_class})."
+                ),
+            })
+
+            source.flags.ignore_permissions = True
+            source.save(ignore_permissions=True)
+
+            # Point the lot back at the SAME holding — no new doc minted.
+            frappe.db.set_value(
+                "Portfolio Transfer Lot", lot.name, "new_lot",
+                source.name, update_modified=False,
+            )
+            continue
+
+        # ── Legacy fallback (pre-24B sites): mint a new IH ──────────────
         source.flags.ignore_permissions = True
         source.save(ignore_permissions=True)
 
         new_holding = frappe.get_doc({
             "doctype": "Investment Holding",
-            # Carry both keys forward: `security` is the new primary identity,
-            # `item` stays populated so legacy queries on Item-keyed Holdings
-            # still see the new row. New-world Holdings (from Security
-            # Purchase) won't have `item` — getattr handles that case.
             "security": getattr(source, "security", None),
             "item": getattr(source, "item", None),
             "company": source.company,
