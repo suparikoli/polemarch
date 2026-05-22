@@ -127,3 +127,13 @@ polemarch.patches.v0_22_0.backfill_security_holdings_cache
 # "Polemarch — Unclassified Value" Number Card (Frappe doesn't auto-sync
 # Workspace JSON; v0_11_0 only ran once at install).
 polemarch.patches.v0_24_0.reimport_polemarch_workspace
+# Phase 24B-1: add Custom Fields on Investment Holding for the new
+# child-table classification model + parallel cache fields on Security.
+# Order matters: this MUST run before backfill_classification_child_rows
+# so the `classifications` Table field exists when we insert child rows.
+polemarch.patches.v0_24_0.add_classification_child_table
+# Backfill child rows on existing Investment Holdings from the legacy
+# single-classification field. After this, the Security form panel +
+# LCM table read from the child rows; the legacy `classification`
+# field stays in sync via the controller's _compute_derived_fields.
+polemarch.patches.v0_24_0.backfill_classification_child_rows

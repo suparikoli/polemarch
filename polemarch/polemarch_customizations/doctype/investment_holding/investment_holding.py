@@ -28,8 +28,88 @@ from frappe.utils import flt
 class InvestmentHolding(Document):
     def validate(self):
         self._validate_qty_consistency()
+        self._validate_classification_rows()
         self._compute_derived_fields()
         self._update_status()
+
+    def _validate_classification_rows(self):
+        """Phase 24B-1: enforce the child-table classification invariants.
+
+        - Σ qty across all rows ≤ qty_remaining (can't classify more than
+          we hold).
+        - Each row qty > 0 (negative / zero rows are noise).
+        - Append-only: existing rows can't be edited or deleted. Compare
+          against get_doc_before_save() to detect tampering. New rows
+          must come after the last existing row's idx.
+        - Window check: new rows can only be added when now <=
+          classification_deadline (or there's no deadline yet, e.g.
+          first save).
+
+        Skips silently when the Custom Field isn't installed yet (early
+        deploy / v0_24_0 patch hasn't run).
+        """
+        if not hasattr(self, "classifications"):
+            return
+        rows = self.classifications or []
+        if not rows:
+            return
+
+        # Per-row sanity
+        for r in rows:
+            if flt(r.qty) <= 0:
+                frappe.throw(
+                    _("Classification row {0}: qty must be > 0.").format(r.idx),
+                    title=_("Invalid Classification Qty"),
+                )
+            if r.classification not in ("Stock in Trade", "Investment"):
+                frappe.throw(
+                    _("Classification row {0}: classification must be Stock in Trade or Investment.").format(r.idx),
+                    title=_("Invalid Classification"),
+                )
+
+        # Σ qty ≤ qty_remaining
+        total = sum(flt(r.qty) for r in rows)
+        cap = flt(self.qty_remaining or self.qty_acquired)
+        if total > cap + 0.0001:
+            frappe.throw(
+                _(
+                    "Total classified qty ({0}) exceeds available {1}. "
+                    "Only Unclassified shares can be classified."
+                ).format(total, cap),
+                title=_("Classification Exceeds Available"),
+            )
+
+        # Append-only enforcement: compare against the persisted version.
+        # System-driven flows (FIFO disposal, smoke tests) can opt out via
+        # flags.allow_classification_edit if needed in the future.
+        if not self.is_new() and not getattr(self.flags, "allow_classification_edit", False):
+            prev = self.get_doc_before_save()
+            if prev is not None:
+                prev_by_name = {r.name: r for r in (prev.classifications or [])}
+                for r in rows:
+                    if r.name in prev_by_name:
+                        old = prev_by_name[r.name]
+                        if (
+                            old.classification != r.classification
+                            or flt(old.qty) != flt(r.qty)
+                            or old.classified_on != r.classified_on
+                            or old.classified_by != r.classified_by
+                        ):
+                            frappe.throw(
+                                _(
+                                    "Classification row {0} is append-only. To reclassify, "
+                                    "create a Portfolio Transfer with appropriate from/to."
+                                ).format(r.idx),
+                                title=_("Append-Only Violated"),
+                            )
+                # Deleted rows from previous save → also forbidden
+                kept_names = {r.name for r in rows}
+                for old_name in prev_by_name:
+                    if old_name not in kept_names:
+                        frappe.throw(
+                            _("Cannot delete existing classification rows. They are append-only."),
+                            title=_("Append-Only Violated"),
+                        )
 
     def before_insert(self):
         # Set classification + deadline if the new fields are present.
@@ -91,6 +171,43 @@ class InvestmentHolding(Document):
         self.total_cost = flt(self.qty_acquired) * flt(self.cost_basis_per_unit)
         self.remaining_cost = self.qty_remaining * flt(self.cost_basis_per_unit)
 
+        # Phase 24B-1: derive child-table classification rollup. Only sets
+        # attrs if the Custom Fields exist (v0_24_0 patch installed).
+        if hasattr(self, "qty_classified_sit"):
+            self._compute_classification_rollup()
+
+    def _compute_classification_rollup(self):
+        """Aggregate the classifications child table into the rollup fields.
+        Keeps the legacy `classification` Select in sync as a back-compat
+        shim so existing readers (FIFO, list views, reports) keep working
+        until Phase 24C cuts them over to the child-table directly."""
+        sit_q = 0.0
+        inv_q = 0.0
+        for row in (self.classifications or []):
+            if row.classification == "Stock in Trade":
+                sit_q += flt(row.qty)
+            elif row.classification == "Investment":
+                inv_q += flt(row.qty)
+        self.qty_classified_sit = sit_q
+        self.qty_classified_investment = inv_q
+        self.qty_unclassified = max(0, flt(self.qty_remaining) - sit_q - inv_q)
+
+        # Back-compat: derive the legacy single `classification` field.
+        # A holding that's fully classified one way stays that way; mixed
+        # holdings become "Stock in Trade" by convention (FIFO will tag
+        # the right portion via classifications); unclassified stays as
+        # "Unallocated".
+        if sit_q > 0 and inv_q == 0:
+            self.classification = "Stock in Trade"
+        elif inv_q > 0 and sit_q == 0:
+            self.classification = "Investment"
+        elif sit_q > 0 and inv_q > 0:
+            # Mixed — keep whatever was set originally (if any) so we don't
+            # silently flip a previously-classified record.
+            self.classification = self.classification or "Stock in Trade"
+        elif self.qty_unclassified > 0:
+            self.classification = "Unallocated"
+
     def _update_status(self):
         if flt(self.qty_remaining) <= 0:
             self.status = "Fully Disposed"
@@ -101,6 +218,69 @@ class InvestmentHolding(Document):
 
 
 # ── Split & Classify shortcut ────────────────────────────────────────────
+
+
+@frappe.whitelist()
+def classify_qty(holding: str, qty: float, classification: str, notes: str = "") -> dict:
+    """Phase 24B-1: add a classification child row to the holding.
+
+    Allows partial classification of an Unallocated portion. Append-only
+    via the parent's validate guard. Returns the new row's totals so the
+    UI can refresh without a full reload.
+
+    Args:
+        holding: Investment Holding name.
+        qty: how many shares to classify (must be > 0 and ≤ qty_unclassified).
+        classification: "Stock in Trade" or "Investment".
+        notes: optional free-text note saved on the child row.
+    """
+    qty = flt(qty)
+    if qty <= 0:
+        frappe.throw(_("Classify qty must be greater than zero."))
+    if classification not in ("Stock in Trade", "Investment"):
+        frappe.throw(
+            _("Classification must be Stock in Trade or Investment (got {0}).").format(classification)
+        )
+
+    h = frappe.get_doc("Investment Holding", holding)
+    if not hasattr(h, "classifications"):
+        frappe.throw(
+            _("This site hasn't installed the Phase 24B classification table yet. Run bench migrate."),
+            title=_("Schema Out of Date"),
+        )
+
+    # Check deadline (operator can only classify within the 5-business-day
+    # window from acquisition; after that, Portfolio Transfer + JEs).
+    from frappe.utils import now_datetime, get_datetime
+    deadline = getattr(h, "classification_deadline", None)
+    if deadline and get_datetime(deadline) < now_datetime():
+        frappe.throw(
+            _(
+                "Classification deadline ({0}) has passed for this holding. "
+                "Use Portfolio Transfer to move shares between classifications."
+            ).format(deadline),
+            title=_("Classification Window Closed"),
+        )
+
+    h.append("classifications", {
+        "classification": classification,
+        "qty": qty,
+        "classified_on": frappe.utils.now_datetime(),
+        "classified_by": frappe.session.user,
+        "auto_classified": 0,
+        "notes": notes,
+    })
+    h.flags.ignore_permissions = True
+    h.save(ignore_permissions=True)
+
+    return {
+        "holding": holding,
+        "added_qty": qty,
+        "classification": classification,
+        "qty_classified_sit": h.qty_classified_sit,
+        "qty_classified_investment": h.qty_classified_investment,
+        "qty_unclassified": h.qty_unclassified,
+    }
 
 
 @frappe.whitelist()

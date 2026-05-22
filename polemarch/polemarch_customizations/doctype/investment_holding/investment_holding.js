@@ -20,6 +20,21 @@ frappe.ui.form.on('Investment Holding', {
         // classify before deadline or accept the auto-SiT default.
         render_classification_deadline_banner(frm);
 
+        // Phase 24B-1 "Classify Qty" button — only meaningful while there's
+        // Unclassified qty to assign and the window hasn't expired. Lets
+        // operators classify a partial qty without forking a new Holding
+        // via Portfolio Transfer.
+        const qty_unclass = frm.doc.qty_unclassified;
+        const deadline_open = !frm.doc.classification_deadline
+            || new Date(String(frm.doc.classification_deadline).replace(' ', 'T')) > new Date();
+        if (qty_unclass !== undefined && qty_unclass > 0 && deadline_open) {
+            frm.add_custom_button(
+                __('Classify Qty'),
+                () => open_classify_dialog(frm, qty_unclass),
+                __('Actions'),
+            );
+        }
+
         if (!frm.doc.classification) return;
         // Only meaningful when there's something to split and the source has
         // a definite classification (not Unallocated).
@@ -37,6 +52,83 @@ frappe.ui.form.on('Investment Holding', {
         );
     },
 });
+
+// ── Phase 24B-1: Classify Qty dialog ─────────────────────────────────────
+function open_classify_dialog(frm, max_qty) {
+    const d = new frappe.ui.Dialog({
+        title: __('Classify Qty'),
+        fields: [
+            {
+                fieldtype: 'HTML',
+                options: `
+                    <div class="alert alert-info">
+                        <b>${frappe.utils.escape_html(frm.doc.name)}</b> has
+                        <b>${max_qty}</b> shares awaiting classification.<br>
+                        Once classified, the row is final (append-only). To reclassify later,
+                        use Portfolio Transfer (creates a JE).
+                    </div>
+                `,
+            },
+            {
+                fieldname: 'qty',
+                label: __('Qty to Classify'),
+                fieldtype: 'Float',
+                reqd: 1,
+                default: max_qty,
+                description: __('Must be > 0 and ≤ {0}.', [max_qty]),
+            },
+            {
+                fieldname: 'classification',
+                label: __('Classification'),
+                fieldtype: 'Select',
+                options: 'Stock in Trade\nInvestment',
+                reqd: 1,
+                default: 'Stock in Trade',
+            },
+            {
+                fieldname: 'notes',
+                label: __('Notes (optional)'),
+                fieldtype: 'Small Text',
+            },
+        ],
+        primary_action_label: __('Classify'),
+        primary_action(values) {
+            if (values.qty <= 0 || values.qty > max_qty) {
+                frappe.msgprint({
+                    title: __('Invalid Qty'),
+                    message: __('Qty must be between 0 and {0}.', [max_qty]),
+                    indicator: 'orange',
+                });
+                return;
+            }
+            frappe.dom.freeze(__('Classifying…'));
+            frappe.call({
+                method:
+                    'polemarch.polemarch_customizations.doctype.investment_holding.investment_holding.classify_qty',
+                args: {
+                    holding: frm.doc.name,
+                    qty: values.qty,
+                    classification: values.classification,
+                    notes: values.notes || '',
+                },
+            }).then((r) => {
+                frappe.dom.unfreeze();
+                if (!r.message) return;
+                d.hide();
+                frappe.show_alert({
+                    message: __('Classified ${0} shares as ${1}',
+                                [values.qty, values.classification]),
+                    indicator: 'green',
+                });
+                frm.reload_doc();
+            }).catch(() => {
+                frappe.dom.unfreeze();
+                // Server-side throw message surfaces automatically.
+            });
+        },
+    });
+    d.show();
+}
 
 // ── Phase 24A: classification deadline countdown banner ───────────────────
 function render_classification_deadline_banner(frm) {
