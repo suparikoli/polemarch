@@ -1,0 +1,170 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-22 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "module": "Polemarch Trading",
+ "name": "Wallet Withdrawal",
+ "title_field": "customer",
+ "search_fields": "customer,posting_date,reference_no",
+ "track_changes": 1,
+ "field_order": [
+  "naming_series",
+  "customer",
+  "wallet",
+  "column_break_1",
+  "company",
+  "posting_date",
+  "section_amounts",
+  "amount",
+  "mode",
+  "column_break_2",
+  "bank_or_cash_account",
+  "reference_no",
+  "section_refs",
+  "wallet_transaction_ref",
+  "journal_entry_ref",
+  "section_meta",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "POL-WW-.YYYY.-.#####",
+   "default": "POL-WW-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "wallet",
+   "fieldtype": "Link",
+   "label": "Wallet",
+   "options": "Wallet",
+   "read_only": 1
+  },
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "default": "Today",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break",
+   "label": "Withdrawal"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "INR",
+   "reqd": 1,
+   "non_negative": 1,
+   "in_list_view": 1,
+   "description": "Validated against the wallet's available balance on submit."
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "Bank Transfer\nUPI\nCheque\nCash\nOther",
+   "default": "Bank Transfer",
+   "in_standard_filter": 1
+  },
+  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "fieldname": "bank_or_cash_account",
+   "fieldtype": "Link",
+   "label": "Paying Account (CR)",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Bank / Cash account from which Polemarch sends the money."
+  },
+  {
+   "fieldname": "reference_no",
+   "fieldtype": "Data",
+   "label": "Reference No",
+   "description": "Bank UTR / Cheque No / UPI ref."
+  },
+  {
+   "fieldname": "section_refs",
+   "fieldtype": "Section Break",
+   "label": "Generated Documents"
+  },
+  {
+   "fieldname": "wallet_transaction_ref",
+   "fieldtype": "Link",
+   "label": "Wallet Transaction",
+   "options": "Wallet Transaction",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Auto-posted on submit: Debit Withdrawal on the customer's wallet."
+  },
+  {
+   "fieldname": "journal_entry_ref",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Auto-posted on submit: DR Customer Wallet Liability, CR Paying Account."
+  },
+  {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Notes",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Wallet Withdrawal",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {"role": "System Manager",           "read": 1, "write": 1, "create": 1, "delete": 1, "submit": 1, "cancel": 1, "amend": 1, "report": 1, "export": 1, "import": 1, "share": 1, "print": 1, "email": 1},
+  {"role": "Accounts Manager",         "read": 1, "write": 1, "create": 1,              "submit": 1, "cancel": 1, "amend": 1, "report": 1, "export": 1,              "share": 1, "print": 1, "email": 1},
+  {"role": "Polemarch Settlement Officer", "read": 1, "write": 1, "create": 1,          "submit": 1, "cancel": 1,            "report": 1, "export": 1,              "share": 1, "print": 1, "email": 1},
+  {"role": "Polemarch Trader",         "read": 1,                                                                                              "report": 1, "export": 1},
+  {"role": "Accounts User",            "read": 1,                                                                                              "report": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

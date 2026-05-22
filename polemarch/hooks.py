@@ -70,6 +70,7 @@ scheduler_events = {
         # Reconciliation jobs — each detects mismatches and logs them;
         # none of them auto-heal.
         "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
+        "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
     ],
 }

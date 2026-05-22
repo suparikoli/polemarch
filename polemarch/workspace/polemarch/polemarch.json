@@ -30,6 +30,8 @@
   {"hidden": 0, "is_query_report": 0, "label": "Customer",               "link_to": "Customer",               "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Customer Holding",       "link_to": "Customer Holding",       "link_type": "DocType", "onboard": 1, "type": "Link", "description": "CRM-style snapshot of what each customer currently holds. NOT on Polemarch's books."},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet",                 "link_to": "Wallet",                 "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Wallet Deposit",         "link_to": "Wallet Deposit",         "link_type": "DocType", "onboard": 1, "type": "Link", "description": "Operator-recorded customer funds-in. Posts wallet credit + GL JE atomically."},
+  {"hidden": 0, "is_query_report": 0, "label": "Wallet Withdrawal",      "link_to": "Wallet Withdrawal",      "link_type": "DocType", "onboard": 0, "type": "Link", "description": "Operator-recorded customer funds-out. Posts wallet debit + GL JE atomically."},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet Transaction",     "link_to": "Wallet Transaction",     "link_type": "DocType", "onboard": 0, "type": "Link"},
 
   {"hidden": 0, "is_query_report": 0, "label": "Audit",                  "link_count": 0, "onboard": 0, "type": "Card Break"},

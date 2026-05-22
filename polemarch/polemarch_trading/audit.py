@@ -54,6 +54,77 @@ def verify_wallet_balance_matches_ledger():
     _log_audit("verify_wallet_balance_matches_ledger", len(wallets), mismatches)
 
 
+def verify_wallet_liability_aggregate_matches_gl():
+    """Per-company aggregate check: ∑ Wallet.balance_total should equal
+    the CR balance of the Customer Wallet Liability GL account for that
+    company.
+
+    This catches drift that the per-wallet `verify_wallet_balance_matches_
+    ledger` audit can miss — specifically, manual GL postings (Payment
+    Entries, JEs) hitting Customer Wallet Liability WITHOUT a matching
+    Wallet Transaction. The per-wallet check uses `party_type=Customer,
+    party=<customer>` party-balance lookups; a JE that touches the account
+    without party tagging inflates the aggregate but stays invisible to
+    the per-wallet check.
+
+    Reports drift to Polemarch Audit Log; does NOT auto-heal.
+    """
+    if not frappe.db.table_exists("Wallet"):
+        return
+
+    # Group wallet totals by company.
+    rows = frappe.db.sql(
+        """
+        SELECT company, COALESCE(SUM(balance_total), 0) AS wallet_sum
+          FROM `tabWallet`
+         WHERE status = 'Active'
+         GROUP BY company
+        """,
+        as_dict=True,
+    )
+
+    mismatches = []
+    for row in rows:
+        # Find the company's Customer Wallet Liability account by account_name
+        # (composite Account.name carries an account_number prefix when set).
+        liability_account = frappe.db.get_value(
+            "Account",
+            {
+                "company": row.company,
+                "account_name": "Customer Wallet Liability",
+                "disabled": 0,
+            },
+            "name",
+        )
+        if not liability_account:
+            # No wallet liability account for this company — skip silently.
+            continue
+
+        # Net GL balance (CR is positive for a liability account).
+        gl = frappe.db.sql(
+            """
+            SELECT COALESCE(SUM(credit), 0) - COALESCE(SUM(debit), 0) AS net_credit
+              FROM `tabGL Entry`
+             WHERE account = %s
+               AND company = %s
+               AND is_cancelled = 0
+            """,
+            (liability_account, row.company),
+            as_dict=True,
+        )[0]
+
+        if abs(flt(row.wallet_sum) - flt(gl.net_credit)) > _DELTA_TOLERANCE:
+            mismatches.append({
+                "company": row.company,
+                "liability_account": liability_account,
+                "sum_of_wallet_balances": flt(row.wallet_sum),
+                "gl_net_credit": flt(gl.net_credit),
+                "drift": flt(row.wallet_sum) - flt(gl.net_credit),
+            })
+
+    _log_audit("verify_wallet_liability_aggregate_matches_gl", len(rows), mismatches)
+
+
 def verify_holding_disposal_chain():
     """Investment Holding qty_disposed must equal SUM(Investment Disposal Lot.qty_consumed)."""
     if not frappe.db.table_exists("Investment Holding"):

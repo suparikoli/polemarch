@@ -29,6 +29,9 @@ _REQUIRED_DOCTYPES = [
     "Security Type",
     # Phase 15 — Customer Holding (CRM snapshot, not part of GL ledger)
     "Customer Holding",
+    # Phase 17 — Standalone Wallet Deposit/Withdrawal (closes the manual-GL gap)
+    "Wallet Deposit",
+    "Wallet Withdrawal",
 ]
 
 _REQUIRED_JE_CUSTOM_FIELDS = ["custom_source_doctype", "custom_source_name"]
@@ -182,6 +185,7 @@ def execute(verbose: bool = False) -> dict:
         from polemarch import hooks as polemarch_hooks  # noqa: F401
         required_daily = [
             "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
+            "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         ]
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])
