@@ -346,18 +346,13 @@ class SecurityPurchase(Document):
             "credit_in_account_currency": self.amount,
             "cost_center": cost_center,
         }
-        if (
-            self.payment_method == "Default Payable"
-            and _is_payable_account(self.payment_account)
-        ):
-            if self.party_type == "Supplier":
-                credit_line["party_type"] = "Supplier"
-                credit_line["party"] = self.party
-            elif self.party_type == "Customer":
-                # Customer parties for payable accounts — Polemarch owes
-                # the customer outside the wallet (rare but legal).
-                credit_line["party_type"] = "Customer"
-                credit_line["party"] = self.party
+        # ERPNext requires party_type+party on ANY Receivable / Payable
+        # account row regardless of debit/credit direction. Customer
+        # Wallet Liability is account_type=Payable, so wallet rails get
+        # tagged too. Bank / Cash accounts don't need party tagging.
+        if _is_receivable_or_payable(self.payment_account) and self.party_type and self.party:
+            credit_line["party_type"] = self.party_type
+            credit_line["party"] = self.party
 
         je = frappe.get_doc({
             "doctype": "Journal Entry",
@@ -468,6 +463,12 @@ def _wallet_gl_account_for_customer(customer: str):
 
 def _is_payable_account(account: str) -> bool:
     return frappe.db.get_value("Account", account, "account_type") == "Payable"
+
+
+def _is_receivable_or_payable(account: str) -> bool:
+    return frappe.db.get_value("Account", account, "account_type") in (
+        "Receivable", "Payable"
+    )
 
 
 def _resolve_account_by_name(company: str, account_name: str):
