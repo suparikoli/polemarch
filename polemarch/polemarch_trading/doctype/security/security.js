@@ -114,31 +114,46 @@ function build_panel_html(data, security) {
     function row(label, units, cost, fair, lcm, opts = {}) {
         const weight = opts.bold ? 'font-weight: 600;' : '';
         const border = opts.topBorder ? 'border-top: 2px solid var(--border-color);' : 'border-top: 1px solid var(--border-color);';
-        const td = `padding: 8px 12px; vertical-align: top; ${weight} ${border}`;
+        // Unclassified rows with 0 qty render muted (placeholder for the
+        // operator's reference) but stay visible so they always see the bucket.
+        const muted = opts.unclassified && !units;
+        const rowOpacity = muted ? 'opacity: 0.55;' : '';
+        const td = `padding: 8px 12px; vertical-align: top; ${weight} ${border} ${rowOpacity}`;
         const td_r = `${td} text-align: right;`;
+        // Label gets a subtle hint when Unclassified > 0 (this row is "live").
+        const labelHtml = opts.unclassified && units
+            ? `${label} <small style="color: var(--text-muted); font-weight: normal;">(awaiting classification)</small>`
+            : label;
+        // Empty cells render as "—" when the value is 0; otherwise normal dual.
+        const costCell = !units
+            ? '<span style="color: var(--text-muted)">—</span>'
+            : dual(unit(cost, units), cost);
+        const fairCell = (fair == null)
+            ? '<span style="color: var(--text-muted)">—</span>'
+            : (!units ? '<span style="color: var(--text-muted)">—</span>' : dual(unit(fair, units), fair));
+        const lcmCell = !units
+            ? '<span style="color: var(--text-muted)">—</span>'
+            : lcm_dual(cost, fair, lcm, units);
         return `
           <tr>
-            <td style="${td}">${label}</td>
+            <td style="${td}">${labelHtml}</td>
             <td style="${td_r}">${fmt_n(units)}</td>
-            <td style="${td_r}">${dual(unit(cost, units), cost)}</td>
-            <td style="${td_r}">${fair == null
-                ? '<span style="color: var(--text-muted)">—</span>'
-                : dual(unit(fair, units), fair)}</td>
-            <td style="${td_r}">${lcm_dual(cost, fair, lcm, units)}</td>
+            <td style="${td_r}">${costCell}</td>
+            <td style="${td_r}">${fairCell}</td>
+            <td style="${td_r}">${lcmCell}</td>
           </tr>
         `;
     }
 
+    // Always render Stock in Trade, Investment, and Unclassified rows —
+    // even with 0 qty — so the operator sees the classification model at
+    // a glance. Phase 24: Unclassified is the pool of shares within the
+    // 5-day window that haven't been assigned to SiT or Investment yet.
     const rows = [];
-    if (data.sit_units > 0) {
-        rows.push(row('Stock in Trade', data.sit_units, data.sit_cost, data.sit_market, data.sit_lcm));
-    }
-    if (data.inv_units > 0) {
-        rows.push(row('Investment', data.inv_units, data.inv_cost, data.inv_market, data.inv_lcm));
-    }
-    if (data.unalloc_units > 0) {
-        rows.push(row('Unallocated', data.unalloc_units, data.unalloc_cost, data.unalloc_market, data.unalloc_lcm));
-    }
+    rows.push(row('Stock in Trade', data.sit_units || 0, data.sit_cost || 0, data.sit_market, data.sit_lcm || 0));
+    rows.push(row('Investment',     data.inv_units || 0, data.inv_cost || 0, data.inv_market, data.inv_lcm || 0));
+    rows.push(row('Unclassified',   data.unalloc_units || 0, data.unalloc_cost || 0, data.unalloc_market, data.unalloc_lcm || 0,
+                  { unclassified: true }));
     rows.push(row('TOTAL', data.total_units, data.total_cost, data.total_market, data.total_lcm,
                   { bold: true, topBorder: true }));
 

@@ -187,6 +187,7 @@ def execute(verbose: bool = False) -> dict:
         "Polemarch — Total Holdings Value",
         "Polemarch — Stock in Trade Value",
         "Polemarch — Investment Value",
+        "Polemarch — Unclassified Value",
         "Polemarch — Unrealised Gain",
     ]:
         if frappe.db.exists("Number Card", card):

@@ -34,6 +34,11 @@ CARDS = [
         "color": "#10B981",
     },
     {
+        "label": "Polemarch — Unclassified Value",
+        "method": "polemarch.api.holdings_summary.card_unclassified_value",
+        "color": "#9CA3AF",
+    },
+    {
         "label": "Polemarch — Unrealised Gain",
         "method": "polemarch.api.holdings_summary.card_unrealised_gain",
         "color": "#F59E0B",

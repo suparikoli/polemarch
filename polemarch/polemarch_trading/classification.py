@@ -3,7 +3,7 @@
 Workflow:
   1. New Investment Holding → classification = "Unallocated".
   2. On insert, `compute_deadline()` stamps classification_deadline = creation
-     + 2 working days (Mon-Fri minus the company's Holiday List).
+     + 5 working days (Mon-Fri minus the company's Holiday List).
   3. Within the window, an authorized user can call
      `classify_as_investment(holding_name)` to mark it `Investment`.
   4. The daily scheduler `auto_classify_expired_unallocated()` walks all
@@ -11,6 +11,11 @@ Workflow:
      `Stock in Trade`.
   5. After classification, Portfolio Transfer is the only way to move
      between Stock in Trade ↔ Investment (FMV-based, approval controlled).
+
+Phase 24: window extended from 2 → 5 business days. Phase 24B will also
+flip this engine to the child-table classification model + post the
+reconciliation JE moving cost from the Pending Classification suspense
+account to the final inventory accounts at deadline.
 """
 
 import frappe
@@ -19,7 +24,10 @@ from frappe.utils import add_days, get_datetime, now_datetime, getdate
 
 # Skip Saturday + Sunday by default. Holiday List (per-company) takes
 # precedence when present and adds India public holidays on top.
-_WORKING_DAYS = 2
+# Phase 24: 5 business days (was 2). Operators wanted more slack to decide
+# between Stock in Trade vs Investment without rushing into a Portfolio
+# Transfer post-classification.
+_WORKING_DAYS = 5
 _WEEKEND = {5, 6}  # Saturday=5, Sunday=6 in Python's date.weekday()
 
 
@@ -27,7 +35,7 @@ _WEEKEND = {5, 6}  # Saturday=5, Sunday=6 in Python's date.weekday()
 
 
 def compute_deadline(start_dt, company=None):
-    """Compute classification deadline = start_dt + 2 working days.
+    """Compute classification deadline = start_dt + 5 working days.
 
     Uses ERPNext's Holiday List (resolved via Company.default_holiday_list)
     to skip holidays. Falls back to weekend-only skipping if no Holiday List

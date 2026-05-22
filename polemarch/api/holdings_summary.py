@@ -235,6 +235,26 @@ def card_investment_value(company: Optional[str] = None) -> dict:
 
 
 @frappe.whitelist()
+def card_unclassified_value(company: Optional[str] = None) -> dict:
+    """Number Card: book value of Unclassified shares (within the 5-business-
+    day classification window — sits in the Pending Classification suspense
+    account until day-5 reconciliation)."""
+    where = ["status IN ('Open', 'Partially Disposed')", "qty_remaining > 0"]
+    params: list = []
+    if company:
+        where.append("company = %s")
+        params.append(company)
+    where.append("classification = 'Unallocated'")
+    where_sql = " AND ".join(where)
+    row = frappe.db.sql(
+        f"SELECT COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0) "
+        f"FROM `tabInvestment Holding` WHERE {where_sql}",
+        tuple(params),
+    )
+    return _currency_card(flt(row[0][0]) if row else 0)
+
+
+@frappe.whitelist()
 def card_unrealised_gain(company: Optional[str] = None) -> dict:
     """Number Card: unrealised gain across priced securities (NULL-safe)."""
     s = get_summary(company)
