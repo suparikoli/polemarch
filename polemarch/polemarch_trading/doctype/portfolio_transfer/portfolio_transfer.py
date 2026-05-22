@@ -101,19 +101,26 @@ class PortfolioTransfer(Document):
         ts = now_datetime()
 
         if new_state == "Approved":
-            if actor == self.requested_by:
-                frappe.throw(
-                    _(
-                        "Portfolio Transfer {0}: cannot self-approve. Requested by {1}, "
-                        "approval attempted by {2}."
-                    ).format(self.name, self.requested_by, actor),
-                    title=_("Self-Approval Forbidden"),
-                )
-            if "Polemarch Compliance Officer" not in frappe.get_roles(actor):
-                frappe.throw(
-                    _("Only Polemarch Compliance Officer may approve Portfolio Transfers."),
-                    title=_("Insufficient Role"),
-                )
+            # System-driven shortcuts (e.g. Investment Holding's "Split & Classify"
+            # button) can opt out of the human approval gate by setting
+            # `flags.bypass_approval_checks = True`. The shortcut still creates
+            # a fully-audited PT row — it just skips the dual-control step that
+            # exists for human-initiated reclassifications.
+            bypass = getattr(self.flags, "bypass_approval_checks", False)
+            if not bypass:
+                if actor == self.requested_by:
+                    frappe.throw(
+                        _(
+                            "Portfolio Transfer {0}: cannot self-approve. Requested by {1}, "
+                            "approval attempted by {2}."
+                        ).format(self.name, self.requested_by, actor),
+                        title=_("Self-Approval Forbidden"),
+                    )
+                if "Polemarch Compliance Officer" not in frappe.get_roles(actor):
+                    frappe.throw(
+                        _("Only Polemarch Compliance Officer may approve Portfolio Transfers."),
+                        title=_("Insufficient Role"),
+                    )
             self.approved_by = actor
             self.approved_on = ts
 
@@ -140,6 +147,51 @@ class PortfolioTransfer(Document):
         from polemarch.polemarch_trading import fifo as fifo_engine
 
         if not self.from_classification or not self.security or not self.qty or not self.company:
+            return
+
+        # Shortcut callers (Investment Holding's "Split & Classify" button)
+        # set `flags.preset_source_lot` to a specific Investment Holding name.
+        # Building the plan straight from that lot bypasses FIFO ordering so
+        # the user actually splits the lot they're looking at, not whatever
+        # the oldest lot happens to be.
+        preset = getattr(self.flags, "preset_source_lot", None)
+        if preset:
+            source = frappe.db.get_value(
+                "Investment Holding",
+                preset,
+                ["qty_acquired", "qty_disposed", "qty_reserved",
+                 "cost_basis_per_unit", "acquisition_date"],
+                as_dict=True,
+            )
+            if not source:
+                frappe.throw(
+                    _("preset_source_lot {0} not found.").format(preset),
+                    title=_("Invalid Source Lot"),
+                )
+            qty = flt(self.qty)
+            cost_basis = flt(source.cost_basis_per_unit)
+            acq = getdate(source.acquisition_date) if source.acquisition_date else None
+            sale_date = getdate(self.transfer_date)
+            days = (sale_date - acq).days if acq else 0
+            is_long_term = days > _LONG_TERM_THRESHOLD_DAYS
+            fmv_amt = qty * flt(self.fmv_per_unit)
+            cost_amt = qty * cost_basis
+
+            self.set("lots_consumed", [])
+            self.append(
+                "lots_consumed",
+                {
+                    "source_lot": preset,
+                    "qty_consumed": qty,
+                    "original_cost_basis_per_unit": cost_basis,
+                    "transfer_fmv_per_unit": flt(self.fmv_per_unit),
+                    "holding_period_days_at_transfer": days,
+                    "is_long_term_at_transfer": int(is_long_term),
+                    "cost_basis_amount": cost_amt,
+                    "fmv_amount": fmv_amt,
+                    "deemed_gain": fmv_amt - cost_amt,
+                },
+            )
             return
 
         plan = fifo_engine.consume(
