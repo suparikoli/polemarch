@@ -66,6 +66,14 @@ doc_events = {
     "Journal Entry": {
         "validate": "polemarch.polemarch_trading.hooks.journal_entry_validate",
     },
+    # Phase 22 — keep the Security.qty_sit / qty_investment / qty_total /
+    # cost_total cache fields fresh whenever an Investment Holding changes.
+    # The cache backs the at-a-glance columns on the Security list view.
+    "Investment Holding": {
+        "after_insert": "polemarch.polemarch_trading.holdings_cache.on_investment_holding_change",
+        "on_update":    "polemarch.polemarch_trading.holdings_cache.on_investment_holding_change",
+        "on_trash":     "polemarch.polemarch_trading.holdings_cache.on_investment_holding_change",
+    },
 }
 
 scheduler_events = {
@@ -75,6 +83,9 @@ scheduler_events = {
         "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
         "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
+        # Phase 22 — recompute Security.qty_sit/qty_investment/cost_total
+        # cache and log any drift. Self-healing (re-persists the truth).
+        "polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache",
     ],
 }
 

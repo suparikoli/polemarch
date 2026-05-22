@@ -17,6 +17,12 @@
   "column_break_1",
   "security_type",
   "face_value",
+  "section_holdings",
+  "qty_sit",
+  "qty_investment",
+  "column_break_holdings",
+  "qty_total",
+  "cost_total",
   "section_market",
   "last_traded_price",
   "price_updated_on",
@@ -73,6 +79,56 @@
    "label": "Face Value",
    "options": "INR",
    "description": "Statutory face value (₹10 default for equity)."
+  },
+  {
+   "fieldname": "section_holdings",
+   "fieldtype": "Section Break",
+   "label": "Polemarch's Holdings (cached)",
+   "description": "Denormalised qty/cost rollup across all open Investment Holdings for this security in the current Company. Auto-refreshed by polemarch.polemarch_trading.holdings_cache.refresh_for_security on every Investment Holding write."
+  },
+  {
+   "fieldname": "qty_sit",
+   "fieldtype": "Float",
+   "label": "SiT",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "precision": 0,
+   "description": "Sum of qty_remaining for Stock-in-Trade Holdings."
+  },
+  {
+   "fieldname": "qty_investment",
+   "fieldtype": "Float",
+   "label": "Investment",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "precision": 0,
+   "description": "Sum of qty_remaining for Investment Holdings."
+  },
+  {
+   "fieldname": "column_break_holdings",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qty_total",
+   "fieldtype": "Float",
+   "label": "Total Units",
+   "read_only": 1,
+   "no_copy": 1,
+   "precision": 0,
+   "description": "qty_sit + qty_investment + any Unallocated."
+  },
+  {
+   "fieldname": "cost_total",
+   "fieldtype": "Currency",
+   "label": "Total Cost (book)",
+   "options": "INR",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Σ(qty_remaining × cost_basis_per_unit) across all open lots."
   },
   {
    "fieldname": "section_market",

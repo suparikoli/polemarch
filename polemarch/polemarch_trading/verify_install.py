@@ -194,6 +194,13 @@ def execute(verbose: bool = False) -> dict:
         else:
             errors.append(f"Number Card MISSING: {card}")
 
+    # 6c) Phase 22 — Security cache columns (in_list_view qty rollups).
+    for col in ("qty_sit", "qty_investment", "qty_total", "cost_total"):
+        if frappe.db.has_column("Security", col):
+            ok.append(f"Column present: Security.{col}")
+        else:
+            errors.append(f"Column MISSING: Security.{col}")
+
     # 7) Daily scheduler entries (smoke check — read hooks at import time).
     # The hourly settlement.run_pending scheduler was dropped in v0_13_0
     # along with Trade Order.
@@ -203,6 +210,7 @@ def execute(verbose: bool = False) -> dict:
             "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
             "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
+            "polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache",
         ]
         daily = getattr(polemarch_hooks, "scheduler_events", {}).get("daily", [])
         for entry in required_daily:

@@ -118,3 +118,8 @@ polemarch.patches.v0_18_0.backfill_primary_contact_for_polemarch_customers
 # polemarch.api.holdings_summary that aggregates open Investment
 # Holdings into a Currency-shaped {value, fieldtype} payload.
 polemarch.patches.v0_21_0.seed_holdings_number_cards
+# v0_22_0 — backfill the new Security.qty_sit / qty_investment /
+# qty_total / cost_total cache columns from current Investment
+# Holdings. After this, holdings_cache.on_investment_holding_change
+# (wired via hooks.py) keeps the cache fresh on every IH write.
+polemarch.patches.v0_22_0.backfill_security_holdings_cache
