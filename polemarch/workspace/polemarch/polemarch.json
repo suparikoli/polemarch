@@ -1,7 +1,7 @@
 {
  "app": "polemarch",
  "charts": [],
- "content": "[{\"id\":\"hdrTrading\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Trading Desk</b></span>\",\"col\":12}},{\"id\":\"scPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Purchase\",\"col\":3}},{\"id\":\"scSale\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Sale\",\"col\":3}},{\"id\":\"scHoldings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open Holdings\",\"col\":3}},{\"id\":\"scDisposals\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Investment Disposal\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"scSecurity\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security\",\"col\":3}},{\"id\":\"scCustomers\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"hdrSec\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Sections</b></span>\",\"col\":12}},{\"id\":\"cdTrading\",\"type\":\"card\",\"data\":{\"card_name\":\"Trading\",\"col\":4}},{\"id\":\"cdInventory\",\"type\":\"card\",\"data\":{\"card_name\":\"Inventory & Holdings\",\"col\":4}},{\"id\":\"cdSecurities\",\"type\":\"card\",\"data\":{\"card_name\":\"Securities\",\"col\":4}},{\"id\":\"cdCustomers\",\"type\":\"card\",\"data\":{\"card_name\":\"Customers & Wallets\",\"col\":4}},{\"id\":\"cdAudit\",\"type\":\"card\",\"data\":{\"card_name\":\"Audit\",\"col\":4}}]",
+ "content": "[{\"id\":\"hdrSummary\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Holdings Summary</b></span>\",\"col\":12}},{\"id\":\"ncTotal\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch \\u2014 Total Holdings Value\",\"col\":3}},{\"id\":\"ncSit\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch \\u2014 Stock in Trade Value\",\"col\":3}},{\"id\":\"ncInv\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch \\u2014 Investment Value\",\"col\":3}},{\"id\":\"ncGain\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Polemarch \\u2014 Unrealised Gain\",\"col\":3}},{\"id\":\"sp0\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"hdrTrading\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Trading Desk</b></span>\",\"col\":12}},{\"id\":\"scPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Purchase\",\"col\":3}},{\"id\":\"scSale\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security Sale\",\"col\":3}},{\"id\":\"scHoldings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open Holdings\",\"col\":3}},{\"id\":\"scDisposals\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Investment Disposal\",\"col\":3}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"scSecurity\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Security\",\"col\":3}},{\"id\":\"scCustomers\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Polemarch Customers\",\"col\":3}},{\"id\":\"scHoldingsReport\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Holdings by Security\",\"col\":3}},{\"id\":\"hdrSec\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Sections</b></span>\",\"col\":12}},{\"id\":\"cdTrading\",\"type\":\"card\",\"data\":{\"card_name\":\"Trading\",\"col\":4}},{\"id\":\"cdInventory\",\"type\":\"card\",\"data\":{\"card_name\":\"Inventory & Holdings\",\"col\":4}},{\"id\":\"cdSecurities\",\"type\":\"card\",\"data\":{\"card_name\":\"Securities\",\"col\":4}},{\"id\":\"cdCustomers\",\"type\":\"card\",\"data\":{\"card_name\":\"Customers & Wallets\",\"col\":4}},{\"id\":\"cdReports\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"id\":\"cdAudit\",\"type\":\"card\",\"data\":{\"card_name\":\"Audit\",\"col\":4}}]",
  "creation": "2026-05-22 00:00:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -34,6 +34,9 @@
   {"hidden": 0, "is_query_report": 0, "label": "Wallet Withdrawal",      "link_to": "Wallet Withdrawal",      "link_type": "DocType", "onboard": 0, "type": "Link", "description": "Operator-recorded customer funds-out. Posts wallet debit + GL JE atomically."},
   {"hidden": 0, "is_query_report": 0, "label": "Wallet Transaction",     "link_to": "Wallet Transaction",     "link_type": "DocType", "onboard": 0, "type": "Link"},
 
+  {"hidden": 0, "is_query_report": 0, "label": "Reports",                "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 1, "label": "Holdings by Security",   "link_to": "Polemarch Holdings by Security", "link_type": "Report", "onboard": 1, "type": "Link", "report_ref_doctype": "Investment Holding", "description": "Per-security rollup of all open Investment Holdings: SiT / Investment / Total units & cost, plus market value + unrealised gain when Security.last_traded_price is set."},
+
   {"hidden": 0, "is_query_report": 0, "label": "Audit",                  "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Polemarch Audit Log",    "link_to": "Polemarch Audit Log",    "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Journal Entry",          "link_to": "Journal Entry",          "link_type": "DocType", "onboard": 0, "type": "Link"}
@@ -42,7 +45,12 @@
  "modified_by": "Administrator",
  "module": "Polemarch Customizations",
  "name": "Polemarch",
- "number_cards": [],
+ "number_cards": [
+  {"label": "Total Holdings Value",  "number_card_name": "Polemarch — Total Holdings Value"},
+  {"label": "Stock in Trade Value",  "number_card_name": "Polemarch — Stock in Trade Value"},
+  {"label": "Investment Value",      "number_card_name": "Polemarch — Investment Value"},
+  {"label": "Unrealised Gain",       "number_card_name": "Polemarch — Unrealised Gain"}
+ ],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
@@ -56,7 +64,8 @@
   {"color": "Cyan",   "doc_view": "List", "format": "{} Open",    "label": "Open Holdings",         "link_to": "Investment Holding",    "stats_filter": "{\"status\":[\"in\",[\"Open\",\"Partially Disposed\"]]}", "type": "DocType"},
   {"color": "Purple", "doc_view": "List",                          "label": "Investment Disposal",   "link_to": "Investment Disposal",                                                                                  "type": "DocType"},
   {"color": "Gray",   "doc_view": "List",                          "label": "Security",              "link_to": "Security",                                                                                            "type": "DocType"},
-  {"color": "Pink",   "doc_view": "List", "format": "{} Polemarch", "label": "Polemarch Customers",  "link_to": "Customer",              "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"}
+  {"color": "Pink",   "doc_view": "List", "format": "{} Polemarch", "label": "Polemarch Customers",  "link_to": "Customer",              "stats_filter": "{\"custom_is_polemarch_customer\":1}", "type": "DocType"},
+  {"color": "Orange", "doc_view": "Report Builder",                  "label": "Holdings by Security", "link_to": "Polemarch Holdings by Security",                                                            "type": "Report"}
  ],
  "title": "Polemarch"
 }

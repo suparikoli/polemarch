@@ -112,3 +112,9 @@ polemarch.patches.v0_16_0.drop_customer_pan_name_fields
 # (polemarch.overrides.customer.after_insert) catches new inserts going
 # forward; this patch fixes the historical gap.
 polemarch.patches.v0_18_0.backfill_primary_contact_for_polemarch_customers
+# v0_21_0 — seed 4 Number Cards for the Polemarch workspace: Total
+# Holdings Value, Stock-in-Trade Value, Investment Value, Unrealised
+# Gain. Each card calls a whitelisted method on
+# polemarch.api.holdings_summary that aggregates open Investment
+# Holdings into a Currency-shaped {value, fieldtype} payload.
+polemarch.patches.v0_21_0.seed_holdings_number_cards

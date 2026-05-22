@@ -178,6 +178,22 @@ def execute(verbose: bool = False) -> dict:
         else:
             warnings.append(f"ITT MISSING: {candidate} (Polemarch share items will fail GST routing)")
 
+    # 6b) Phase 21 — Holdings visibility (Report + Number Cards).
+    if frappe.db.exists("Report", "Polemarch Holdings by Security"):
+        ok.append("Report present: Polemarch Holdings by Security")
+    else:
+        errors.append("Report MISSING: Polemarch Holdings by Security")
+    for card in [
+        "Polemarch — Total Holdings Value",
+        "Polemarch — Stock in Trade Value",
+        "Polemarch — Investment Value",
+        "Polemarch — Unrealised Gain",
+    ]:
+        if frappe.db.exists("Number Card", card):
+            ok.append(f"Number Card present: {card}")
+        else:
+            errors.append(f"Number Card MISSING: {card}")
+
     # 7) Daily scheduler entries (smoke check — read hooks at import time).
     # The hourly settlement.run_pending scheduler was dropped in v0_13_0
     # along with Trade Order.
