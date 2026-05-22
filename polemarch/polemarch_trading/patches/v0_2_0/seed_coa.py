@@ -34,8 +34,13 @@ ACCOUNTS = [
      "Temporary", "Asset", "1450",
      [("Current Assets", "Asset")]),
     # Liabilities
+    # Customer Wallet Liability used to be account_type="Payable" — but
+    # Payable accounts in ERPNext mandate party_type=Supplier on every JE
+    # row, and Polemarch's wallet GL is keyed to Customers. Keep it as a
+    # plain Current Liability so JE postings (Security Sale / Purchase
+    # with payment_method=Customer Wallet) don't trip the party validator.
     ("Customer Wallet Liability",
-     "Payable", "Liability", "2310",
+     "", "Liability", "2310",
      [("Current Liabilities", "Liability"), ("Source of Funds", "Liability")]),
     ("Settlement Payable",
      "Payable", "Liability", "2330",

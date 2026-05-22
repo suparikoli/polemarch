@@ -86,3 +86,4 @@ polemarch.patches.v0_12_0.backfill_party_payment_fields
 # payment_method=Customer Wallet. Drops all four doctypes' tables + the
 # polemarch_trade_order back-link Custom Field on Investment Disposal.
 polemarch.patches.v0_13_0.drop_trade_order_doctypes
+polemarch.patches.v0_13_0.clear_customer_wallet_account_type
