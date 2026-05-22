@@ -56,6 +56,7 @@ class SecurityPurchase(Document):
         self._validate_security_tradable()
         self._validate_party_payment_combo()
         self._default_accounts()
+        self._validate_accounts_resolved()
         self._sync_legacy_fields()
 
     def on_submit(self):
@@ -147,6 +148,57 @@ class SecurityPurchase(Document):
             self.payment_account = frappe.db.get_value(
                 "Company", self.company, "default_payable_account"
             )
+
+    def _validate_accounts_resolved(self):
+        """If `_default_accounts` couldn't fill cost_to_account or
+        payment_account (e.g. company missing `Securities Inventory -
+        Trading` or no default_payable_account configured), throw a
+        descriptive error here instead of letting Frappe's generic
+        mandatory check fire."""
+        missing = []
+        if not self.cost_to_account:
+            missing.append(
+                _(
+                    "Cost To Account couldn't be auto-resolved — Company {0} is "
+                    "missing the `Securities Inventory - Trading` account. "
+                    "Run the polemarch CoA seeder or pick an account manually."
+                ).format(self.company)
+            )
+        if not self.payment_account:
+            if self.payment_method == "Default Payable":
+                missing.append(
+                    _(
+                        "Payment Account couldn't be auto-resolved — Company {0} "
+                        "has no `default_payable_account`. Set it on the Company "
+                        "or pick the credit account manually."
+                    ).format(self.company)
+                )
+            elif self.payment_method == "Bank":
+                missing.append(
+                    _(
+                        "Payment Account couldn't be auto-resolved — Company {0} "
+                        "has no `default_bank_account` and no Bank-type accounts. "
+                        "Set the default or pick a Bank account manually."
+                    ).format(self.company)
+                )
+            elif self.payment_method == "Cash":
+                missing.append(
+                    _(
+                        "Payment Account couldn't be auto-resolved — Company {0} "
+                        "has no `default_cash_account` and no Cash-type accounts. "
+                        "Set the default or pick a Cash account manually."
+                    ).format(self.company)
+                )
+            elif self.payment_method == "Customer Wallet":
+                missing.append(
+                    _(
+                        "Payment Account couldn't be auto-resolved — Customer {0} "
+                        "has no Wallet on Company {1}, or the Wallet has no "
+                        "gl_liability_account set."
+                    ).format(self.party, self.company)
+                )
+        if missing:
+            frappe.throw("\n".join(missing), title=_("Account Auto-Fill Failed"))
 
     def _sync_legacy_fields(self):
         """Keep the legacy `supplier` / `paid_from_account` columns populated

@@ -179,8 +179,7 @@
    "fieldtype": "Link",
    "label": "Payment Account (DR)",
    "options": "Account",
-   "reqd": 1,
-   "description": "Account that takes the debit leg of the JE. Auto-defaulted from payment_method on save."
+   "description": "Account that takes the debit leg of the JE. Auto-fills on save based on `Payment Method` + Company defaults:\n  - Default Receivable → Company's default receivable account\n  - Bank → Company's default bank account\n  - Cash → Company's default cash account\n  - Customer Wallet → the customer's Wallet Liability GL"
   },
   {
    "fieldname": "paid_to_account",
@@ -197,8 +196,7 @@
    "fieldtype": "Link",
    "label": "Revenue Account (CR)",
    "options": "Account",
-   "reqd": 1,
-   "description": "Defaults to Trading Revenue - Securities - <abbr>."
+   "description": "Auto-fills on save to `Trading Revenue - Securities - <abbr>` for the chosen Company."
   },
   {"fieldname": "column_break_3", "fieldtype": "Column Break"},
   {
