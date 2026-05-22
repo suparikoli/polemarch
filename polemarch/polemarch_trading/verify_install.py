@@ -184,11 +184,11 @@ def execute(verbose: bool = False) -> dict:
     else:
         errors.append("Report MISSING: Polemarch Holdings by Security")
     for card in [
-        "Polemarch — Total Holdings Value",
-        "Polemarch — Stock in Trade Value",
-        "Polemarch — Investment Value",
-        "Polemarch — Unclassified Value",
-        "Polemarch — Unrealised Gain",
+        "Polemarch - Total Holdings Value",
+        "Polemarch - Stock in Trade Value",
+        "Polemarch - Investment Value",
+        "Polemarch - Unclassified Value",
+        "Polemarch - Open Lots",
     ]:
         if frappe.db.exists("Number Card", card):
             ok.append(f"Number Card present: {card}")

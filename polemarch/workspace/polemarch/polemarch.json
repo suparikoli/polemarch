@@ -46,11 +46,11 @@
  "module": "Polemarch Customizations",
  "name": "Polemarch",
  "number_cards": [
-  {"label": "Total Holdings Value",  "number_card_name": "Polemarch — Total Holdings Value"},
-  {"label": "Stock in Trade Value",  "number_card_name": "Polemarch — Stock in Trade Value"},
-  {"label": "Investment Value",      "number_card_name": "Polemarch — Investment Value"},
-  {"label": "Unclassified Value",    "number_card_name": "Polemarch — Unclassified Value"},
-  {"label": "Unrealised Gain",       "number_card_name": "Polemarch — Unrealised Gain"}
+  {"label": "Total Holdings Value",  "number_card_name": "Polemarch - Total Holdings Value"},
+  {"label": "Stock in Trade Value",  "number_card_name": "Polemarch - Stock in Trade Value"},
+  {"label": "Investment Value",      "number_card_name": "Polemarch - Investment Value"},
+  {"label": "Unclassified Value",    "number_card_name": "Polemarch - Unclassified Value"},
+  {"label": "Open Lots",             "number_card_name": "Polemarch - Open Lots"}
  ],
  "owner": "Administrator",
  "parent_page": "",
