@@ -5,10 +5,21 @@
 // operator can reclassify part of a Holding without navigating the 4-step
 // state machine. Useful when 60 of 100 acquired units are Investment and the
 // other 40 should be Stock in Trade.
+//
+// Phase 24A: when classification = Unallocated, render a deadline banner
+// showing how much time remains until the daily scheduler auto-classifies
+// the remaining qty as Stock in Trade. Colors: green > 24h, amber 6–24h,
+// red < 6h or already past.
 
 frappe.ui.form.on('Investment Holding', {
     refresh(frm) {
         if (frm.is_new()) return;
+
+        // Phase 24A deadline banner — visible whenever classification is
+        // Unallocated, regardless of qty. Drives the operator to either
+        // classify before deadline or accept the auto-SiT default.
+        render_classification_deadline_banner(frm);
+
         if (!frm.doc.classification) return;
         // Only meaningful when there's something to split and the source has
         // a definite classification (not Unallocated).
@@ -26,6 +37,61 @@ frappe.ui.form.on('Investment Holding', {
         );
     },
 });
+
+// ── Phase 24A: classification deadline countdown banner ───────────────────
+function render_classification_deadline_banner(frm) {
+    // Find the mount point. v13–15 use frm.dashboard.wrapper, v16 uses
+    // frm.dashboard.parent. Fall back to the form layout's main section.
+    const d = frm.dashboard || {};
+    const mount = (d.wrapper && d.wrapper.length) ? d.wrapper
+        : (d.parent && d.parent.length) ? d.parent
+        : $(frm.wrapper).find('.layout-main-section, .form-page').first();
+
+    mount.find('.polemarch-deadline-banner').remove();
+
+    // Only show for Unallocated. Once classified, the banner is irrelevant.
+    if (frm.doc.classification !== 'Unallocated') return;
+    if (!frm.doc.classification_deadline) return;
+
+    const deadline = new Date(String(frm.doc.classification_deadline).replace(' ', 'T'));
+    const now = new Date();
+    const diff_ms = deadline - now;
+
+    let color, icon, headline;
+    if (diff_ms <= 0) {
+        color = '#ef4444';
+        icon = '⚠';
+        headline = `<b>Past classification deadline</b> — the daily scheduler will flip this Holding to Stock in Trade on next run`;
+    } else {
+        const totalMin = Math.floor(diff_ms / 60000);
+        const days = Math.floor(totalMin / (60 * 24));
+        const hours = Math.floor((totalMin % (60 * 24)) / 60);
+        const minutes = totalMin % 60;
+        let pretty;
+        if (days >= 1) pretty = `${days}d ${hours}h`;
+        else if (hours >= 1) pretty = `${hours}h ${minutes}m`;
+        else pretty = `${minutes}m`;
+        const total_hours = diff_ms / 3600000;
+        if (total_hours > 24)      { color = '#22c55e'; icon = '✓'; }
+        else if (total_hours > 6)  { color = '#f59e0b'; icon = '⏱'; }
+        else                       { color = '#ef4444'; icon = '⚠'; }
+        headline = `Auto-classifies as <b>Stock in Trade</b> in <b>${pretty}</b>`;
+    }
+
+    const deadline_pretty = moment(deadline).format('D MMM YYYY, HH:mm');
+    const html = `
+      <div class="polemarch-deadline-banner" style="
+          margin: 0 0 12px 0; padding: 10px 14px;
+          background: var(--card-bg); color: var(--text-color);
+          border: 1px solid var(--border-color); border-left: 4px solid ${color};
+          border-radius: 4px; font-size: 13px;">
+        <span style="color: ${color}; font-size: 16px; margin-right: 6px;">${icon}</span>
+        ${headline}
+        &nbsp;·&nbsp; <span style="color: var(--text-muted)">Deadline: ${deadline_pretty}</span>
+      </div>
+    `;
+    mount.prepend(html);
+}
 
 function open_split_dialog(frm, available) {
     const current = frm.doc.classification;

@@ -195,6 +195,27 @@ def get_security_rollup(security: str, company: Optional[str] = None) -> dict:
     r = _attach_market_value(rows[0])
     r["company"] = company
     r["has_holdings"] = True
+
+    # Earliest classification deadline across Unclassified Holdings — drives
+    # the "auto-classifies in 3d 4h" countdown rendered in the Unclassified
+    # row of the LCM table.
+    deadline_row = frappe.db.sql(
+        """
+        SELECT MIN(classification_deadline) AS deadline
+        FROM `tabInvestment Holding`
+        WHERE security = %s
+          AND company = %s
+          AND status IN ('Open', 'Partially Disposed')
+          AND qty_remaining > 0
+          AND classification = 'Unallocated'
+          AND classification_deadline IS NOT NULL
+        """,
+        (security, company),
+        as_dict=True,
+    )
+    r["earliest_classification_deadline"] = (
+        deadline_row[0]["deadline"] if deadline_row and deadline_row[0]["deadline"] else None
+    )
     return r
 
 

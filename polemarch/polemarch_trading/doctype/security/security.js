@@ -47,6 +47,51 @@ function render_holdings_panel(frm) {
     });
 }
 
+// Convert a classification_deadline timestamp into a human-readable
+// countdown for the Unclassified row. Examples:
+//   "auto-classifies as SiT in 3d 4h"     (3+ days remaining)
+//   "auto-classifies as SiT in 18h 22m"   (under 24 hours)
+//   "auto-classifies as SiT in 22m"       (under an hour)
+//   "PAST DEADLINE — scheduler will flip on next run"  (already expired)
+// Colors: green > 24h, amber 6–24h, red < 6h or expired.
+function format_deadline_countdown(deadline_str) {
+    if (!deadline_str) {
+        return '<span style="color: var(--text-muted)">no classification deadline set</span>';
+    }
+    const deadline = new Date(deadline_str.replace(' ', 'T'));
+    const now = new Date();
+    const diff_ms = deadline - now;
+
+    if (diff_ms <= 0) {
+        return `<span style="color: #ef4444;">⚠ past deadline (${moment(deadline).format('D MMM, HH:mm')}) — scheduler will flip to SiT on next run</span>`;
+    }
+
+    const totalMin = Math.floor(diff_ms / 60000);
+    const days = Math.floor(totalMin / (60 * 24));
+    const hours = Math.floor((totalMin % (60 * 24)) / 60);
+    const minutes = totalMin % 60;
+
+    let pretty;
+    if (days >= 1) {
+        pretty = `${days}d ${hours}h`;
+    } else if (hours >= 1) {
+        pretty = `${hours}h ${minutes}m`;
+    } else {
+        pretty = `${minutes}m`;
+    }
+
+    // Color thresholds in HOURS.
+    const total_hours = diff_ms / 3600000;
+    let color;
+    if (total_hours > 24) color = '#22c55e';      // green: plenty of time
+    else if (total_hours > 6) color = '#f59e0b';  // amber: act soon
+    else color = '#ef4444';                       // red: urgent
+
+    return `<span style="color: ${color};">⏱ auto-classifies as SiT in <b>${pretty}</b></span>
+            <small style="color: var(--text-muted)"> (${moment(deadline).format('D MMM, HH:mm')})</small>`;
+}
+
+
 function build_panel_html(data, security) {
     if (!data.has_holdings) {
         return `
@@ -120,10 +165,21 @@ function build_panel_html(data, security) {
         const rowOpacity = muted ? 'opacity: 0.55;' : '';
         const td = `padding: 8px 12px; vertical-align: top; ${weight} ${border} ${rowOpacity}`;
         const td_r = `${td} text-align: right;`;
-        // Label gets a subtle hint when Unclassified > 0 (this row is "live").
-        const labelHtml = opts.unclassified && units
-            ? `${label} <small style="color: var(--text-muted); font-weight: normal;">(awaiting classification)</small>`
-            : label;
+        // Label gets a countdown when Unclassified has shares.
+        let labelHtml;
+        if (opts.unclassified && units) {
+            const countdown = format_deadline_countdown(opts.deadline);
+            labelHtml = `
+                <div>${label}</div>
+                <div style="font-size: 0.85em; font-weight: normal; margin-top: 2px;">
+                    ${countdown}
+                </div>
+            `;
+        } else if (opts.unclassified && !units) {
+            labelHtml = `${label} <small style="color: var(--text-muted); font-weight: normal;">(no shares awaiting classification)</small>`;
+        } else {
+            labelHtml = label;
+        }
         // Empty cells render as "—" when the value is 0; otherwise normal dual.
         const costCell = !units
             ? '<span style="color: var(--text-muted)">—</span>'
@@ -148,12 +204,14 @@ function build_panel_html(data, security) {
     // Always render Stock in Trade, Investment, and Unclassified rows —
     // even with 0 qty — so the operator sees the classification model at
     // a glance. Phase 24: Unclassified is the pool of shares within the
-    // 5-day window that haven't been assigned to SiT or Investment yet.
+    // 5-day window that haven't been assigned to SiT or Investment yet;
+    // we surface the earliest classification_deadline as a countdown so
+    // operators don't accidentally let them auto-flip to SiT.
     const rows = [];
     rows.push(row('Stock in Trade', data.sit_units || 0, data.sit_cost || 0, data.sit_market, data.sit_lcm || 0));
     rows.push(row('Investment',     data.inv_units || 0, data.inv_cost || 0, data.inv_market, data.inv_lcm || 0));
     rows.push(row('Unclassified',   data.unalloc_units || 0, data.unalloc_cost || 0, data.unalloc_market, data.unalloc_lcm || 0,
-                  { unclassified: true }));
+                  { unclassified: true, deadline: data.earliest_classification_deadline }));
     rows.push(row('TOTAL', data.total_units, data.total_cost, data.total_market, data.total_lcm,
                   { bold: true, topBorder: true }));
 
