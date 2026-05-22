@@ -73,12 +73,36 @@ class SecurityPurchase(Document):
         if wallet_txn and hasattr(self, "wallet_transaction_ref"):
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
+    def before_cancel(self):
+        # Frappe's check_links runs BEFORE on_cancel and refuses to cancel a
+        # doc with active Dynamic Links pointing at it. Our Wallet Transaction
+        # (created by _post_wallet_transaction_if_any) has reference_name=this
+        # SP, which would block cancel. We handle that link in on_cancel by
+        # posting a reversal + severing the reference, but check_links runs
+        # before on_cancel so we'd be too late. Sever the WT link HERE so the
+        # link check passes; the reversal still happens in on_cancel below.
+        self._sever_wallet_transaction_link_if_any()
+
     def on_cancel(self):
         self._guard_holding_untouched()
         self._reverse_wallet_transaction_if_any()
         self._restore_customer_holding_snapshot()
         self._delete_investment_holding()
         self._cancel_journal_entry()
+
+    def _sever_wallet_transaction_link_if_any(self):
+        """Clear WT.reference_name on the linked Wallet Transaction so
+        Frappe's link check doesn't block this cancel. Idempotent — safe
+        to call multiple times. The reversal posted in on_cancel records
+        the cancel reason in remarks, preserving audit trail."""
+        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
+            return
+        if frappe.db.exists("Wallet Transaction", self.wallet_transaction_ref):
+            frappe.db.set_value(
+                "Wallet Transaction", self.wallet_transaction_ref,
+                {"reference_doctype": "", "reference_name": ""},
+                update_modified=False,
+            )
 
     # ── validate-time ────────────────────────────────────────────────
 

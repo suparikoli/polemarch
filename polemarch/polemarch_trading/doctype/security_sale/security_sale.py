@@ -86,6 +86,13 @@ class SecuritySale(Document):
         if wallet_txn and hasattr(self, "wallet_transaction_ref"):
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
+    def before_cancel(self):
+        # See Security Purchase.before_cancel — Frappe's check_links runs
+        # before on_cancel and would block cancel because the Wallet
+        # Transaction has reference_name pointing here. Sever the link
+        # pre-emptively; reversal still happens in on_cancel below.
+        self._sever_wallet_transaction_link_if_any()
+
     def on_cancel(self):
         # Reverse JEs and wallet first (no inventory dependency), then
         # cancel the Disposal (its on_cancel restores qty_disposed on the
@@ -94,6 +101,18 @@ class SecuritySale(Document):
         self._cancel_journal_entries()
         self._cancel_investment_disposal()
         self._reverse_customer_holding_snapshot()
+
+    def _sever_wallet_transaction_link_if_any(self):
+        """Clear WT.reference_name on the linked Wallet Transaction so
+        Frappe's link check doesn't block this cancel. Idempotent."""
+        if not hasattr(self, "wallet_transaction_ref") or not self.wallet_transaction_ref:
+            return
+        if frappe.db.exists("Wallet Transaction", self.wallet_transaction_ref):
+            frappe.db.set_value(
+                "Wallet Transaction", self.wallet_transaction_ref,
+                {"reference_doctype": "", "reference_name": ""},
+                update_modified=False,
+            )
 
     # ── validate-time ────────────────────────────────────────────────
 
