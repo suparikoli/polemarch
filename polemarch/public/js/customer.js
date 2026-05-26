@@ -102,6 +102,129 @@ function render_polemarch_dashboard(frm) {
 
 function _build_polemarch_dashboard_html(d, customer) {
     const fmt = (n) => frappe.format(n, { fieldtype: "Currency", options: d.currency || "INR" }, { inline: true }, null);
+    const fmt_n = (n) => frappe.format(n || 0, { fieldtype: "Float", precision: 0 });
+
+    // ── Top stat cards — Wallet · Holdings · Trades · KYC ──
+    const wallet = d.wallet;
+    const positions = d.positions;
+
+    const wallet_card = wallet
+        ? `<a href="/app/wallet/${encodeURIComponent(wallet.wallet)}" style="text-decoration:none;color:inherit">
+              <div style="border:1px solid var(--border-color);border-left:4px solid #4F46E5;border-radius:8px;padding:12px">
+                  <div class="text-muted small">${__("Wallet Available")}</div>
+                  <div style="font-size:22px;font-weight:600">${fmt(wallet.balance_available)}</div>
+                  <div class="text-muted" style="font-size:11px;margin-top:4px">
+                      ${__("Total: {0}", [fmt(wallet.balance_total)])} ·
+                      ${__("Reserved: {0}", [fmt(wallet.balance_reserved)])}
+                  </div>
+              </div>
+           </a>`
+        : `<div style="border:1px solid var(--border-color);border-left:4px solid #9CA3AF;border-radius:8px;padding:12px;opacity:0.6">
+              <div class="text-muted small">${__("Wallet")}</div>
+              <div style="font-size:14px;color:var(--text-muted);margin-top:6px">${__("Not provisioned")}</div>
+           </div>`;
+
+    const positions_card = positions && positions.count > 0
+        ? `<a href="/app/customer-holding/view/list?customer=${encodeURIComponent(customer)}" style="text-decoration:none;color:inherit">
+              <div style="border:1px solid var(--border-color);border-left:4px solid #22C55E;border-radius:8px;padding:12px">
+                  <div class="text-muted small">${__("Holdings")}</div>
+                  <div style="font-size:22px;font-weight:600">${positions.count}</div>
+                  <div class="text-muted" style="font-size:11px;margin-top:4px">
+                      ${__("{0} units total", [fmt_n(positions.total_qty)])}
+                  </div>
+              </div>
+           </a>`
+        : `<div style="border:1px solid var(--border-color);border-left:4px solid #9CA3AF;border-radius:8px;padding:12px;opacity:0.6">
+              <div class="text-muted small">${__("Holdings")}</div>
+              <div style="font-size:14px;color:var(--text-muted);margin-top:6px">${__("None yet")}</div>
+           </div>`;
+
+    const link_invoices = `/app/sales-invoice/view/list?customer=${encodeURIComponent(customer)}&custom_is_polemarch_invoice=1`;
+    const trades_card = `<a href="${link_invoices}" style="text-decoration:none;color:inherit">
+        <div style="border:1px solid var(--border-color);border-left:4px solid #0EA5E9;border-radius:8px;padding:12px">
+            <div class="text-muted small">${__("Trades (Submitted)")}</div>
+            <div style="font-size:22px;font-weight:600">${d.total_orders}</div>
+            <div class="text-muted" style="font-size:11px;margin-top:4px">
+                ${__("Invested: {0}", [fmt(d.total_invested)])}
+            </div>
+        </div>
+    </a>`;
+
+    const completeness = d.kyc ? d.kyc.completeness : 0;
+    const completeness_color = completeness === 100 ? "#22C55E" : completeness >= 60 ? "#F59E0B" : "#EF4444";
+    const kyc_card = `<div style="border:1px solid var(--border-color);border-left:4px solid ${completeness_color};border-radius:8px;padding:12px">
+        <div class="text-muted small">${__("KYC Completeness")}</div>
+        <div style="font-size:22px;font-weight:600;color:${completeness_color}">${completeness}%</div>
+        <div class="text-muted" style="font-size:11px;margin-top:4px">
+            ${(d.kyc && d.kyc.items || []).filter(i => i.ok).length} / ${(d.kyc && d.kyc.items || []).length} ${__("checks passed")}
+        </div>
+    </div>`;
+
+    // ── Wallet detail panel ──
+    const wallet_panel = wallet
+        ? `<div style="border:1px solid var(--border-color);border-radius:8px;padding:14px;background:var(--card-bg)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <h5 style="margin:0">${__("Wallet")} — <a href="/app/wallet/${encodeURIComponent(wallet.wallet)}" style="font-size:0.9em">${wallet.wallet}</a></h5>
+                  <span class="indicator ${wallet.status === 'Active' ? 'green' : 'grey'}">${frappe.utils.escape_html(wallet.status || '')}</span>
+              </div>
+              <table style="width:100%;margin-top:8px">
+                  <tr><td class="text-muted">${__("Available")}</td><td class="text-right" style="font-weight:600;color:#22C55E">${fmt(wallet.balance_available)}</td></tr>
+                  <tr><td class="text-muted">${__("Reserved")}</td><td class="text-right" style="color:#F59E0B">${fmt(wallet.balance_reserved)}</td></tr>
+                  <tr style="border-top:1px solid var(--border-color)"><td class="text-muted" style="padding-top:6px"><b>${__("Total")}</b></td><td class="text-right" style="font-weight:600;padding-top:6px">${fmt(wallet.balance_total)}</td></tr>
+              </table>
+              ${wallet.last_transaction ? `
+                  <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-color);font-size:12px;color:var(--text-muted)">
+                      ${__("Last: ")} <b>${wallet.last_transaction.direction} ${wallet.last_transaction.txn_type}</b>
+                      ${fmt(wallet.last_transaction.amount)} ·
+                      ${frappe.utils.escape_html(wallet.last_transaction.posting_datetime || '')}
+                  </div>
+              ` : ''}
+              <div style="margin-top:10px;font-size:12px">
+                  <a href="/app/wallet-transaction/view/list?wallet=${encodeURIComponent(wallet.wallet)}">${__("View transactions →")}</a> ·
+                  <a href="/app/wallet-deposit/new?customer=${encodeURIComponent(customer)}">${__("Deposit")}</a> ·
+                  <a href="/app/wallet-withdrawal/new?customer=${encodeURIComponent(customer)}">${__("Withdrawal")}</a>
+              </div>
+           </div>`
+        : `<div style="border:1px solid var(--border-color);border-radius:8px;padding:14px;background:var(--card-bg)">
+              <h5 style="margin:0">${__("Wallet")}</h5>
+              <div class="text-muted" style="margin-top:8px">${__("No wallet provisioned for this customer.")}</div>
+              <div style="margin-top:8px;font-size:12px">
+                  <a href="/app/wallet/new?customer=${encodeURIComponent(customer)}">${__("Create Wallet →")}</a>
+              </div>
+           </div>`;
+
+    // ── Holdings table ──
+    const holding_rows = positions && positions.rows && positions.rows.length
+        ? positions.rows.map((p) => `
+              <tr>
+                  <td><a href="/app/security/${encodeURIComponent(p.security)}">${frappe.utils.escape_html(p.security)}</a></td>
+                  <td>${frappe.utils.escape_html(p.security_name || '')}</td>
+                  <td class="text-right">${fmt_n(p.qty_held)}</td>
+                  <td class="text-muted" style="font-size:11px">${frappe.utils.escape_html(p.source || '')}</td>
+              </tr>
+          `).join("")
+        : `<tr><td colspan="4" class="text-muted text-center" style="padding:12px">${__("No holdings yet.")}</td></tr>`;
+
+    const holdings_panel = `<div style="border:1px solid var(--border-color);border-radius:8px;padding:14px;background:var(--card-bg)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h5 style="margin:0">${__("Holdings")} ${positions && positions.count ? `<span class="text-muted" style="font-weight:normal">(${positions.count})</span>` : ''}</h5>
+            <a href="/app/customer-holding/view/list?customer=${encodeURIComponent(customer)}" style="font-size:12px">${__("View all →")}</a>
+        </div>
+        <table class="table" style="margin:0;font-size:13px">
+            <thead><tr>
+                <th style="font-weight:600">${__("Security")}</th>
+                <th style="font-weight:600">${__("Name")}</th>
+                <th class="text-right" style="font-weight:600">${__("Qty Held")}</th>
+                <th style="font-weight:600">${__("Source")}</th>
+            </tr></thead>
+            <tbody>${holding_rows}</tbody>
+        </table>
+        <div class="text-muted" style="font-size:11px;margin-top:6px">
+            ${__("Customer Holdings are a CRM snapshot of what each customer holds in their own demat — NOT on Polemarch's books.")}
+        </div>
+    </div>`;
+
+    // ── Recent Trades + KYC Checklist ──
     const rec = (d.recent_trades || []).map((t) => `
         <tr>
             <td><a href="/app/sales-invoice/${encodeURIComponent(t.name)}">${frappe.utils.escape_html(t.name)}</a></td>
@@ -117,36 +240,23 @@ function _build_polemarch_dashboard_html(d, customer) {
             <span style="${i.ok ? "" : "color:#b54708"}">${frappe.utils.escape_html(i.label)}</span>
         </li>
     `).join("");
-    const completeness = d.kyc ? d.kyc.completeness : 0;
-    const completeness_color = completeness === 100 ? "#0a7847" : completeness >= 60 ? "#b54708" : "#b91c1c";
-
-    const link_invoices = `/app/sales-invoice/view/list?customer=${encodeURIComponent(customer)}&custom_is_polemarch_invoice=1`;
-    const link_orders = `/app/sales-order/view/list?customer=${encodeURIComponent(customer)}&custom_is_polemarch_order=1`;
 
     return `
+        <!-- Top stat cards -->
         <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px">
-            <a href="${link_invoices}" style="text-decoration:none;color:inherit">
-                <div style="border:1px solid var(--border-color);border-radius:8px;padding:12px">
-                    <div class="text-muted small">${__("Trades (Submitted)")}</div>
-                    <div style="font-size:22px;font-weight:600">${d.total_orders}</div>
-                </div>
-            </a>
-            <div style="border:1px solid var(--border-color);border-radius:8px;padding:12px">
-                <div class="text-muted small">${__("Total Invested")}</div>
-                <div style="font-size:22px;font-weight:600">${fmt(d.total_invested)}</div>
-            </div>
-            <a href="${link_orders}" style="text-decoration:none;color:inherit">
-                <div style="border:1px solid var(--border-color);border-radius:8px;padding:12px">
-                    <div class="text-muted small">${__("Pending Invoices")}</div>
-                    <div style="font-size:22px;font-weight:600">${d.pending_orders}</div>
-                </div>
-            </a>
-            <div style="border:1px solid var(--border-color);border-radius:8px;padding:12px">
-                <div class="text-muted small">${__("KYC Completeness")}</div>
-                <div style="font-size:22px;font-weight:600;color:${completeness_color}">${completeness}%</div>
-            </div>
+            ${wallet_card}
+            ${positions_card}
+            ${trades_card}
+            ${kyc_card}
         </div>
 
+        <!-- Wallet + Holdings detail row -->
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:16px">
+            ${wallet_panel}
+            ${holdings_panel}
+        </div>
+
+        <!-- Recent Trades + KYC Checklist row -->
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
             <div>
                 <h5>${__("Recent Trades")}</h5>
