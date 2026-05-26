@@ -4,6 +4,15 @@ from polemarch.install import POLEMARCH_CUSTOMER_GROUP
 
 
 def validate(doc, method=None):
+    # Mithtech-only customers are explicitly OFF the Polemarch path —
+    # operator-managed escape hatch for non-trading lines of business.
+    # Force the polemarch flag off (so the tab + dashboard collapse) and
+    # skip the primary-contact requirement (Mithtech-only customers
+    # don't need DP / KYC plumbing).
+    if doc.get("custom_is_mithtech_only"):
+        doc.custom_is_polemarch_customer = 0
+        _sync_customer_name_from_primary_contact(doc)
+        return
     doc.custom_is_polemarch_customer = 1 if _is_polemarch_customer(doc) else 0
     _sync_customer_name_from_primary_contact(doc)
     _enforce_primary_contact_for_polemarch(doc)
@@ -22,7 +31,13 @@ def _is_polemarch_customer(doc) -> bool:
     The original validate-time logic only checked the first two, which
     left customers transacted via the Polemarch trading subsystem
     invisible in the Polemarch tab. This expansion captures everyone
-    who's actually doing something Polemarch-related."""
+    who's actually doing something Polemarch-related.
+
+    Note: callers should short-circuit this for `custom_is_mithtech_only`
+    customers — that's an explicit operator opt-out and overrides every
+    auto-signal below."""
+    if doc.get("custom_is_mithtech_only"):
+        return False
     if doc.get("custom_dp_details"):
         return True
     if doc.customer_group == POLEMARCH_CUSTOMER_GROUP:
