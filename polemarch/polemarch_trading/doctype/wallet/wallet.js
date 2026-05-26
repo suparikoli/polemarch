@@ -17,21 +17,35 @@
 // server-side endpoint needed; uses frappe.db.get_list on the Wallet
 // Transaction child.
 
+const PASSBOOK_PAGE_SIZE = 100;
+const PASSBOOK_MAX_IN_FORM = 1000;  // beyond this, redirect to full list view
+
 frappe.ui.form.on('Wallet', {
     refresh(frm) {
         if (frm.is_new()) return;
-        render_passbook(frm);
+        // Reset paging state on refresh so navigating away + back gives a
+        // fresh window.
+        frm.__passbook_offset = 0;
+        frm.__passbook_rows = [];
+        load_and_render_passbook(frm);
     },
 });
 
-function render_passbook(frm) {
-    const d = frm.dashboard || {};
-    const mount = (d.wrapper && d.wrapper.length) ? d.wrapper
-        : (d.parent && d.parent.length) ? d.parent
-        : $(frm.wrapper).find('.layout-main-section, .form-page').first();
-    mount.find('.polemarch-wallet-passbook').remove();
+// Load total count + the first page, then call render.
+function load_and_render_passbook(frm) {
+    Promise.all([
+        frappe.db.count('Wallet Transaction', { wallet: frm.doc.name, docstatus: 1 }),
+        fetch_passbook_page(frm, 0, PASSBOOK_PAGE_SIZE),
+    ]).then(([total, rows]) => {
+        frm.__passbook_total = Number(total || 0);
+        frm.__passbook_rows = rows || [];
+        frm.__passbook_offset = (rows || []).length;
+        render_passbook(frm);
+    });
+}
 
-    frappe.db.get_list('Wallet Transaction', {
+function fetch_passbook_page(frm, start, limit) {
+    return frappe.db.get_list('Wallet Transaction', {
         filters: { wallet: frm.doc.name, docstatus: 1 },
         fields: [
             'name', 'posting_datetime', 'txn_type', 'direction', 'amount',
@@ -40,14 +54,42 @@ function render_passbook(frm) {
             'is_cancelled', 'reversed_by', 'reverses', 'remarks',
         ],
         order_by: 'posting_datetime desc, creation desc',
-        limit: 100,
-    }).then((rows) => {
-        const html = build_passbook_html(frm, rows || []);
-        mount.prepend(html);
+        start: start,
+        limit: limit,
     });
 }
 
-function build_passbook_html(frm, rows) {
+function render_passbook(frm) {
+    const d = frm.dashboard || {};
+    const mount = (d.wrapper && d.wrapper.length) ? d.wrapper
+        : (d.parent && d.parent.length) ? d.parent
+        : $(frm.wrapper).find('.layout-main-section, .form-page').first();
+    mount.find('.polemarch-wallet-passbook').remove();
+
+    const html = build_passbook_html(
+        frm,
+        frm.__passbook_rows || [],
+        frm.__passbook_total || 0,
+    );
+    mount.prepend(html);
+
+    // Wire the "Load 100 more" button.
+    mount.find('.polemarch-passbook-load-more').on('click', (e) => {
+        e.preventDefault();
+        const offset = frm.__passbook_offset || 0;
+        const remaining = (frm.__passbook_total || 0) - offset;
+        if (remaining <= 0) return;
+        const $btn = $(e.currentTarget);
+        $btn.text('Loading…').css('pointer-events', 'none');
+        fetch_passbook_page(frm, offset, PASSBOOK_PAGE_SIZE).then((more) => {
+            frm.__passbook_rows = (frm.__passbook_rows || []).concat(more || []);
+            frm.__passbook_offset = offset + (more || []).length;
+            render_passbook(frm);
+        });
+    });
+}
+
+function build_passbook_html(frm, rows, total) {
     const fmt = (v) => frappe.format(v || 0, { fieldtype: 'Currency', options: frm.doc.currency || 'INR' });
     const dt = (s) => s ? moment(s).format('D MMM YYYY, HH:mm') : '';
 
@@ -110,6 +152,41 @@ function build_passbook_html(frm, rows) {
 
     const view_all_link = `/app/wallet-transaction/view/list?wallet=${encodeURIComponent(frm.doc.name)}`;
 
+    // Pagination control: how many we have vs how many exist
+    const loaded = rows.length;
+    const showing_text = (total > 0 && total !== loaded)
+        ? `Showing ${loaded.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} transactions`
+        : `${loaded.toLocaleString('en-IN')} transaction${loaded === 1 ? '' : 's'}`;
+
+    const remaining = Math.max(0, total - loaded);
+    // Hard cap on in-form pagination — past 1000 rows the form starts
+    // feeling sluggish; nudge the operator to the full list view instead.
+    let load_more_html = '';
+    if (remaining > 0 && loaded < PASSBOOK_MAX_IN_FORM) {
+        const next_page = Math.min(PASSBOOK_PAGE_SIZE, remaining);
+        load_more_html = `
+          <div style="padding: 10px 14px; background: var(--bg-color); border-top: 1px solid var(--border-color);
+                      display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-muted); font-size: 12px;">
+              ${remaining.toLocaleString('en-IN')} older transaction${remaining === 1 ? '' : 's'} not shown.
+            </span>
+            <button type="button" class="polemarch-passbook-load-more btn btn-default btn-sm"
+                    style="cursor: pointer;">
+              Load ${next_page} more
+            </button>
+          </div>
+        `;
+    } else if (remaining > 0 && loaded >= PASSBOOK_MAX_IN_FORM) {
+        load_more_html = `
+          <div style="padding: 10px 14px; background: var(--bg-color); border-top: 1px solid var(--border-color);
+                      font-size: 12px; color: var(--text-muted);">
+            ⚠ ${remaining.toLocaleString('en-IN')} older transactions exist but the in-form passbook
+            is capped at ${PASSBOOK_MAX_IN_FORM.toLocaleString('en-IN')} for performance.
+            <a href="${view_all_link}">Open the full Wallet Transaction list →</a> to scroll further.
+          </div>
+        `;
+    }
+
     return `
       <div class="polemarch-wallet-passbook" style="
           margin: 0 0 16px 0;
@@ -122,9 +199,7 @@ function build_passbook_html(frm, rows) {
                     display: flex; justify-content: space-between; align-items: center;">
           <div>
             <b style="font-size: 14px;">Passbook</b>
-            <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">
-              ${rows.length === 100 ? 'showing last 100' : `${rows.length} transaction${rows.length === 1 ? '' : 's'}`}
-            </span>
+            <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">${showing_text}</span>
           </div>
           <div style="font-size: 12px;">
             <a href="${view_all_link}">View all →</a> &nbsp;·&nbsp;
@@ -133,12 +208,14 @@ function build_passbook_html(frm, rows) {
           </div>
         </div>
 
-        <div style="overflow-x: auto;">
+        <div style="overflow-x: auto; max-height: 600px; overflow-y: auto;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-            <thead>${header_html}</thead>
+            <thead style="position: sticky; top: 0; z-index: 1;">${header_html}</thead>
             <tbody>${body_html}</tbody>
           </table>
         </div>
+
+        ${load_more_html}
 
         <div style="padding: 8px 14px; background: var(--bg-color); border-top: 1px solid var(--border-color);
                     font-size: 11px; color: var(--text-muted);">
