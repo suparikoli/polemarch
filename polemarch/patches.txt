@@ -143,3 +143,10 @@ polemarch.patches.v0_24_0.backfill_classification_child_rows
 # the form because the breakdown panel + child table render the same
 # info more usefully.
 polemarch.patches.v0_24_0.hide_legacy_classification_fields
+# Backfill custom_is_polemarch_customer=1 on existing customers who
+# transact via the Polemarch trading subsystem (Wallet, Customer
+# Holding, Polemarch invoice, Security Sale/Purchase party). The
+# original validate-time logic only flipped the flag for DP Details
+# holders or Polemarch Group members, so trading-only customers were
+# left with the Polemarch tab + dashboard hidden. Idempotent.
+polemarch.patches.v0_24_0.backfill_is_polemarch_customer
