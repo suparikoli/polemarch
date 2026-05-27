@@ -24,6 +24,10 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from polemarch.polemarch_trading.controller_helpers import (
+    sever_wallet_transaction_link,
+)
+
 
 class WalletWithdrawal(Document):
     def validate(self):
@@ -38,6 +42,15 @@ class WalletWithdrawal(Document):
         je_name = self._post_journal_entry()
         self.db_set("wallet_transaction_ref", wt_name, update_modified=False)
         self.db_set("journal_entry_ref", je_name, update_modified=False)
+
+    def before_cancel(self):
+        # Gap 6 fix: sever the WT.reference link before on_cancel runs
+        # wallet.reverse(). Otherwise wallet.reverse() copies the original
+        # WT's reference_doctype/_name (= this Withdrawal) onto the new
+        # reversal WT, and Frappe's _validate_links blocks because this
+        # Withdrawal is being cancelled in the current transaction (cannot
+        # link a fresh doc to a cancelled doc).
+        sever_wallet_transaction_link("Wallet Withdrawal", self.name)
 
     def on_cancel(self):
         self._reverse_wallet_transaction()
