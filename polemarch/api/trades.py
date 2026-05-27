@@ -1,7 +1,7 @@
-"""Quick-create a Polemarch Sales Invoice for back-office trades booked
-outside Medusa. The brand-aware validate hook on Sales Invoice already
-takes care of tax-template + cost-center + Polemarch tagging — this
-endpoint is just a thin wrapper that builds the doc from the dialog.
+"""Quick-create a Polemarch Sales Invoice from a back-office dialog.
+The brand-aware validate hook on Sales Invoice already takes care of
+tax-template + cost-center + Polemarch tagging — this endpoint is just
+a thin wrapper that builds the doc from the dialog payload.
 """
 
 import json

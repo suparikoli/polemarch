@@ -39,8 +39,6 @@ doc_events = {
         # Template to every brand=Polemarch item — see
         # `polemarch.overrides.item.validate`.
         "validate": "polemarch.overrides.item.validate",
-        "on_update": "polemarch.overrides.item.on_update",
-        "on_trash": "polemarch.overrides.item.on_trash",
     },
     "Sales Invoice": {
         "validate": "polemarch.overrides.sales_invoice.validate",

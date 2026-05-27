@@ -3,10 +3,15 @@
 ERPNext customizations for the **Polemarch** business unit (securities trading: unlisted shares, pre-IPO, bonds, MFs, AIF, REIT, InvIT) operating under **Mithtech Innovative Solutions PVT LTD**, alongside the **Mithtech Services** business unit.
 
 This app provides:
-- Brand-aware data model separating Polemarch (no GST) from Mithtech Services (GST 18%)
+
+- Brand-aware data model separating Polemarch (no GST — Schedule III, CGST Act) from Mithtech Services (GST 18%)
+- A custom **Securities Trading subsystem**: Security Purchase / Sale, Investment Holding with child-table classifications (SiT vs Investment), Customer Holding (CRM snapshot), Portfolio Transfer, Wallet (deposit / withdrawal / reservation / settlement), and append-only Wallet Transactions
+- Auto-classification of new lots into Stock-in-Trade vs Investment after a 5-business-day operator window
 - A Sale Transfer Order print format for Polemarch sales invoices
-- Bidirectional sync with a Medusa v2 storefront (Items, Customers, Orders) — only Polemarch entities sync
-- A Polemarch desk workspace with charts, number cards, and shortcuts
+- A Polemarch desk workspace with charts, Number Cards (Total / SiT / Investment / Unclassified holdings value), and shortcuts
+- Daily reconciliation audit jobs (Investment Account ↔ Holdings, Wallet ledger ↔ balances, Holdings cache ↔ Investment Holdings)
+
+The app is a **passive ERPNext customization** — it exposes Frappe's standard REST API. External integrations (storefront, mobile app, etc.) are the responsibility of whatever upstream system calls Frappe.
 
 ## Installation
 
@@ -19,130 +24,51 @@ bench --site <your-site> migrate
 ```
 
 The `after_install` / `after_migrate` hooks idempotently create:
+
+- Module Def `Polemarch Trading`
 - Brands `Polemarch` and `Mithtech Services`
 - Customer Group `Polemarch`
 - Custom fields on Customer, Item, Sales Invoice, Sales Order
-- Sales Taxes and Charges Templates per Company: `Polemarch - No GST` and `Mithtech Services - GST 18%`
+- Item Tax Template `Polemarch - Non-GST`
+- Service items `POLEMARCH-PROC-FEE` and `POLEMARCH-LOW-ORDER-FEE`
+- Polemarch sales naming series `POL-.YYYY.-.#####`
 
 ## Brand-aware behaviour
 
-- A Customer is auto-tagged `custom_is_polemarch_customer = 1` if they have a row in `custom_dp_details` or are in the `Polemarch` Customer Group.
+- A Customer is auto-tagged `custom_is_polemarch_customer = 1` if **any** of these is true: a DP Details row, member of the `Polemarch` Customer Group, has a Wallet, has a Customer Holding, is the party on a submitted Security Sale / Purchase, or has any submitted Polemarch invoice.
+- A Customer can be opted out with `custom_is_mithtech_only` — the Polemarch + KYC tabs collapse and the auto-flag is forced off.
 - A Sales Invoice / Sales Order is auto-tagged `custom_is_polemarch_invoice` (or `_order`) if **all** line items have `brand = Polemarch`. Mixed-brand documents are rejected.
-- The relevant tax template is auto-applied if the user hasn't picked one.
-- The Sales Invoice print dialog defaults to **Polemarch Sale Transfer Order** for Polemarch invoices and **GST Tax Invoice** for Mithtech Services invoices.
+- The Sales Invoice print dialog defaults to **Polemarch Sale Transfer Order** for Polemarch invoices.
 
-## Configuring the Medusa Integration — ERPNext side
+## Trading subsystem
 
-1. Open **Medusa Settings** (Single DocType: Desk → search "Medusa Settings").
-2. Fill in:
-   - `Medusa URL` — base URL of your Medusa v2 backend, e.g. `https://store.polemarch.in`
-   - `Medusa Admin API Key` — created in the Medusa Admin UI under Settings → API Key Management → "Secret Keys"
-   - `Medusa Publishable API Key` — same UI, "Publishable Keys" tab; required for storefront API
-   - `Medusa Webhook Secret` — any random 32+ char string; must match the secret you set on the Medusa side (see below)
-   - `Default Sales Channel ID`, `Default Region ID`, `Default Warehouse`, `Default Brand` (= `Polemarch`), `Default Polemarch Customer Group` (= `Polemarch`), `Default Price List`
-   - Tick `Enable Sync`
-3. Save. The controller validates that URL and admin API key are present.
-4. Inbound webhook URL exposed by ERPNext:
-   ```
-   https://<your-erpnext-site>/api/method/polemarch.medusa.webhooks.receive
-   ```
-   This endpoint is `allow_guest=True`. Security is HMAC-SHA256 of the raw body using the `Medusa Webhook Secret`, sent in header `x-medusa-signature`. Requests without a valid signature are rejected with 401 and logged in `Medusa Sync Log`.
-5. Manual full re-sync (for backfill or recovery):
-   ```bash
-   bench --site <site> execute polemarch.medusa.reconcile.full_resync
-   ```
-6. The hourly reconciler (`polemarch.medusa.reconcile.run_hourly`) is auto-scheduled via `scheduler_events.hourly`. It catches missed webhooks and re-pushes Polemarch items.
+See [`docs/purchase-cycle.md`](docs/purchase-cycle.md) and [`docs/sales-cycle.md`](docs/sales-cycle.md) for the full operator-facing lifecycle. In brief:
 
-## Configuring the Medusa Integration — Medusa v2 side
+- **Security Purchase** — books inventory into `Investment Holding`, debits `Securities Inventory`, credits the chosen payment source (Wallet / Bank / Cash / Supplier).
+- **Investment Holding** — append-only child-table classifications (SiT / Investment). A new lot lands as Unclassified; operator has 5 business days to classify, then the auto-classifier flips remaining qty to SiT.
+- **Security Sale** — consumes from `Investment Holding` via classification-aware FIFO, books realised gain via Capital Gains Auto-JE.
+- **Portfolio Transfer** — reclassifies SiT ↔ Investment in-place on the source IH (no fragmentation).
+- **Wallet** — bank-passbook-style ledger; all writes go through `apply_delta` / `reverse` in the wallet engine. Form renders the last 100 rows with DR/CR + running balance and a "Load 100 more" pagination control.
 
-1. In the Medusa Admin UI, create an **Admin API Key** and a **Publishable API Key**. Paste both into ERPNext's `Medusa Settings`.
-2. Add a Subscriber that forwards Medusa events to ERPNext. Create `src/subscribers/erpnext-forward.ts`:
-   ```ts
-   import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework"
-   import crypto from "crypto"
+## Daily audits
 
-   const ERPNEXT_URL = process.env.ERPNEXT_URL!         // e.g. https://erp.polemarch.in
-   const SECRET     = process.env.ERPNEXT_WEBHOOK_SECRET!
+Wired into `scheduler_events.daily`:
 
-   export default async function forwardToErpnext({ event }: SubscriberArgs<any>) {
-     const body = JSON.stringify({ event: event.name, data: event.data, id: event.id })
-     const signature = crypto.createHmac("sha256", SECRET).update(body).digest("hex")
-     await fetch(`${ERPNEXT_URL}/api/method/polemarch.medusa.webhooks.receive`, {
-       method: "POST",
-       headers: {
-         "Content-Type": "application/json",
-         "x-medusa-signature": signature,
-         "x-medusa-event-id": event.id ?? "",
-       },
-       body,
-     })
-   }
+- `polemarch.polemarch_trading.audit.verify_inventory_account_matches_holdings` — drift between `Securities Inventory` GL balance and sum of `Investment Holding.remaining_cost`
+- `polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger` — drift between Wallet doc balances and replayed Wallet Transactions
+- `polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache` — drift between `Security.qty_*` / `cost_total` cache and live IH aggregation
 
-   export const config: SubscriberConfig = {
-     event: [
-       "customer.created",
-       "customer.updated",
-       "order.placed",
-       "order.payment_captured",
-       "order.fulfillment_created",
-       "order.canceled",
-     ],
-   }
-   ```
-3. In Medusa's `.env`:
-   ```
-   ERPNEXT_URL=https://erp.polemarch.in
-   ERPNEXT_WEBHOOK_SECRET=<same value as Medusa Webhook Secret in ERPNext>
-   ```
-4. Restart the Medusa server. The subscriber registers automatically.
-
-## Adding a new outbound API call (ERPNext → Medusa)
-
-All outbound calls go through `polemarch.medusa.client.MedusaClient`:
-
-```python
-from polemarch.medusa.client import get_client
-
-client = get_client()        # returns None if sync is disabled
-if client:
-    response = client.post("/admin/products", json_body={"title": "..."}, idempotency_key="…")
-```
-
-Rules:
-- Wrap pushes triggered from doc events in `frappe.enqueue(..., queue="short", enqueue_after_commit=True)` so form saves stay snappy and a transient Medusa outage doesn't break the user's save.
-- Always emit a `Medusa Sync Log` row via `polemarch.medusa.log.write_log(...)` — both on success and on failure.
-- Pass an `idempotency_key` derived from the entity name + last-modified hash so retries don't dupe.
-
-## Adding a new inbound webhook event
-
-1. Add the event name to `EVENT_DISPATCH` in [polemarch/medusa/webhooks.py](polemarch/polemarch/medusa/webhooks.py) and write a small handler that delegates to the right module:
-   ```python
-   def _handle_my_new_event(data, event_id=None):
-       from polemarch.medusa.sync_orders import handle_my_new_event
-       return handle_my_new_event(data, event_id=event_id)
-
-   EVENT_DISPATCH["order.something_new"] = _handle_my_new_event
-   ```
-2. Implement the handler in `polemarch/medusa/sync_orders.py` (or wherever it belongs) and call `write_log(...)` for both outcomes.
-3. On the Medusa side, append the event name to the `event` array of `erpnext-forward.ts` and restart Medusa.
-4. Test end-to-end with a captured payload:
-   ```bash
-   BODY='{"event":"order.something_new","data":{...}}'
-   SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$ERPNEXT_WEBHOOK_SECRET" | awk '{print $2}')
-   curl -X POST https://<site>/api/method/polemarch.medusa.webhooks.receive \
-     -H "Content-Type: application/json" \
-     -H "x-medusa-signature: $SIG" \
-     -d "$BODY"
-   ```
+Drift > ₹100 (or any qty mismatch) logs a row to `Polemarch Audit Log`.
 
 ## Troubleshooting
 
 | Symptom | Where to look |
 |---|---|
-| Sync isn't happening | `Medusa Settings.enable_sync` is on? `Error Log` and `Medusa Sync Log` for failures. |
-| Webhook returns 401 | Secret mismatch between `Medusa Webhook Secret` in ERPNext and `ERPNEXT_WEBHOOK_SECRET` in Medusa env. |
-| Stale data | `bench --site <site> execute polemarch.medusa.reconcile.full_resync` |
-| Wrong print format on Sales Invoice | Make sure all line items have `brand = Polemarch`. Mixed brands trigger a validation error and won't auto-tag. |
+| Polemarch tab missing on a customer who should see it | `custom_is_polemarch_customer` is set? `custom_is_mithtech_only` is off? Hard-refresh after toggling either. |
+| Wrong print format on Sales Invoice | All line items must have `brand = Polemarch`. Mixed brands trigger a validation error and won't auto-tag. |
+| Number Cards blank on the workspace | Confirm cards are type=`Document Type` (Frappe v16 doesn't render `Custom` cards in workspaces). Re-run `polemarch.patches.v0_21_0.seed_holdings_number_cards`. |
+| Holdings breakdown stale | Re-save the affected Investment Holding (triggers `holdings_cache.on_investment_holding_change`), or run the daily audit manually. |
+| Cancel cascade fails on Security Purchase / Sale | Look at `flags._pending_wt_reversal` on the doc — `before_cancel` stashes Wallet Transaction names there for `on_cancel` to reverse. |
 
 ## Contributing
 

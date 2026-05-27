@@ -1,10 +1,9 @@
 """KYC verification actions on Polemarch customers.
 
 Verify / reject the KYC submission, write an audit comment, email the
-customer. The Frappe→Medusa push was removed in the Medusa-owned-sync
-refactor — the Medusa storefront should poll Frappe's
-`Customer.custom_kyc_status` field via standard REST on its own schedule
-to surface state changes in the storefront UI.
+customer. External systems that need to react to KYC state changes
+should poll Frappe's `Customer.custom_kyc_status` field via the standard
+REST API on their own schedule.
 """
 
 import frappe
@@ -55,9 +54,6 @@ def _set_status(customer: str, status: str, reason: str = ""):
     frappe.db.commit()
 
     _send_email(doc, status, reason)
-    # Frappe→Medusa push removed. The Medusa-side plugin reads
-    # `Customer.custom_kyc_status` from Frappe via REST and reflects it
-    # into Medusa customer metadata on its own schedule.
 
     return {"ok": True, "status": status}
 

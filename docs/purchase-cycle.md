@@ -352,4 +352,3 @@ The classification side-effects (child table, window, auto-classifier, in-place 
 ## Related docs
 
 - `sales-cycle.md` — the Security Sale flow (disposal side)
-- `medusa_erpnext_sync.md` — Medusa-side sync spec (storefront integration)

@@ -193,11 +193,6 @@ def _sync_customer_name_from_primary_contact(doc):
 
 def on_update(doc, method=None):
     if doc.custom_is_polemarch_customer:
-        # Medusa-side plugin owns Frappe→Medusa sync via REST API. Frappe no
-        # longer pushes customer updates outbound; if Medusa needs to know
-        # about a KYC status change, it'll either re-fetch on its own
-        # schedule or rely on a Frappe-API-key-protected webhook on the
-        # Medusa side (out of scope for this app).
         _maybe_ensure_wallet(doc)
 
 

@@ -38,21 +38,6 @@ def validate(doc, method=None):
     _ensure_non_gst_item_tax_template(doc)
 
 
-def on_update(doc, method=None):
-    # Frappe→Medusa sync removed. The Medusa plugin owns the integration
-    # surface: it reads Items from Frappe via the standard REST API on its
-    # own schedule (or watches Medusa-side product events and reflects them
-    # back). Frappe stays passive.
-    return
-
-
-def on_trash(doc, method=None):
-    # Frappe→Medusa sync removed. If you need to also tombstone the Medusa
-    # product when a Frappe Item is deleted, do it in the Medusa plugin by
-    # polling for tombstoned Items via the Frappe REST API.
-    return
-
-
 def _ensure_non_gst_item_tax_template(doc):
     """Append a row to `Item.taxes` for every company that has a
     `Polemarch - Non-GST` ITT created (`install._create_polemarch_item_tax_template`

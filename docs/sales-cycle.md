@@ -281,4 +281,3 @@ Net change to Polemarch's net worth: +₹1,000  ✓
 ## Related docs
 
 - `purchase-cycle.md` — Security Purchase flow (acquisition side)
-- `medusa_erpnext_sync.md` — Medusa-side sync spec (storefront integration)

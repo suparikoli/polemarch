@@ -32,7 +32,8 @@ polemarch.patches.v0_5_0.remove_medusa_sync_doctypes
 # v0_6_0 — Full Medusa decoupling: drop the 7 Medusa-related Custom Fields.
 polemarch.patches.v0_6_0.remove_medusa_custom_fields
 # v0_7_0 — Remove Polemarch API Log + Polemarch API Idempotency Log doctypes
-# (no longer needed with sync delegated to Medusa-side plugin).
+# (no longer needed; Frappe is a passive ERPNext customization and external
+# systems use the standard REST API).
 polemarch.patches.v0_7_0.remove_api_audit_doctypes
 # v0_8_0 — Lot-free FIFO refactor. Classification fields land on Investment
 # Holding, legacy portfolio values get mapped to classifications, and the

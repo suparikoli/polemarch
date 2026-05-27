@@ -194,7 +194,7 @@ def _create_custom_fields():
                 "no_copy": 1,
                 "in_standard_filter": 1,
                 "insert_after": "custom_address_as_per_pan",
-                "description": "Polemarch-issued client ID, format NNNNYYWW. Set when the Medusa customer record is created.",
+                "description": "Polemarch-issued client ID, format NNNNYYWW.",
             },
             {
                 "fieldname": "custom_vba_id",
@@ -274,7 +274,7 @@ def _make_hsn_optional_on_item():
 
 
 def _create_processing_fee_item():
-    """Service item used when a Medusa order carries a processing fee
+    """Service item for the Polemarch processing / facilitation fee
     (HSN 997152, GST 18%). Lives under Mithtech Services brand so the
     fee invoice is correctly classified for GSTR-1."""
     _create_service_fee_item(
@@ -360,10 +360,6 @@ def _add_polemarch_naming_series():
     frappe.clear_cache(doctype="Sales Invoice")
 
 
-# ────────────────────────────────────────────────────────────────────
-# Frappe→Medusa sync removed
-# ────────────────────────────────────────────────────────────────────
-#
-# Frappe-side Medusa sync code has been fully removed. The Frappe app is
-# now an internal-only ERPNext customization; any external integration is
-# the responsibility of whatever upstream system calls Frappe's REST API.
+# The Frappe app is an internal-only ERPNext customization; any external
+# integration is the responsibility of whatever upstream system calls
+# Frappe's REST API.
