@@ -1,7 +1,6 @@
 """Remove Polemarch API Log + Polemarch API Idempotency Log doctypes.
 
-With the Medusa-sync layer fully delegated to the Medusa-side plugin, the
-Frappe-side trading APIs no longer need:
+The Frappe-side trading APIs no longer need:
   - external-caller idempotency dedup (the wallet engine has its own
     per-row idempotency_key check on Wallet Transaction; that's enough)
   - dedicated API audit logging (Frappe's native Activity Log + Error Log

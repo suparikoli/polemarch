@@ -29,7 +29,7 @@ def execute():
         current_group = frappe.db.get_value("Item", name, "item_group")
         if current_hsn:
             # update_modified=False to avoid bumping `modified` and
-            # triggering the Medusa-sync hook for every row.
+            # triggering downstream doc-event hooks for every row.
             frappe.db.set_value("Item", name, "gst_hsn_code", None, update_modified=False)
             cleared_hsn += 1
         if current_group != POLEMARCH_ITEM_GROUP and frappe.db.exists("Item Group", POLEMARCH_ITEM_GROUP):

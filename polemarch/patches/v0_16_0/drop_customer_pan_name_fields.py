@@ -1,10 +1,10 @@
 """Phase 16 — drop custom_first_name / custom_middle_name / custom_last_name
 on Customer.
 
-These were created for the (since-removed) Medusa sync mapper which wrote
-PAN-card name parts separately. Polemarch now uses the standard ERPNext
-Contact linked to each Customer for storing first / middle / last name,
-email, and phone. The custom fields are dead weight.
+Legacy fields that used to store PAN-card name parts separately. Polemarch
+now uses the standard ERPNext Contact linked to each Customer for storing
+first / middle / last name, email, and phone. The custom fields are dead
+weight.
 
 Drops the Custom Field rows AND the underlying columns. Any data in
 those columns is lost — but no production code reads them.

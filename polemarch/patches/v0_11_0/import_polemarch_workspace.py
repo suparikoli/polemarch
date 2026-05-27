@@ -9,8 +9,7 @@ Drop+insert pattern: if a Polemarch workspace already exists (from a
 previous version of this file), delete it first so children clear,
 then re-insert from the current JSON. This guarantees the rebuilt
 layout overwrites any stale rows from the original Polemarch /
-Polemarch Customizations workspace that referenced removed doctypes
-(Polemarch Items, SI Polemarch flag, Medusa Reference doctypes).
+Polemarch Customizations workspace that referenced removed doctypes.
 
 Idempotent.
 """

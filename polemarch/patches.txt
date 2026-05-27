@@ -27,13 +27,9 @@ polemarch.polemarch_trading.patches.v0_2_0.seed_position_from_holdings
 polemarch.polemarch_trading.patches.v0_3_0.add_custom_fields_to_je
 # Phase 4 — Portfolio Transfer + roles.
 polemarch.polemarch_trading.patches.v0_4_0.seed_polemarch_roles
-# v0_5_0 — Medusa-owned-sync refactor: remove the 4 sync doctypes.
-polemarch.patches.v0_5_0.remove_medusa_sync_doctypes
-# v0_6_0 — Full Medusa decoupling: drop the 7 Medusa-related Custom Fields.
-polemarch.patches.v0_6_0.remove_medusa_custom_fields
-# v0_7_0 — Remove Polemarch API Log + Polemarch API Idempotency Log doctypes
-# (no longer needed; Frappe is a passive ERPNext customization and external
-# systems use the standard REST API).
+# v0_7_0 — Remove Polemarch API Log + Polemarch API Idempotency Log doctypes.
+# Frappe is a passive ERPNext customization; external systems use the standard
+# REST API and the wallet engine has its own per-row idempotency check.
 polemarch.patches.v0_7_0.remove_api_audit_doctypes
 # v0_8_0 — Lot-free FIFO refactor. Classification fields land on Investment
 # Holding, legacy portfolio values get mapped to classifications, and the
@@ -104,9 +100,8 @@ polemarch.patches.v0_15_0.migrate_customer_holdings
 polemarch.patches.v0_15_0.drop_customer_field_on_holding
 # v0_16_0 — Customer name + email + phone live on the standard Contact.
 # Drop the polemarch custom_first_name / custom_middle_name / custom_last_name
-# Custom Fields (Medusa-era residue). install.py stops creating them; the
-# Customer.validate hook auto-syncs customer_name from the primary Contact
-# for Individual customers.
+# Custom Fields. install.py stops creating them; the Customer.validate hook
+# auto-syncs customer_name from the primary Contact for Individual customers.
 polemarch.patches.v0_16_0.drop_customer_pan_name_fields
 # v0_18_0 — Every Customer gets a primary Contact. Backfill for Polemarch
 # customers created before the after_insert hook landed. The hook itself
