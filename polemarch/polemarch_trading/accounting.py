@@ -26,7 +26,6 @@ ERPNext stdlib path — reverse GL entries are emitted natively by JE.cancel().
 from typing import Optional
 
 import frappe
-from frappe import _
 from frappe.utils import flt, getdate
 
 

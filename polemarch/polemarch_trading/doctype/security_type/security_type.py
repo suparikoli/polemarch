@@ -9,7 +9,6 @@ goes through `field:type_name`, so re-saving with a new name renames
 the document. That's by design — the field is user-editable.
 """
 
-import frappe
 from frappe.model.document import Document
 
 

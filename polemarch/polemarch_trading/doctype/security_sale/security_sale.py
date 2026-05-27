@@ -31,7 +31,7 @@ back-compat sync in validate so old reports don't break.
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt, getdate, now_datetime
+from frappe.utils import flt, getdate
 
 
 _VALID_PAYMENT_METHODS_FOR_CUSTOMER = {
