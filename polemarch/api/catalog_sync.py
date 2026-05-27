@@ -45,6 +45,94 @@ from polemarch.polemarch_trading.doctype.polemarch_settings.polemarch_settings i
 
 
 @frappe.whitelist()
+def list_customers_for_medusa(
+    since: Optional[str] = None,
+    limit: int = 100,
+) -> dict:
+    """Return Polemarch customers (NOT Mithtech-only) modified since
+    the given timestamp, with KYC fields. Used by the Medusa customer
+    pull cron to mirror operator-side KYC changes into Medusa's
+    customer.metadata so the storefront can reflect verified status.
+
+    Args:
+      since:  ISO datetime string; defaults to 1 day ago.
+      limit:  Max rows (default 100, max 500).
+
+    Returns:
+      {
+        customers: [{
+          name, email, customer_name, customer_type, customer_group,
+          custom_is_polemarch_customer, custom_is_mithtech_only,
+          custom_kyc_status, custom_kyc_verified_on,
+          pan, custom_client_id, modified
+        }, ...],
+        now: <ISO datetime — caller stores this as next cursor>,
+      }
+
+    Filters out:
+      - custom_is_mithtech_only=1 (operator policy: never sync these
+        to Medusa)
+      - Customers without an email_id on their primary Contact
+        (Medusa keys customers by email; we can't mirror without one)
+    """
+    if not is_medusa_sync_enabled():
+        return {
+            "customers": [],
+            "now": frappe.utils.now_datetime().isoformat(),
+        }
+
+    limit = max(1, min(int(limit or 100), 500))
+    since_dt = (
+        frappe.utils.get_datetime(since)
+        if since
+        else frappe.utils.add_to_date(None, days=-1)
+    )
+    since_str = frappe.utils.get_datetime_str(since_dt)
+
+    # Pull Customers modified since cursor, joined with their primary
+    # Contact's primary email. Filter mithtech-only out at SQL level.
+    rows = frappe.db.sql(
+        """
+        SELECT
+            c.name                                              AS name,
+            c.customer_name                                     AS customer_name,
+            c.customer_type                                     AS customer_type,
+            c.customer_group                                    AS customer_group,
+            c.custom_is_polemarch_customer                      AS custom_is_polemarch_customer,
+            c.custom_is_mithtech_only                           AS custom_is_mithtech_only,
+            c.custom_kyc_status                                 AS custom_kyc_status,
+            c.custom_kyc_verified_on                            AS custom_kyc_verified_on,
+            c.pan                                               AS pan,
+            c.custom_client_id                                  AS custom_client_id,
+            c.modified                                          AS modified,
+            (
+                SELECT LOWER(ce.email_id)
+                FROM `tabContact Email` ce
+                JOIN `tabContact` ct ON ct.name = ce.parent
+                JOIN `tabDynamic Link` dl ON dl.parent = ct.name
+                WHERE dl.link_doctype = 'Customer'
+                  AND dl.link_name = c.name
+                ORDER BY ce.is_primary DESC, ce.idx ASC
+                LIMIT 1
+            )                                                   AS email
+        FROM `tabCustomer` c
+        WHERE c.modified >= %s
+          AND COALESCE(c.custom_is_mithtech_only, 0) = 0
+        ORDER BY c.modified ASC
+        LIMIT %s
+        """,
+        (since_str, limit),
+        as_dict=True,
+    )
+
+    # Filter out rows with no email — Medusa keys by email, can't sync
+    return {
+        "customers": [r for r in rows if r.get("email")],
+        "now": frappe.utils.now_datetime().isoformat(),
+    }
+
+
+@frappe.whitelist()
 def list_securities_for_medusa(
     since: Optional[str] = None,
     limit: int = 100,
