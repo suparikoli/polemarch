@@ -171,3 +171,6 @@ polemarch.patches.v0_24_0.add_medusa_product_id_to_security
 # Medusa) from API-created (already mirrored). Set by wallet_sync API
 # on creation.
 polemarch.patches.v0_24_0.add_medusa_originated_flag
+# Re-import the Polemarch workspace to land the new Settings card +
+# Polemarch Settings shortcut. Drop-and-reimport pattern; idempotent.
+polemarch.patches.v0_24_0.reimport_workspace_with_settings
