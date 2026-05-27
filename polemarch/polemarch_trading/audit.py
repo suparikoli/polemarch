@@ -159,11 +159,25 @@ def verify_holding_disposal_chain():
 
 
 def _wallet_transaction_signed_sum(wallet: str) -> float:
+    """Net signed sum of every SUBMITTED Wallet Transaction on the wallet,
+    independent of is_cancelled.
+
+    Gap 7 fix: previously this filtered out is_cancelled=1 rows, but the
+    wallet engine's apply_delta updates balance_total for EVERY WT it
+    inserts — including the reversal it posts when an original is
+    cancelled. Both rows contribute to the running balance: the original
+    adds its delta on insert (later flagged is_cancelled=1 by reverse()),
+    and its reversal posts the inverse delta. Excluding cancelled rows
+    from this sum left every reversed pair contributing a phantom
+    ±amount (cancelled original excluded, reversal counted), causing
+    spurious daily-audit drift on any wallet that has ever had a
+    transaction cancelled.
+    """
     row = frappe.db.sql(
         """
         SELECT COALESCE(
-                 SUM(CASE WHEN direction = 'Credit' AND is_cancelled = 0 THEN amount
-                          WHEN direction = 'Debit'  AND is_cancelled = 0 THEN -amount
+                 SUM(CASE WHEN direction = 'Credit' THEN amount
+                          WHEN direction = 'Debit'  THEN -amount
                           ELSE 0 END),
                  0) AS signed_sum
           FROM `tabWallet Transaction`
