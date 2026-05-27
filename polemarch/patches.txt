@@ -162,3 +162,7 @@ polemarch.patches.v0_24_0.add_security_sale_source_field
 # Unique, populated by the Medusa webhook receiver for idempotency on
 # storefront-originated orders.
 polemarch.patches.v0_24_0.add_medusa_order_id_field
+# Medusa-sync prep: `medusa_product_id` Custom Field on Security. Back-
+# reference set by the Medusa webhook after the storefront-side Product
+# is created.
+polemarch.patches.v0_24_0.add_medusa_product_id_to_security
