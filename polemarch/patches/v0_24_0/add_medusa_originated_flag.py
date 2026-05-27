@@ -43,12 +43,36 @@ def execute():
         ("Wallet Deposit", "reference_no"),
         ("Wallet Withdrawal", "reference_no"),
     ]:
-        if frappe.db.exists(
+        if not frappe.db.exists(
             "Custom Field", {"dt": doctype, "fieldname": "medusa_originated"}
         ):
+            create_custom_fields(
+                {doctype: [{**fields_spec, "insert_after": insert_after}]},
+                ignore_validate=True,
+                update=True,
+            )
+
+    # Backfill: any historical Wallet Deposit / Withdrawal whose
+    # reference_no looks like a gateway reference (cashfree_*, razorpay_*,
+    # wallet_*, evt_*) was clearly API-created — flag so the pull cron
+    # skips it. Operator-typed cheque numbers / UPI refs are short and
+    # don't match these prefixes.
+    for doctype in ("Wallet Deposit", "Wallet Withdrawal"):
+        if not frappe.db.has_column(doctype, "medusa_originated"):
             continue
-        create_custom_fields(
-            {doctype: [{**fields_spec, "insert_after": insert_after}]},
-            ignore_validate=True,
-            update=True,
+        # Heuristic prefixes for known gateway / event references
+        updated = frappe.db.sql(
+            f"""
+            UPDATE `tab{doctype}`
+               SET medusa_originated = 1
+             WHERE COALESCE(medusa_originated, 0) = 0
+               AND (
+                    reference_no LIKE 'cashfree_%%'
+                 OR reference_no LIKE 'razorpay_%%'
+                 OR reference_no LIKE 'wallet_%%'
+                 OR reference_no LIKE 'evt_%%'
+                 OR reference_no LIKE 'wt_%%'
+               )
+            """
         )
+    frappe.db.commit()
