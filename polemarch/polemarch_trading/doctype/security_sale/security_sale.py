@@ -33,6 +33,17 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, getdate
 
+from polemarch.polemarch_trading.controller_helpers import (
+    company_default_bank_account,
+    company_default_cash_account,
+    company_default_cost_center,
+    is_receivable_or_payable,
+    resolve_account_by_name,
+    reverse_wallet_transactions,
+    sever_wallet_transaction_link,
+    wallet_gl_account_for_customer,
+)
+
 
 _VALID_PAYMENT_METHODS_FOR_CUSTOMER = {
     "Default Receivable",
@@ -103,21 +114,12 @@ class SecuritySale(Document):
         self._reverse_customer_holding_snapshot()
 
     def _sever_wallet_transaction_link_if_any(self):
-        """Clear WT.reference_name on the linked Wallet Transaction(s) so
-        Frappe's link check doesn't block this cancel. Also stash the
-        WT names on self.flags so on_cancel can still reverse them."""
-        linked = frappe.get_all(
-            "Wallet Transaction",
-            filters={"reference_doctype": "Security Sale", "reference_name": self.name},
-            pluck="name",
+        """Sever the WT.reference link so Frappe's link check passes;
+        stash the WT names for on_cancel to reverse. See
+        controller_helpers.sever_wallet_transaction_link for the why."""
+        self.flags._pending_wt_reversal = sever_wallet_transaction_link(
+            "Security Sale", self.name
         )
-        self.flags._pending_wt_reversal = linked
-        for wt in linked:
-            frappe.db.set_value(
-                "Wallet Transaction", wt,
-                {"reference_doctype": "", "reference_name": ""},
-                update_modified=False,
-            )
 
     # ── validate-time ────────────────────────────────────────────────
 
@@ -165,18 +167,18 @@ class SecuritySale(Document):
 
     def _default_accounts(self):
         if not self.revenue_account:
-            self.revenue_account = _resolve_account_by_name(
+            self.revenue_account = resolve_account_by_name(
                 self.company, "Trading Revenue - Securities"
             )
         if self.payment_account:
             return
 
         if self.payment_method == "Customer Wallet" and self.party_type == "Customer":
-            self.payment_account = _wallet_gl_account_for_customer(self.party)
+            self.payment_account = wallet_gl_account_for_customer(self.party)
         elif self.payment_method == "Bank":
-            self.payment_account = _company_default_bank_account(self.company)
+            self.payment_account = company_default_bank_account(self.company)
         elif self.payment_method == "Cash":
-            self.payment_account = _company_default_cash_account(self.company)
+            self.payment_account = company_default_cash_account(self.company)
         else:  # Default Receivable
             self.payment_account = frappe.db.get_value(
                 "Company", self.company, "default_receivable_account"
@@ -332,7 +334,7 @@ class SecuritySale(Document):
         if existing:
             return existing
 
-        cost_center = self.cost_center or _company_default_cost_center(self.company)
+        cost_center = self.cost_center or company_default_cost_center(self.company)
 
         debit_line = {
             "account": self.payment_account,
@@ -343,7 +345,7 @@ class SecuritySale(Document):
         # account row (not just Default Receivable). Customer Wallet
         # Liability is account_type=Payable, so wallet rails get tagged
         # too. Bank / Cash accounts don't need party tagging.
-        if _is_receivable_or_payable(self.payment_account) and self.party_type and self.party:
+        if is_receivable_or_payable(self.payment_account) and self.party_type and self.party:
             debit_line["party_type"] = self.party_type
             debit_line["party"] = self.party
 
@@ -404,23 +406,12 @@ class SecuritySale(Document):
         )
 
     def _reverse_wallet_transaction_if_any(self):
-        """Reverse any Wallet Transaction(s) created on submit. The reverse
-        link was already severed in before_cancel; we use the stashed WT
-        names from self.flags."""
-        linked = list(getattr(self.flags, "_pending_wt_reversal", None) or [])
-        if not linked:
-            return
-        from polemarch.polemarch_trading import wallet as wallet_engine
-        for original_wt in linked:
-            if not frappe.db.exists("Wallet Transaction", original_wt):
-                continue
-            already_reversed = frappe.db.get_value("Wallet Transaction", original_wt, "is_cancelled")
-            if already_reversed:
-                continue
-            wallet_engine.reverse(
-                original_wt,
-                remarks=f"Reversed on Security Sale {self.name} cancel",
-            )
+        """Reverse Wallet Transaction(s) created on submit. Uses the WT
+        names that `before_cancel` stashed on `self.flags`."""
+        reverse_wallet_transactions(
+            getattr(self.flags, "_pending_wt_reversal", None) or [],
+            remarks=f"Reversed on Security Sale {self.name} cancel",
+        )
 
     # ── on_cancel ────────────────────────────────────────────────────
 
@@ -443,59 +434,3 @@ class SecuritySale(Document):
             disposal.cancel()
 
 
-# ── helpers ──────────────────────────────────────────────────────────
-
-
-def _company_default_cost_center(company: str):
-    return frappe.db.get_value("Company", company, "cost_center")
-
-
-def _company_default_bank_account(company: str):
-    direct = frappe.db.get_value("Company", company, "default_bank_account")
-    if direct:
-        return direct
-    return frappe.db.get_value(
-        "Account",
-        {"company": company, "account_type": "Bank", "disabled": 0, "is_group": 0},
-        "name",
-        order_by="creation ASC",
-    )
-
-
-def _company_default_cash_account(company: str):
-    direct = frappe.db.get_value("Company", company, "default_cash_account")
-    if direct:
-        return direct
-    return frappe.db.get_value(
-        "Account",
-        {"company": company, "account_type": "Cash", "disabled": 0, "is_group": 0},
-        "name",
-        order_by="creation ASC",
-    )
-
-
-def _wallet_gl_account_for_customer(customer: str):
-    wallet_name = f"WAL-{customer}"
-    return frappe.db.get_value("Wallet", wallet_name, "gl_liability_account")
-
-
-def _is_receivable_account(account: str) -> bool:
-    return frappe.db.get_value("Account", account, "account_type") == "Receivable"
-
-
-def _is_receivable_or_payable(account: str) -> bool:
-    return frappe.db.get_value("Account", account, "account_type") in (
-        "Receivable", "Payable"
-    )
-
-
-def _resolve_account_by_name(company: str, account_name: str):
-    return frappe.db.get_value(
-        "Account",
-        {
-            "company": company,
-            "account_name": account_name,
-            "disabled": 0,
-        },
-        "name",
-    )
