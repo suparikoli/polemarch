@@ -315,6 +315,23 @@ class SecurityPurchase(Document):
         if classification != "Unallocated":
             holding_fields["classified_by"] = frappe.session.user
             holding_fields["classified_on"] = now_datetime()
+            # Gap 5 fix: seed a matching child row in the `classifications`
+            # Table so IH._compute_classification_rollup doesn't back-sync
+            # the legacy `classification` field to "Unallocated" on the
+            # very first save. Without this, the Purchase persists
+            # intended_classification correctly on the Sale-Purchase doc,
+            # but the resulting IH always lands as Unallocated regardless
+            # of the operator's pick.
+            holding_fields["classifications"] = [
+                {
+                    "classification": classification,
+                    "qty": flt(self.qty),
+                    "classified_by": frappe.session.user,
+                    "classified_on": now_datetime(),
+                    "auto_classified": 0,
+                    "notes": f"Seeded at Purchase {self.name}",
+                }
+            ]
 
         holding = frappe.get_doc(holding_fields)
         holding.flags.ignore_permissions = True

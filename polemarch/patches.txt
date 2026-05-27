@@ -148,3 +148,9 @@ polemarch.patches.v0_24_0.backfill_is_polemarch_customer
 # Lot references. Required so the Phase 24B-1 classification invariants
 # stop drifting on subsequent IH saves.
 polemarch.patches.v0_24_0.backfill_disposal_lot_source_classification
+# Gap 5 fix: backfill `classifications` child rows on IHs whose source
+# Purchase set a non-Unallocated `intended_classification`, but whose
+# child rows were never seeded (so the rollup back-synced the legacy
+# classification field to "Unallocated"). Idempotent — only seeds where
+# child rows are missing.
+polemarch.patches.v0_24_0.backfill_classification_child_rows_from_classification_field
