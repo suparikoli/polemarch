@@ -106,8 +106,18 @@ class InvestmentDisposal(Document):
 
     def _apply_to_holdings(self, direction: int):
         """direction = +1 on submit (consume), −1 on cancel (release).
-        Updates `Investment Holding.qty_disposed` and triggers status
-        recompute via the holding's own validate."""
+        Updates `Investment Holding.qty_disposed` (top-level) AND
+        `qty_disposed_<source_classification>` (Phase 24B-1 child-table
+        rollup counter) so the IH's classification invariants stay
+        consistent. Triggers status recompute via the holding's own
+        validate.
+
+        Gap 4 fix: pre-Phase-24B-1 Disposals didn't carry a per-lot
+        classification, so qty_disposed_<class> was never bumped and
+        Σ(child rows) drifted over time. Disposal Lots now carry a
+        `source_classification` field populated by Security Sale; we
+        bump the matching qty_disposed_<class> counter atomically with
+        qty_disposed."""
         for lot in self.lots or []:
             if not lot.holding or not lot.qty_consumed:
                 continue
@@ -121,6 +131,22 @@ class InvestmentDisposal(Document):
                 # accountant may have already amended other disposals
                 # and we don't want a chain of errors.
                 holding.qty_disposed = 0
+
+            # Per-classification counter (Phase 24B-1 rollup). Skip if
+            # source_classification is blank (legacy lots) or Unallocated
+            # (shouldn't reach Disposal but if it does, no class counter
+            # to bump). The class counter mirrors qty_disposed and clamps
+            # at 0 on over-cancellation.
+            src_class = (lot.get("source_classification") or "").strip()
+            if src_class in ("Stock in Trade", "Investment"):
+                field = "qty_disposed_sit" if src_class == "Stock in Trade" else "qty_disposed_investment"
+                if hasattr(holding, field):
+                    setattr(
+                        holding,
+                        field,
+                        max(0, flt(getattr(holding, field) or 0) + direction * flt(lot.qty_consumed)),
+                    )
+
             holding.flags.ignore_permissions = True
             holding.save(ignore_permissions=True)
 

@@ -285,6 +285,13 @@ class SecuritySale(Document):
                     "holding": entry.holding,
                     "qty_consumed": entry.qty,
                     "sale_price_per_unit": flt(self.rate),
+                    # Gap 4 fix: stamp the source classification on each lot
+                    # so Disposal._apply_to_holdings can bump
+                    # qty_disposed_<class> and accounting can route the COGS
+                    # JE to the right inventory bucket. Single-bucket Sales
+                    # (enforced by from_classification) → all lots share
+                    # the same source_classification.
+                    "source_classification": self.from_classification,
                 }
                 for entry in plan
             ],

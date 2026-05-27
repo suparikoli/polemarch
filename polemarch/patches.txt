@@ -141,3 +141,10 @@ polemarch.patches.v0_24_0.hide_legacy_classification_fields
 # holders or Polemarch Group members, so trading-only customers were
 # left with the Polemarch tab + dashboard hidden. Idempotent.
 polemarch.patches.v0_24_0.backfill_is_polemarch_customer
+# Gap 4 fix: backfill source_classification on every Investment Disposal
+# Lot from history (derived from the linked Security Sale's from_classification
+# when available, else the IH's top-level classification) AND re-sync
+# qty_disposed_sit / qty_disposed_investment on every IH that has Disposal
+# Lot references. Required so the Phase 24B-1 classification invariants
+# stop drifting on subsequent IH saves.
+polemarch.patches.v0_24_0.backfill_disposal_lot_source_classification

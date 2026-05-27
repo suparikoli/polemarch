@@ -153,29 +153,39 @@ def cancel_journal_entry_for_source(source_doctype: str, source_name: str) -> Op
 def _build_cost_lines_for_disposal(disposal) -> dict:
     """Return {logical_account_name: total_cost_to_credit}.
 
-    For each consumed lot, look up the source Investment Holding's
-    `custom_portfolio` (Phase 0 backfill ensures this is set). The portfolio
-    determines whether to credit Trading or Investment inventory.
+    Routes each consumed lot's cost to the matching inventory bucket
+    based on the lot's `source_classification` (Phase 24B-1 / Gap 4 fix):
+
+      - Stock in Trade  → Securities Inventory - Trading
+      - Investment      → Long-Term Investments
+      - Unallocated / blank → fall back to the IH's top-level
+        `classification` (legacy lots created before source_classification
+        existed). The legacy path is drift-prone — the `_compute_classification_rollup`
+        on IH back-syncs top-level from child rows after each save, so a
+        lot's classification at submit time may differ from what's read
+        here at JE-build time. The per-lot field fixes this for new
+        Disposals; old ones rely on the backfill patch.
     """
     by_bucket = {
         "Securities Inventory - Trading": 0.0,
         "Long-Term Investments": 0.0,
     }
 
-    # Phase 14: route by Investment Holding.classification directly. The old
-    # Portfolio link is gone — Stock in Trade → Securities Inventory,
-    # Investment → Long-Term Investments. Unallocated rows shouldn't reach
-    # disposal (you can't sell Unallocated inventory by design), but if one
-    # slips through, treat it as Stock in Trade so the math doesn't blow up.
     for lot in disposal.lots or []:
         if not lot.holding or not lot.qty_consumed:
             continue
-        classification = frappe.db.get_value(
-            "Investment Holding", lot.holding, "classification"
-        ) or "Stock in Trade"
+
+        src_class = (lot.get("source_classification") or "").strip()
+        if not src_class or src_class == "Unallocated":
+            # Legacy fallback — read IH top-level. New Disposals always
+            # have source_classification populated by the Sale controller.
+            src_class = (
+                frappe.db.get_value("Investment Holding", lot.holding, "classification")
+                or "Stock in Trade"
+            )
 
         bucket = (
-            "Long-Term Investments" if classification == "Investment"
+            "Long-Term Investments" if src_class == "Investment"
             else "Securities Inventory - Trading"
         )
         by_bucket[bucket] += flt(lot.cost_basis_amount)
