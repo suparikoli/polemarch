@@ -257,6 +257,21 @@ class SecuritySale(Document):
         )
 
     def _create_investment_disposal(self, plan) -> str:
+        # Idempotency mirror of Purchase._create_investment_holding: if a
+        # Disposal already references this Sale (back-link Custom Field
+        # `polemarch_security_sale` added in v0_9_0), return it instead of
+        # minting a duplicate. Guards against on_submit re-runs from
+        # retries / programmatic .submit() calls — normal UI flow doesn't
+        # double-submit, but the rare path would cause double-counted
+        # qty_disposed bumps + double COGS JE.
+        existing = frappe.db.get_value(
+            "Investment Disposal",
+            {"polemarch_security_sale": self.name, "docstatus": ["<", 2]},
+            "name",
+        )
+        if existing:
+            return existing
+
         disposal = frappe.get_doc({
             "doctype": "Investment Disposal",
             "security": self.security,

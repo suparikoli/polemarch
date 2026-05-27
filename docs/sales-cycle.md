@@ -157,9 +157,15 @@ Inventory checks:
 
 ## Cancel flow
 
-`on_cancel` reverses everything atomically:
+Two-phase cascade (P28 fix). `before_cancel` runs *before* Frappe's `check_links`, which would otherwise refuse to cancel because Wallet Transaction holds a Dynamic Link pointing at the Sale:
 
-1. **Wallet** (if applicable) — `wallet.reverse(wt_name, ...)` posts a Reversal that credits the wallet back.
+**`before_cancel`:**
+- Severs `Wallet Transaction.reference_doctype` / `reference_name` on every WT that pointed at this Sale (via `controller_helpers.sever_wallet_transaction_link`).
+- Stashes the WT names on `self.flags._pending_wt_reversal` so `on_cancel` can still reverse them after the forward pointer is gone.
+
+**`on_cancel` reverses everything atomically:**
+
+1. **Wallet** (if applicable) — `wallet.reverse(wt_name, ...)` posts a Reversal that credits the wallet back. Uses the stashed names from `before_cancel`.
 2. **Revenue JE** + **COGS JE** — both cancelled (ERPNext auto-reverses GL).
 3. **Investment Disposal** — cancelled. Its own `on_cancel` decrements `qty_disposed` on each Holding (releasing inventory back).
 4. **Customer Holding** (if `party=Customer`) — `apply_delta(-qty, source="Security Sale", note="reversed on Sale cancel")`. If the snapshot drifted (e.g. operator manually edited it lower), clamps to 0 + drift note.
@@ -274,7 +280,20 @@ Net change to Polemarch's net worth: +₹1,000  ✓
 | Operator picks `from_classification=Investment` but Polemarch only has Stock-in-Trade | FIFO returns empty / partial → controller throws |
 | Customer already had Holdings (CRM snapshot) before this sale | snapshot increments — `qty += sold qty`, doesn't reset |
 | Customer Holding row had drift (operator-edited lower) | New qty = old + sold, regardless of historical drift |
-| Cancel a Sale whose Disposal had FURTHER trades after | Reversal would propagate; the controller doesn't currently block this — be careful (future hardening candidate) |
+| Sale `on_submit` is re-invoked programmatically (rare) | Idempotency guard: if a Disposal with `polemarch_security_sale = self.name` already exists, returns it instead of minting a duplicate (post P3 audit fix). |
+| Cancel a Sale whose Disposal had FURTHER trades after | Reversal would propagate; the controller doesn't currently block this — be careful (future hardening candidate). Purchase has an analogous `_guard_holding_untouched`; Sale doesn't. |
+
+---
+
+## Phase history (recent sale-side changes)
+
+| Phase | What changed |
+|---|---|
+| **12** | Generalised from Customer-only to (party_type, party) + payment_method. Three party_type/payment_method combinations replace the old narrower flow. |
+| **15** | Customer Holding split out of the inventory ledger — now CRM data only. Sale's `_upsert_customer_holding_snapshot` writes to the Customer Holding doctype; no GL impact. |
+| **24** | FIFO consumption scopes by classification child rows. `from_classification` picks one bucket (SiT or Investment); FIFO matches the consumed lots accordingly. |
+| **28** | `before_cancel` severs the Wallet Transaction reference link before Frappe's `check_links` fires, so customer-Wallet sale cancels no longer hit the "cannot cancel — has active links" wall. Stashes WT names on `self.flags` for `on_cancel` reversal. |
+| **Gap 1 audit fix** | `_create_investment_disposal` now checks for an existing Disposal back-linked via `polemarch_security_sale = self.name` before minting a new one. Mirrors Purchase's idempotency guard. |
 
 ---
 
