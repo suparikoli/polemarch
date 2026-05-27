@@ -435,6 +435,66 @@ def _handle_order_placed(data: dict, event_id: Optional[str] = None) -> dict:
     }
 
 
+def _handle_order_canceled(data: dict, event_id: Optional[str] = None) -> dict:
+    """Medusa-side order cancellation → cancel the linked Security Sale.
+
+    Triggers the Frappe Security Sale's full cancel cascade (Gap 3 fix):
+    wallet reversal → CH snapshot rollback → JEs cancelled → Disposal
+    cancelled → qty_disposed_<class> restored. Idempotent: returns
+    'already_cancelled' if the Sale is docstatus=2 already, and
+    'not_found' if there's no Sale for the given Medusa order id (e.g.
+    cancellation before the order.placed webhook completed)."""
+    medusa_order_id = data.get("order_id") or event_id
+    if not medusa_order_id:
+        return {"status": "skipped", "reason": "no_order_id"}
+
+    if not frappe.db.has_column("Security Sale", "medusa_order_id"):
+        return {
+            "status": "skipped",
+            "reason": "medusa_order_id Custom Field not deployed yet",
+        }
+
+    sale_name = frappe.db.get_value(
+        "Security Sale", {"medusa_order_id": medusa_order_id}, "name"
+    )
+    if not sale_name:
+        return {
+            "status": "not_found",
+            "medusa_order_id": medusa_order_id,
+            "hint": (
+                "Sale for this Medusa order id doesn't exist on Frappe — "
+                "either order.placed webhook never landed, or the Sale "
+                "was already manually deleted."
+            ),
+        }
+
+    sale = frappe.get_doc("Security Sale", sale_name)
+    if sale.docstatus == 2:
+        return {
+            "status": "already_cancelled",
+            "sale": sale_name,
+            "medusa_order_id": medusa_order_id,
+        }
+    if sale.docstatus == 0:
+        sale.flags.ignore_permissions = True
+        sale.delete(ignore_permissions=True)
+        frappe.db.commit()
+        return {
+            "status": "draft_deleted",
+            "sale": sale_name,
+            "medusa_order_id": medusa_order_id,
+        }
+
+    sale.flags.ignore_permissions = True
+    sale.cancel()
+    frappe.db.commit()
+    return {
+        "status": "cancelled",
+        "sale": sale_name,
+        "medusa_order_id": medusa_order_id,
+    }
+
+
 def _customer_by_email(email: str) -> Optional[str]:
     """Find a Frappe Customer linked to this email via Contact.Dynamic Link.
     Returns the Customer name or None. Uses the standard ERPNext Contact
@@ -519,6 +579,8 @@ _DISPATCH: dict[str, Any] = {
     "customer.kyc.synced": _handle_customer_kyc_synced,
     "product.synced": _handle_product_synced,
     "order.placed": _handle_order_placed,
+    "order.canceled": _handle_order_canceled,
+    "order.cancelled": _handle_order_canceled,  # British spelling, same handler
 }
 
 
