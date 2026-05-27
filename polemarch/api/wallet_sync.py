@@ -89,20 +89,22 @@ def record_deposit(
     posting_date = posting_date or frappe.utils.today()
     company = _company_for_customer_wallet(customer)
 
-    deposit = frappe.get_doc(
-        {
-            "doctype": "Wallet Deposit",
-            "customer": customer,
-            "company": company,
-            "posting_date": posting_date,
-            "amount": amt,
-            "bank_or_cash_account": _bank_account_for_company(company),
-            "mode": "Bank Transfer" if source != "manual" else "Other",
-            "reference_no": gateway_ref,
-            "remarks": remarks
-                or f"Wallet deposit via {source} (gateway_ref={gateway_ref or 'none'})",
-        }
-    )
+    deposit_fields: dict = {
+        "doctype": "Wallet Deposit",
+        "customer": customer,
+        "company": company,
+        "posting_date": posting_date,
+        "amount": amt,
+        "bank_or_cash_account": _bank_account_for_company(company),
+        "mode": "Bank Transfer" if source != "manual" else "Other",
+        "reference_no": gateway_ref,
+        "remarks": remarks
+            or f"Wallet deposit via {source} (gateway_ref={gateway_ref or 'none'})",
+    }
+    # C1 fix: tag every API-created doc so the pull cron knows to skip it
+    if frappe.db.has_column("Wallet Deposit", "medusa_originated"):
+        deposit_fields["medusa_originated"] = 1
+    deposit = frappe.get_doc(deposit_fields)
     deposit.flags.ignore_permissions = True
     deposit.insert(ignore_permissions=True)
     deposit.submit()
@@ -166,19 +168,20 @@ def record_withdrawal(
     posting_date = posting_date or frappe.utils.today()
     company = _company_for_customer_wallet(customer)
 
-    wd = frappe.get_doc(
-        {
-            "doctype": "Wallet Withdrawal",
-            "customer": customer,
-            "company": company,
-            "posting_date": posting_date,
-            "amount": amt,
-            "bank_or_cash_account": _bank_account_for_company(company),
-            "reference_no": gateway_ref,
-            "remarks": remarks
-                or f"Wallet withdrawal (gateway_ref={gateway_ref or 'none'})",
-        }
-    )
+    withdrawal_fields: dict = {
+        "doctype": "Wallet Withdrawal",
+        "customer": customer,
+        "company": company,
+        "posting_date": posting_date,
+        "amount": amt,
+        "bank_or_cash_account": _bank_account_for_company(company),
+        "reference_no": gateway_ref,
+        "remarks": remarks
+            or f"Wallet withdrawal (gateway_ref={gateway_ref or 'none'})",
+    }
+    if frappe.db.has_column("Wallet Withdrawal", "medusa_originated"):
+        withdrawal_fields["medusa_originated"] = 1
+    wd = frappe.get_doc(withdrawal_fields)
     wd.flags.ignore_permissions = True
     wd.insert(ignore_permissions=True)
     wd.submit()
@@ -189,6 +192,97 @@ def record_withdrawal(
         "amount": amt,
         "idempotent_skip": False,
     }
+
+
+@frappe.whitelist()
+def list_for_medusa(
+    since: Optional[str] = None,
+    limit: int = 100,
+) -> dict:
+    """List Frappe-originated (operator-created) Wallet Deposits + Withdrawals
+    modified since the given timestamp. Used by the Medusa pull cron to
+    mirror operator deposits back into the Medusa cashfree_wallet ledger.
+
+    Args:
+        since: ISO datetime string. Returns docs with `modified >= since`.
+               If None, defaults to 1 day ago to bound result size.
+        limit: Per-doctype cap (deposits + withdrawals each capped).
+               Default 100, max 500.
+
+    Returns:
+        {
+          "deposits":    [{name, customer, customer_email, amount, posting_date,
+                           reference_no, remarks, mode, modified, docstatus}, ...],
+          "withdrawals": [{name, customer, customer_email, amount, posting_date,
+                           reference_no, remarks, modified, docstatus}, ...],
+          "now":         <ISO datetime — caller stores this as next cursor>,
+        }
+
+    Filters out medusa_originated=1 docs (those were created by the
+    record_deposit/record_withdrawal endpoints, already mirrored on
+    Medusa side). The caller is expected to be the Medusa plugin's
+    pull cron, authenticated via the dedicated API user.
+    """
+    if not is_medusa_sync_enabled():
+        return {"deposits": [], "withdrawals": [], "now": frappe.utils.now_datetime().isoformat()}
+
+    limit = max(1, min(int(limit or 100), 500))
+    since_dt = frappe.utils.get_datetime(since) if since else frappe.utils.add_to_date(
+        None, days=-1
+    )
+    since_str = frappe.utils.get_datetime_str(since_dt)
+
+    def _fetch(doctype: str, extra_fields: list[str]) -> list[dict]:
+        if not frappe.db.has_column(doctype, "medusa_originated"):
+            # Pre-patch site — treat all docs as Frappe-originated (safer
+            # default). Once the patch runs, future API-created docs land
+            # with medusa_originated=1 and get filtered out.
+            filters = {"docstatus": 1, "modified": [">=", since_str]}
+        else:
+            filters = {
+                "docstatus": 1,
+                "modified": [">=", since_str],
+                "medusa_originated": 0,
+            }
+        rows = frappe.get_all(
+            doctype,
+            filters=filters,
+            fields=["name", "customer", "amount", "posting_date",
+                    "reference_no", "remarks", "modified", "docstatus"] + extra_fields,
+            order_by="modified ASC",
+            limit=limit,
+        )
+        # Decorate with the customer's primary email (Phase 16+ Contact lookup)
+        for r in rows:
+            r["customer_email"] = _primary_email_for_customer(r["customer"])
+        return rows
+
+    deposits = _fetch("Wallet Deposit", ["mode"])
+    withdrawals = _fetch("Wallet Withdrawal", [])
+
+    return {
+        "deposits": deposits,
+        "withdrawals": withdrawals,
+        "now": frappe.utils.now_datetime().isoformat(),
+    }
+
+
+def _primary_email_for_customer(customer: str) -> Optional[str]:
+    """Look up the primary Contact email for the Customer (Phase 16+
+    standard ERPNext flow). Returns None if no Contact / no email."""
+    primary = frappe.db.get_value("Customer", customer, "customer_primary_contact")
+    if not primary:
+        return None
+    rows = frappe.db.sql(
+        "SELECT email_id FROM `tabContact Email` WHERE parent = %s AND is_primary = 1 LIMIT 1",
+        (primary,), as_dict=True,
+    )
+    if not rows:
+        rows = frappe.db.sql(
+            "SELECT email_id FROM `tabContact Email` WHERE parent = %s ORDER BY idx LIMIT 1",
+            (primary,), as_dict=True,
+        )
+    return rows[0]["email_id"] if rows else None
 
 
 # ── helpers ─────────────────────────────────────────────────────────
