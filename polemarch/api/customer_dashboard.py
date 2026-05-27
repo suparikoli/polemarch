@@ -5,6 +5,7 @@ tab on the Customer form by public/js/customer.js.
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 @frappe.whitelist()
@@ -17,19 +18,25 @@ def get_dashboard(customer: str) -> dict:
         "custom_is_polemarch_invoice": 1,
         "docstatus": 1,
     }
-    total_orders = frappe.db.count("Sales Invoice", filters=inv_filters)
-    total_invested = (
-        frappe.db.sql(
-            """
-            SELECT COALESCE(SUM(grand_total), 0)
-            FROM `tabSales Invoice`
-            WHERE customer = %s AND custom_is_polemarch_invoice = 1 AND docstatus = 1
-            """,
-            (customer,),
-        )[0][0]
-        or 0
+    # Single aggregate covers both count + sum — saves a round-trip per
+    # dashboard render. Sales Invoice has indexes on (customer, docstatus),
+    # so this is a single index scan either way.
+    inv_agg = frappe.db.sql(
+        """
+        SELECT COUNT(name) AS cnt, COALESCE(SUM(grand_total), 0) AS total
+        FROM `tabSales Invoice`
+        WHERE customer = %s AND custom_is_polemarch_invoice = 1 AND docstatus = 1
+        """,
+        (customer,),
+        as_dict=True,
     )
-    currency = frappe.db.get_value("Customer", customer, "default_currency") or frappe.defaults.get_global_default("currency") or "INR"
+    total_orders = int(inv_agg[0]["cnt"] or 0) if inv_agg else 0
+    total_invested = flt(inv_agg[0]["total"] if inv_agg else 0)
+    currency = (
+        frappe.db.get_value("Customer", customer, "default_currency")
+        or frappe.defaults.get_global_default("currency")
+        or "INR"
+    )
 
     recent_trades = frappe.get_all(
         "Sales Invoice",
@@ -154,13 +161,30 @@ def _positions_section(customer: str) -> dict | None:
 
 
 def _kyc_status(customer: str) -> dict:
-    doc = frappe.get_doc("Customer", customer)
+    # `pan` / `custom_pan_card` / `custom_aadhaar_card` are scalar fields on
+    # Customer (Data / Attach / Attach). `custom_dp_details` and
+    # `custom_bank_details` are Table fields — completeness is "has at least
+    # one row". One get_value for all 3 scalars, two child-row counts.
+    # Replaces the old `frappe.get_doc("Customer", ...)` which N+1'd every
+    # child table on Customer just to read 5 booleans.
+    scalars = frappe.db.get_value(
+        "Customer",
+        customer,
+        ("pan", "custom_pan_card", "custom_aadhaar_card"),
+        as_dict=True,
+    ) or {}
+    has_dp = bool(
+        frappe.db.count("DP Details", {"parent": customer, "parenttype": "Customer"})
+    )
+    has_bank = bool(
+        frappe.db.count("Bank Details", {"parent": customer, "parenttype": "Customer"})
+    )
     checks = [
-        ("pan_number", bool((doc.get("pan") or "").strip()), _("PAN number on record")),
-        ("pan_card", bool(doc.get("custom_pan_card")), _("PAN card uploaded")),
-        ("aadhaar_card", bool(doc.get("custom_aadhaar_card")), _("Aadhaar card uploaded")),
-        ("dp_details", bool(doc.get("custom_dp_details")), _("Demat (DP Details) on file")),
-        ("bank_details", bool(doc.get("custom_bank_details")), _("Bank account on file")),
+        ("pan_number", bool((scalars.get("pan") or "").strip()), _("PAN number on record")),
+        ("pan_card", bool(scalars.get("custom_pan_card")), _("PAN card uploaded")),
+        ("aadhaar_card", bool(scalars.get("custom_aadhaar_card")), _("Aadhaar card uploaded")),
+        ("dp_details", has_dp, _("Demat (DP Details) on file")),
+        ("bank_details", has_bank, _("Bank account on file")),
     ]
     items = [{"key": k, "ok": ok, "label": label} for k, ok, label in checks]
     completeness = round(100 * sum(1 for i in items if i["ok"]) / len(items)) if items else 0

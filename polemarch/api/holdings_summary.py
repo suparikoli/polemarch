@@ -132,6 +132,12 @@ def _attach_market_value(row: dict) -> dict:
 def get_summary(company: Optional[str] = None) -> dict:
     """Full rollup: per-security rows + grand totals.
 
+    Result is cached on `frappe.local` for the duration of the request so
+    workspace Number Cards (5 of them, each calling a thin wrapper around
+    this function) share a single aggregation pass instead of running it
+    5×. Cache key includes `company` so multi-company sites still get
+    isolated results.
+
     Returns:
         {
             "company": str,
@@ -139,6 +145,7 @@ def get_summary(company: Optional[str] = None) -> dict:
             "totals": {
                 "sit_units", "sit_cost",
                 "inv_units", "inv_cost",
+                "unalloc_units", "unalloc_cost",
                 "total_units", "total_cost",
                 "market_value", "unrealised_gain", "unrealised_gain_pct",
                 "securities", "lots",
@@ -146,6 +153,14 @@ def get_summary(company: Optional[str] = None) -> dict:
         }
     """
     company = company or frappe.defaults.get_user_default("Company")
+    cache_key = f"polemarch_holdings_summary::{company or '_'}"
+    cached = getattr(frappe.local, "polemarch_request_cache", None)
+    if cached is None:
+        cached = {}
+        frappe.local.polemarch_request_cache = cached
+    if cache_key in cached:
+        return cached[cache_key]
+
     rows = [_attach_market_value(r) for r in _rows(company=company)]
 
     totals = {
@@ -153,6 +168,8 @@ def get_summary(company: Optional[str] = None) -> dict:
         "sit_cost": sum(flt(r["sit_cost"]) for r in rows),
         "inv_units": sum(flt(r["inv_units"]) for r in rows),
         "inv_cost": sum(flt(r["inv_cost"]) for r in rows),
+        "unalloc_units": sum(flt(r["unalloc_units"]) for r in rows),
+        "unalloc_cost": sum(flt(r["unalloc_cost"]) for r in rows),
         "total_units": sum(flt(r["total_units"]) for r in rows),
         "total_cost": sum(flt(r["total_cost"]) for r in rows),
         "market_value": sum(flt(r["market_value"]) for r in rows if r["market_value"] is not None) or None,
@@ -178,7 +195,9 @@ def get_summary(company: Optional[str] = None) -> dict:
         totals["priced_securities"] = 0
         totals["unpriced_securities"] = len(rows)
 
-    return {"company": company, "rows": rows, "totals": totals}
+    result = {"company": company, "rows": rows, "totals": totals}
+    cached[cache_key] = result
+    return result
 
 
 @frappe.whitelist()
@@ -259,20 +278,10 @@ def card_investment_value(company: Optional[str] = None) -> dict:
 def card_unclassified_value(company: Optional[str] = None) -> dict:
     """Number Card: book value of Unclassified shares (within the 5-business-
     day classification window — sits in the Pending Classification suspense
-    account until day-5 reconciliation)."""
-    where = ["status IN ('Open', 'Partially Disposed')", "qty_remaining > 0"]
-    params: list = []
-    if company:
-        where.append("company = %s")
-        params.append(company)
-    where.append("classification = 'Unallocated'")
-    where_sql = " AND ".join(where)
-    row = frappe.db.sql(
-        f"SELECT COALESCE(SUM(qty_remaining * cost_basis_per_unit), 0) "
-        f"FROM `tabInvestment Holding` WHERE {where_sql}",
-        tuple(params),
-    )
-    return _currency_card(flt(row[0][0]) if row else 0)
+    account until day-5 reconciliation). Reads the cached aggregate from
+    `get_summary` to share the single GROUP BY pass with the other 4 cards."""
+    s = get_summary(company)
+    return _currency_card(s["totals"]["unalloc_cost"])
 
 
 @frappe.whitelist()
