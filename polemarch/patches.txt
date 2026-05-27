@@ -9,18 +9,13 @@ polemarch.patches.v0_0_1.recreate_mithtech_tax_template
 polemarch.patches.v0_0_1.link_polemarch_items_to_non_gst_template
 polemarch.patches.v0_0_1.strip_hsn_from_polemarch_items
 # v0_2_0 — Polemarch Trading: Phase 0 (Prep)
-# Order matters: CoA → Portfolios → custom fields → backfills.
+# Order matters: CoA → custom fields → backfills → wallets.
+# Portfolio + Security Position patches were dropped along with the
+# doctypes they seeded (see v0_14_0.drop_portfolio_and_position).
 polemarch.polemarch_trading.patches.v0_2_0.seed_coa
-polemarch.polemarch_trading.patches.v0_2_0.seed_portfolios
 polemarch.polemarch_trading.patches.v0_2_0.add_custom_security_field_to_item
-polemarch.polemarch_trading.patches.v0_2_0.add_custom_portfolio_field_to_investment_holding
 polemarch.polemarch_trading.patches.v0_2_0.backfill_security_from_polemarch_items
-polemarch.polemarch_trading.patches.v0_2_0.backfill_portfolio_on_holdings
-# Phase 1 — Core ledgers (Wallet / Position) and mirror-seed.
-# Order: wallets → positions. (The Security Lot + SLLE backfills that used to
-# run here were dropped in v0_8_0 — those doctypes no longer exist.)
 polemarch.polemarch_trading.patches.v0_2_0.seed_wallets_for_polemarch_customers
-polemarch.polemarch_trading.patches.v0_2_0.seed_position_from_holdings
 # Phase 3 — Capital Gains auto-JE plumbing.
 # `add_custom_fields_to_je` is the only auto-run Phase 3 patch.
 # `backfill_capital_gains_je` is OPT-IN — run manually via `bench execute`.
