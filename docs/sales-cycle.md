@@ -163,12 +163,12 @@ Two-phase cascade (P28 fix). `before_cancel` runs *before* Frappe's `check_links
 - Severs `Wallet Transaction.reference_doctype` / `reference_name` on every WT that pointed at this Sale (via `controller_helpers.sever_wallet_transaction_link`).
 - Stashes the WT names on `self.flags._pending_wt_reversal` so `on_cancel` can still reverse them after the forward pointer is gone.
 
-**`on_cancel` reverses everything atomically:**
+**`on_cancel` reverses everything atomically (mirrors Purchase ordering):**
 
 1. **Wallet** (if applicable) — `wallet.reverse(wt_name, ...)` posts a Reversal that credits the wallet back. Uses the stashed names from `before_cancel`.
-2. **Revenue JE** + **COGS JE** — both cancelled (ERPNext auto-reverses GL).
-3. **Investment Disposal** — cancelled. Its own `on_cancel` decrements `qty_disposed` on each Holding (releasing inventory back).
-4. **Customer Holding** (if `party=Customer`) — `apply_delta(-qty, source="Security Sale", note="reversed on Sale cancel")`. If the snapshot drifted (e.g. operator manually edited it lower), clamps to 0 + drift note.
+2. **Customer Holding** (if `party=Customer`) — `apply_delta(-qty, source="Security Sale", note="reversed on Sale cancel")`. CRM only, no GL. If the snapshot drifted (e.g. operator manually edited it lower), clamps to 0 + drift note.
+3. **Revenue JE** + **COGS JE** — both cancelled (ERPNext auto-reverses GL).
+4. **Investment Disposal** — cancelled. Its own `on_cancel` decrements `qty_disposed` AND `qty_disposed_<source_classification>` on each consumed Holding atomically (Gap 4 fix), releasing inventory back into the right classification bucket.
 
 ---
 
@@ -281,7 +281,7 @@ Net change to Polemarch's net worth: +₹1,000  ✓
 | Customer already had Holdings (CRM snapshot) before this sale | snapshot increments — `qty += sold qty`, doesn't reset |
 | Customer Holding row had drift (operator-edited lower) | New qty = old + sold, regardless of historical drift |
 | Sale `on_submit` is re-invoked programmatically (rare) | Idempotency guard: if a Disposal with `polemarch_security_sale = self.name` already exists, returns it instead of minting a duplicate (post P3 audit fix). |
-| Cancel a Sale whose Disposal had FURTHER trades after | Reversal would propagate; the controller doesn't currently block this — be careful (future hardening candidate). Purchase has an analogous `_guard_holding_untouched`; Sale doesn't. |
+| Cancel a Sale whose Disposal had FURTHER trades against the same Holdings | Safe (post Gap 4 fix). Each Disposal's cancel decrements both `qty_disposed` and `qty_disposed_<source_classification>` on every consumed Holding, independent of any subsequent trades. The IH's classification invariants stay consistent at every step. |
 
 ---
 
@@ -294,6 +294,8 @@ Net change to Polemarch's net worth: +₹1,000  ✓
 | **24** | FIFO consumption scopes by classification child rows. `from_classification` picks one bucket (SiT or Investment); FIFO matches the consumed lots accordingly. |
 | **28** | `before_cancel` severs the Wallet Transaction reference link before Frappe's `check_links` fires, so customer-Wallet sale cancels no longer hit the "cannot cancel — has active links" wall. Stashes WT names on `self.flags` for `on_cancel` reversal. |
 | **Gap 1 audit fix** | `_create_investment_disposal` now checks for an existing Disposal back-linked via `polemarch_security_sale = self.name` before minting a new one. Mirrors Purchase's idempotency guard. |
+| **Gap 4 fix** | `Investment Disposal Lot.source_classification` carries the consumed bucket. `_apply_to_holdings` bumps `qty_disposed_<class>` alongside `qty_disposed`. `accounting._build_cost_lines_for_disposal` routes COGS per-lot using the same field. `v0_24_0.backfill_disposal_lot_source_classification` retrofits the new field on historical lots + resyncs the class counters. Also reordered IH `validate()` so derived fields compute before classification check. |
+| **Gap 3 fix** | `Sale.on_cancel` reordered to mirror Purchase: wallet → CH snapshot → JEs → Disposal cancel. Cosmetic but improves cross-controller consistency. |
 
 ---
 

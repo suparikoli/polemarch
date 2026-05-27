@@ -105,13 +105,18 @@ class SecuritySale(Document):
         self._sever_wallet_transaction_link_if_any()
 
     def on_cancel(self):
-        # Reverse JEs and wallet first (no inventory dependency), then
-        # cancel the Disposal (its on_cancel restores qty_disposed on the
-        # consumed Holdings). Roll back the Customer Holding snapshot.
+        # Mirrors Purchase.on_cancel ordering for consistency. Wallet
+        # reversal first (no inventory dependency), then CH snapshot
+        # rollback (CRM only, no GL), then JE cancel (Revenue + COGS),
+        # then Disposal cancel which decrements qty_disposed + qty_disposed_<class>
+        # on consumed Holdings via Disposal._apply_to_holdings(-1).
+        # The Gap 4 fix keeps qty_disposed_<class> in sync, so cancelling
+        # a Sale that had subsequent trades against the same Holdings is
+        # fully reversible — each Sale's class counter unwinds independently.
         self._reverse_wallet_transaction_if_any()
+        self._reverse_customer_holding_snapshot()
         self._cancel_journal_entries()
         self._cancel_investment_disposal()
-        self._reverse_customer_holding_snapshot()
 
     def _sever_wallet_transaction_link_if_any(self):
         """Sever the WT.reference link so Frappe's link check passes;
