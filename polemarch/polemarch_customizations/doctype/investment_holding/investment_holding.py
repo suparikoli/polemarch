@@ -28,8 +28,14 @@ from frappe.utils import flt
 class InvestmentHolding(Document):
     def validate(self):
         self._validate_qty_consistency()
-        self._validate_classification_rows()
+        # Derived fields (qty_remaining + classification rollup counters) MUST
+        # compute before _validate_classification_rows so that the
+        # `Σ child rows ≤ qty_remaining` check sees the post-update value.
+        # Otherwise an _apply_to_holdings call from Disposal that nudges
+        # qty_disposed would race against validate's stale qty_remaining and
+        # throw spuriously on cancel (smoke-tested in the Gap 4 fix).
         self._compute_derived_fields()
+        self._validate_classification_rows()
         self._update_status()
 
     def _validate_classification_rows(self):
