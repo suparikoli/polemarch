@@ -154,3 +154,11 @@ polemarch.patches.v0_24_0.backfill_disposal_lot_source_classification
 # classification field to "Unallocated"). Idempotent — only seeds where
 # child rows are missing.
 polemarch.patches.v0_24_0.backfill_classification_child_rows_from_classification_field
+# Medusa-sync prep: `source` Select field on Security Sale (Direct /
+# Platform Purchase / Backend Order). Drives the storefront's
+# order-source chip. Idempotent.
+polemarch.patches.v0_24_0.add_security_sale_source_field
+# Medusa-sync prep: `medusa_order_id` Custom Field on Security Sale.
+# Unique, populated by the Medusa webhook receiver for idempotency on
+# storefront-originated orders.
+polemarch.patches.v0_24_0.add_medusa_order_id_field

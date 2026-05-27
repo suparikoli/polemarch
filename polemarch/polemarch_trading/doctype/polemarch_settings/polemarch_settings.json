@@ -1,0 +1,121 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-05-27 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "issingle": 1,
+ "module": "Polemarch Trading",
+ "name": "Polemarch Settings",
+ "field_order": [
+  "section_sync",
+  "enable_medusa_sync",
+  "medusa_webhook_secret",
+  "section_wallet_gateway",
+  "wallet_gateway_fee_fixed",
+  "wallet_gateway_fee_gst_rate",
+  "column_break_gateway",
+  "wallet_gateway_fee_expense_account",
+  "wallet_gateway_fee_gst_input_account",
+  "wallet_gateway_fee_bank_account",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_sync",
+   "fieldtype": "Section Break",
+   "label": "Medusa Sync"
+  },
+  {
+   "fieldname": "enable_medusa_sync",
+   "fieldtype": "Check",
+   "label": "Enable Medusa Sync",
+   "default": "1",
+   "description": "Master toggle. When off, the webhook receiver returns 200 immediately without dispatching, and the wallet-sync endpoints throw a friendly 'sync disabled' error."
+  },
+  {
+   "fieldname": "medusa_webhook_secret",
+   "fieldtype": "Password",
+   "label": "Medusa Webhook Secret",
+   "description": "HMAC-SHA256 key. Inbound POSTs to /api/method/polemarch.api.medusa_webhook.receive must carry x-medusa-signature computed over the raw body. Must equal the same secret in Medusa's ErpnextSetting.webhook_secret."
+  },
+  {
+   "fieldname": "section_wallet_gateway",
+   "fieldtype": "Section Break",
+   "label": "Wallet Payment-Gateway Fee (company-borne)"
+  },
+  {
+   "fieldname": "wallet_gateway_fee_fixed",
+   "fieldtype": "Currency",
+   "options": "INR",
+   "label": "Fixed Fee per Pay-in",
+   "default": "20",
+   "description": "Cashfree (or whichever gateway) charges this flat amount per successful wallet deposit. The company bears it as an expense — the customer's wallet credit is NOT reduced by the fee."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_gst_rate",
+   "fieldtype": "Percent",
+   "label": "GST Rate on Fee",
+   "default": "18",
+   "description": "GST applied on top of the fixed fee. 18% standard for facilitation services. India Compliance reads the GST-input account during GSTR-2 filing."
+  },
+  {
+   "fieldname": "column_break_gateway",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wallet_gateway_fee_expense_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Fee Expense Account",
+   "description": "Where the gateway fee net-of-GST hits. P&L expense — typically under Indirect Expenses. India Compliance picks this up in GSTR-1 / GSTR-3B."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_gst_input_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "GST Input Account",
+   "description": "Input GST credit on the fee. Asset (current) account. Usually 'Input Tax IGST' or similar from the standard India Compliance CoA."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_bank_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Bank Account (Fee Outflow)",
+   "description": "Where the fee + GST is deducted from. Usually the same operating bank account that receives the customer's deposit. Cashfree typically settles net-of-fee (deposit credit minus fee) into this account."
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Operator Notes",
+   "description": "Free-form. E.g., 'switched from Cashfree to Razorpay on 2026-06-01, fee schedule changed to ₹15 + 18% GST'."
+  }
+ ],
+ "modified": "2026-05-27 12:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
