@@ -224,31 +224,163 @@ def _handle_customer_created(data: dict, event_id: Optional[str] = None) -> dict
 
 
 def _handle_customer_updated(data: dict, event_id: Optional[str] = None) -> dict:
-    """Lightweight customer update. Currently syncs the metadata.client_id
-    onto custom_client_id if present and previously unset. Heavier
-    fields (KYC, addresses) are driven by Medusa→Frappe via the pull
-    cron, not the push webhook — pull lets the operator preview and
-    approve changes before they hit the Customer ledger."""
+    """Customer update — top-level metadata sync PLUS bank/demat child
+    table upsert when the payload includes those arrays.
+
+    The bank/demat sync was wired in Phase 189 (Bank + BOID sync,
+    Medusa→Frappe). The Medusa-side erpnext-forward subscriber listens
+    to bank_account.verified / demat_account.verified events and
+    rewrites them to customer.updated on the wire, with the enriched
+    customer payload carrying:
+
+      bank_accounts: [
+        {bank_name, ifsc, account_number_last4, account_holder_name,
+         is_primary, verification_status, ...}
+      ]
+      demat_accounts: [
+        {depository, dp_id, client_id, boid, dp_name,
+         account_holder_name, is_primary, verification_status, ...}
+      ]
+
+    Each Medusa row is upserted into the Customer's `custom_bank_
+    details` / `custom_dp_details` child tables, keyed by:
+      - Bank: (ifsc, account_number_last4)
+      - Demat: (bo_id)
+
+    Unverified Medusa rows are skipped (only `verification_status ==
+    'verified'` rows land on Frappe — the operator workspace shouldn't
+    show pending rows).
+    """
     email = (data.get("email") or "").strip().lower()
     if not email:
         return {"status": "skipped", "reason": "no_email"}
     customer = _customer_by_email(email)
     if not customer:
         return {"status": "not_found", "email": email}
+
     metadata = data.get("metadata") or {}
-    updates = {}
+    top_level_updates = {}
     if metadata.get("client_id") and not frappe.db.get_value(
         "Customer", customer, "custom_client_id"
     ):
-        updates["custom_client_id"] = metadata["client_id"]
-    if updates:
-        frappe.db.set_value("Customer", customer, updates, update_modified=False)
-        frappe.db.commit()
+        top_level_updates["custom_client_id"] = metadata["client_id"]
+    if top_level_updates:
+        frappe.db.set_value(
+            "Customer", customer, top_level_updates, update_modified=False
+        )
+
+    # ── Bank + Demat child-row upserts ──
+    bank_synced = _sync_bank_accounts(
+        customer, data.get("bank_accounts") or []
+    )
+    demat_synced = _sync_demat_accounts(
+        customer, data.get("demat_accounts") or []
+    )
+
+    frappe.db.commit()
     return {
         "status": "synced",
         "customer": customer,
-        "updates": list(updates.keys()),
+        "updates": list(top_level_updates.keys()),
+        "bank_accounts": bank_synced,
+        "demat_accounts": demat_synced,
     }
+
+
+def _sync_bank_accounts(customer_name: str, rows: list) -> dict:
+    """Upsert Medusa-verified banks into the Customer's
+    custom_bank_details child table. Key = (bank_code/IFSC,
+    ac_number/last4 — though stored full on Frappe, the last4 is the
+    matchable component since Medusa never sees the full number once
+    encrypted)."""
+    if not rows:
+        return {"upserted": 0, "skipped": 0, "removed_unverified": 0}
+    customer_doc = frappe.get_doc("Customer", customer_name)
+    existing_by_key = {
+        (b.bank_code or "", (b.ac_number or "")[-4:]): b
+        for b in (customer_doc.get("custom_bank_details") or [])
+    }
+    upserted = 0
+    skipped = 0
+    for row in rows:
+        if (row.get("verification_status") or "") != "verified":
+            skipped += 1
+            continue
+        ifsc = (row.get("ifsc") or "").upper()
+        last4 = row.get("account_number_last4") or ""
+        key = (ifsc, last4)
+        existing = existing_by_key.get(key)
+        payload = {
+            "bank_name": row.get("bank_name") or "",
+            "bank_code": ifsc,
+            "ac_number": last4,  # Medusa only knows last4 — Frappe
+                                  # operator can backfill full number
+                                  # manually if needed.
+            "account_holder": row.get("account_holder_name") or "",
+            "is_primary": 1 if row.get("is_primary") else 0,
+            "cheque_image": row.get("bank_proof_file_url") or "",
+        }
+        if existing:
+            for k, v in payload.items():
+                existing.set(k, v)
+        else:
+            customer_doc.append("custom_bank_details", payload)
+        upserted += 1
+    if upserted or skipped:
+        customer_doc.flags.ignore_permissions = True
+        customer_doc.save()
+    return {"upserted": upserted, "skipped": skipped}
+
+
+def _sync_demat_accounts(customer_name: str, rows: list) -> dict:
+    """Upsert Medusa-verified demats into the Customer's
+    custom_dp_details child table. Key = bo_id (BOID is unique per
+    depository — for CDSL it's the 16-digit number; for NSDL it's
+    dp_id + client_id concatenated)."""
+    if not rows:
+        return {"upserted": 0, "skipped": 0}
+    customer_doc = frappe.get_doc("Customer", customer_name)
+    existing_by_key = {
+        (b.bo_id or ""): b
+        for b in (customer_doc.get("custom_dp_details") or [])
+    }
+    upserted = 0
+    skipped = 0
+    for row in rows:
+        if (row.get("verification_status") or "") != "verified":
+            skipped += 1
+            continue
+        # CDSL: boid is the 16-digit number. NSDL: derive from dp_id +
+        # client_id (Medusa exposes both columns).
+        depository = (row.get("depository") or "").upper()
+        if depository == "CDSL":
+            bo_id = row.get("boid") or ""
+        else:
+            bo_id = f"{row.get('dp_id') or ''}{row.get('client_id') or ''}"
+        if not bo_id:
+            skipped += 1
+            continue
+        existing = existing_by_key.get(bo_id)
+        payload = {
+            "dp_id": row.get("dp_id") or "",
+            "client_id": row.get("client_id") or "",
+            "bo_id": bo_id,
+            "depository": depository,
+            "dp_name": row.get("dp_name") or "",
+            "primary_bo_name": row.get("account_holder_name") or "",
+            "is_primary": 1 if row.get("is_primary") else 0,
+            "cmr_copy": row.get("cmr_file_url") or "",
+        }
+        if existing:
+            for k, v in payload.items():
+                existing.set(k, v)
+        else:
+            customer_doc.append("custom_dp_details", payload)
+        upserted += 1
+    if upserted or skipped:
+        customer_doc.flags.ignore_permissions = True
+        customer_doc.save()
+    return {"upserted": upserted, "skipped": skipped}
 
 
 def _handle_customer_kyc_synced(data: dict, event_id: Optional[str] = None) -> dict:
