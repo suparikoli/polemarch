@@ -571,10 +571,22 @@ def _handle_customer_updated(data: dict, event_id: Optional[str] = None) -> dict
 
 def _sync_bank_accounts(customer_name: str, rows: list) -> dict:
     """Upsert Medusa-verified banks into the Customer's
-    custom_bank_details child table. Key = (bank_code/IFSC,
-    ac_number/last4 — though stored full on Frappe, the last4 is the
-    matchable component since Medusa never sees the full number once
-    encrypted)."""
+    custom_bank_details child table.
+
+    Match key is (IFSC, last4). The Medusa side now decrypts the
+    `account_number_encrypted` column server-side (via the wallet
+    module's `listBankAccountsForSync` helper) and passes the FULL
+    account number on `row.account_number`; we use that for
+    `ac_number` so Frappe operators see the real number rather than
+    just "1485". The `last4` field is kept around purely as the
+    stable match key — full account numbers can be re-issued or
+    masked differently between systems, but (IFSC, last4) is enough
+    to identify a row without false positives.
+
+    For backward compatibility (older payloads that only carry
+    last4), we fall back to last4 in `ac_number` if `account_number`
+    isn't present.
+    """
     if not rows:
         return {"upserted": 0, "skipped": 0, "removed_unverified": 0}
     customer_doc = frappe.get_doc("Customer", customer_name)
@@ -590,14 +602,16 @@ def _sync_bank_accounts(customer_name: str, rows: list) -> dict:
             continue
         ifsc = (row.get("ifsc") or "").upper()
         last4 = row.get("account_number_last4") or ""
+        # Prefer the full decrypted account number — fall back to
+        # last4 only if the wallet helper couldn't decrypt (key
+        # rotation skew, etc.) or the payload predates the helper.
+        full_number = row.get("account_number") or last4
         key = (ifsc, last4)
         existing = existing_by_key.get(key)
         payload = {
             "bank_name": row.get("bank_name") or "",
             "bank_code": ifsc,
-            "ac_number": last4,  # Medusa only knows last4 — Frappe
-                                  # operator can backfill full number
-                                  # manually if needed.
+            "ac_number": full_number,
             "account_holder": row.get("account_holder_name") or "",
             "is_primary": 1 if row.get("is_primary") else 0,
             "cheque_image": row.get("bank_proof_file_url") or "",
