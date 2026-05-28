@@ -90,6 +90,15 @@ def receive() -> dict:
             "reason": "no_handler_for_event",
         }
 
+    # HMAC already authenticated the caller — switch the session user
+    # to Administrator for the duration of the dispatch so downstream
+    # doc-event hooks (Contact sync on Customer save, etc.) can read /
+    # write linked doctypes without tripping on Guest-role checks. The
+    # `frappe.db.set_value` + `.save(ignore_permissions=True)` calls
+    # in the handlers themselves stay best-practice — this is the
+    # belt-and-braces for hooks that don't honour the flag.
+    prev_user = frappe.session.user
+    frappe.set_user("Administrator")
     try:
         result = handler(data, event_id=event_id)
         return {"ok": True, "event": event, "result": result}
@@ -100,6 +109,8 @@ def receive() -> dict:
         )
         frappe.local.response.http_status_code = 500
         return {"ok": False, "event": event, "error": str(e)}
+    finally:
+        frappe.set_user(prev_user)
 
 
 @frappe.whitelist(allow_guest=True)
@@ -186,6 +197,12 @@ def receive_mapped() -> dict:
             "key_field": key_field,
         }
 
+    # Same Administrator-switch pattern as `receive()` — HMAC is the
+    # auth boundary; once it passes, hooks that read/write linked
+    # doctypes (e.g. Contact sync on Customer save) need full
+    # permissions.
+    prev_user = frappe.session.user
+    frappe.set_user("Administrator")
     try:
         result = _upsert_via_mapping(
             doctype=doctype,
@@ -209,6 +226,8 @@ def receive_mapped() -> dict:
         )
         frappe.local.response.http_status_code = 500
         return {"ok": False, "event": event, "error": str(e)}
+    finally:
+        frappe.set_user(prev_user)
 
 
 def _upsert_via_mapping(
