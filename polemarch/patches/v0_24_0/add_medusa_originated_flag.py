@@ -10,9 +10,13 @@ Discriminates between:
     storefront payment captured. These are ALREADY reflected on the
     Medusa side; the pull cron skips them to avoid double-mirroring.
 
-The pull cron in the Medusa plugin polls
-`polemarch.api.wallet_sync.list_for_medusa(since)` which filters
-WHERE medusa_originated = 0 AND modified > since.
+The pull cron in the Medusa plugin polls the canonical "Wallet
+Transaction → Wallet Deposit (credit)" + "...→ Wallet Withdrawal
+(debit)" mappings (canonical-mappings.ts), whose pull_filter is
+`[["medusa_originated", "=", 0], ["docstatus", "=", 1]]`. Those
+mappings hit Frappe's standard `frappe.client.get_list` API rather
+than a custom endpoint — the legacy `wallet_sync.list_for_medusa`
+was dropped in v0_25_0 (#184).
 
 Idempotent. Default = 0 (existing operator-created rows remain
 operator-created; API-created rows from future calls set 1).
