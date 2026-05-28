@@ -102,6 +102,261 @@ def receive() -> dict:
         return {"ok": False, "event": event, "error": str(e)}
 
 
+@frappe.whitelist(allow_guest=True)
+def receive_mapped() -> dict:
+    """Counterpart of `receive()` for the canonical-mapping push path
+    (Medusa erpnext-plugin → `pushViaMapping`). The two endpoints exist
+    side-by-side: `receive` handles the legacy full-payload envelope
+    used by `forwardEvent`, while `receive_mapped` handles the per-
+    mapping per-doctype envelope produced by `applyMapping`.
+
+    Body shape:
+      {
+        "event":        "customer.created" | "customer.updated" | ...,
+        "id":           <unique event id — `<medusa-event-id>:<mapping-id>`>,
+        "mapping_id":   <erpnext_mapping.id on the Medusa side>,
+        "mapping_name": <"Customer ↔ Customer", etc.>,
+        "doctype":      "Customer",
+        "key_field":    "email_id",      // erpnext-side identity column
+        "key_value":    "user@x.com",    // value to look up
+        "payload":      { <erpnext_field>: <transformed value>, ... }
+      }
+
+    HMAC verification, sync-disabled gate, and JSON parsing match
+    `receive()` exactly. The dispatch differs: instead of a fixed
+    `event → handler` table, the doctype + key_field decide the
+    upsert path. Customer gets the after_insert Contact wiring,
+    Security gets `medusa_originated`-style stamping, every other
+    doctype gets the generic `frappe.db.exists` + `set_value` /
+    `frappe.new_doc.insert` path.
+
+    Idempotency: re-posting the same `id` is harmless because (a) the
+    upsert by key is naturally idempotent (same payload → no diff),
+    and (b) ERPNext's modified-timestamp doesn't change on set_value
+    when the values are unchanged. Re-creates are prevented by the
+    `if existing_name` branch.
+
+    Returns:
+      {ok, doctype, name, status: "created" | "updated" | "skipped",
+       skipped_fields?: [...], mapping_name}
+    """
+    if not is_medusa_sync_enabled():
+        return {"ok": True, "skipped": True, "reason": "sync_disabled"}
+
+    raw_body = frappe.request.get_data(as_text=False) or b""
+    signature_header = frappe.get_request_header(_SIGNATURE_HEADER) or ""
+    secret = get_medusa_webhook_secret()
+    if not secret:
+        frappe.local.response.http_status_code = 500
+        return {
+            "ok": False,
+            "error": "Polemarch Settings.medusa_webhook_secret is not configured.",
+        }
+    computed = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature_header, computed):
+        frappe.local.response.http_status_code = 401
+        return {"ok": False, "error": "Invalid signature."}
+
+    try:
+        envelope: dict[str, Any] = json.loads(raw_body or b"{}")
+    except json.JSONDecodeError:
+        frappe.local.response.http_status_code = 400
+        return {"ok": False, "error": "Body is not valid JSON."}
+
+    event = envelope.get("event") or ""
+    event_id = envelope.get("id") or ""
+    doctype = (envelope.get("doctype") or "").strip()
+    key_field = (envelope.get("key_field") or "").strip()
+    key_value = envelope.get("key_value")
+    payload = envelope.get("payload") or {}
+    mapping_name = envelope.get("mapping_name") or "(unnamed)"
+
+    if not doctype:
+        frappe.local.response.http_status_code = 400
+        return {"ok": False, "error": "Missing `doctype`."}
+    if not key_field or key_value in (None, ""):
+        # Frappe upserts need an identity. Missing key = the Medusa
+        # source row didn't have the field the mapping points at —
+        # that's a mapping config issue, not a transient error.
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "missing_key_value",
+            "doctype": doctype,
+            "key_field": key_field,
+        }
+
+    try:
+        result = _upsert_via_mapping(
+            doctype=doctype,
+            key_field=key_field,
+            key_value=key_value,
+            payload=payload,
+            event=event,
+            event_id=event_id,
+        )
+        frappe.db.commit()
+        result["ok"] = True
+        result["mapping_name"] = mapping_name
+        return result
+    except Exception as e:
+        frappe.log_error(
+            title=f"Medusa receive_mapped failed: {mapping_name} ({event})",
+            message=(
+                f"event_id={event_id}\nenvelope={envelope}\n"
+                f"error={e}\n{frappe.get_traceback()}"
+            ),
+        )
+        frappe.local.response.http_status_code = 500
+        return {"ok": False, "event": event, "error": str(e)}
+
+
+def _upsert_via_mapping(
+    doctype: str,
+    key_field: str,
+    key_value: Any,
+    payload: dict,
+    event: str,
+    event_id: str,
+) -> dict:
+    """Doctype-aware upsert for `receive_mapped`. Each branch handles
+    the per-doctype quirks (Customer's Contact wiring, etc.) and then
+    delegates back to a shared scalar-only `_set_doctype_fields` helper
+    so the field-write logic stays in one place."""
+    if doctype == "Customer":
+        return _upsert_mapped_customer(
+            key_field=key_field,
+            key_value=str(key_value),
+            payload=payload,
+        )
+    # Generic fallback — applies to Security, Wallet Deposit, etc. that
+    # don't need custom child-doc wiring.
+    existing_name = frappe.db.get_value(
+        doctype, {key_field: key_value}, "name"
+    )
+    if existing_name:
+        _set_doctype_fields(doctype, existing_name, payload)
+        return {
+            "doctype": doctype,
+            "name": existing_name,
+            "status": "updated",
+        }
+    new_doc = frappe.get_doc({"doctype": doctype, **payload})
+    new_doc.flags.ignore_permissions = True
+    new_doc.flags.ignore_mandatory = True
+    new_doc.insert(ignore_permissions=True)
+    return {
+        "doctype": doctype,
+        "name": new_doc.name,
+        "status": "created",
+    }
+
+
+def _upsert_mapped_customer(
+    key_field: str, key_value: str, payload: dict
+) -> dict:
+    """Customer-specific upsert. Identity is by Contact email (Phase
+    16+), so when `key_field == "email_id"` we route through the
+    `_customer_by_email` helper instead of querying the Customer
+    table directly. Existing customers get a column-level set_value;
+    new customers go through the after_insert hook chain (Contact
+    placeholder + customer_name back-sync) and then have their
+    payload-driven Customer columns set in a second pass."""
+    email_lower = key_value.strip().lower()
+    existing_name: Optional[str] = None
+    if key_field == "email_id":
+        existing_name = _customer_by_email(email_lower)
+    else:
+        existing_name = frappe.db.get_value("Customer", {key_field: key_value}, "name")
+
+    # Scalar columns that exist on Customer go through set_value.
+    # `email_id` and `mobile_no` are also Customer columns (ERPNext
+    # syncs them from the primary Contact, but the column is writeable
+    # too), so they live in the same set as the custom_* fields.
+    if existing_name:
+        _set_doctype_fields("Customer", existing_name, payload)
+        return {
+            "doctype": "Customer",
+            "name": existing_name,
+            "status": "updated",
+        }
+
+    # New Customer — synthesise the mandatory fields the after_insert
+    # hook needs. customer_name might already be in the payload (from
+    # `metadata.pan_registered_name` → customer_name in the canonical
+    # mapping); fall back to email-localpart if it isn't.
+    customer_name = (
+        payload.get("customer_name")
+        or (email_lower.split("@", 1)[0] if "@" in email_lower else email_lower)
+    )
+    cust_doc = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": customer_name,
+        "customer_type": "Individual",
+        "customer_group": (
+            "Polemarch"
+            if frappe.db.exists("Customer Group", "Polemarch")
+            else _default_customer_group()
+        ),
+        "territory": _default_territory(),
+    })
+    cust_doc.flags.ignore_permissions = True
+    cust_doc.flags.ignore_mandatory = True
+    cust_doc.insert(ignore_permissions=True)
+
+    # Wire up the placeholder Contact created by polemarch.overrides.
+    # customer.after_insert with the email/phone from the payload so
+    # `_customer_by_email` finds this customer on the next push.
+    _populate_contact(
+        cust_doc.name,
+        {
+            "first_name": customer_name.split(" ", 1)[0],
+            "last_name": (
+                customer_name.split(" ", 1)[1]
+                if " " in customer_name
+                else ""
+            ),
+            "email": payload.get("email_id") or email_lower,
+            "phone": payload.get("mobile_no"),
+        },
+    )
+
+    # Set any remaining payload columns on the new Customer row.
+    # `customer_name` is already on the doc; everything else (email_id,
+    # mobile_no, pan, custom_*) gets a single set_value pass.
+    _set_doctype_fields("Customer", cust_doc.name, payload)
+    return {
+        "doctype": "Customer",
+        "name": cust_doc.name,
+        "status": "created",
+    }
+
+
+def _set_doctype_fields(doctype: str, name: str, payload: dict) -> None:
+    """Write the payload's scalar fields to an existing doc via
+    `frappe.db.set_value`. Filters out non-existent columns so a stale
+    canonical mapping (referencing a field the operator hasn't seeded
+    yet) doesn't blow up the whole push — those fields simply skip.
+    `customer_name` is always preserved on Customer (the field IS
+    writeable, but blocking accidental overwrites of operator-edited
+    legal names is more important — we only set it on first insert).
+    """
+    if not payload:
+        return
+    updates: dict = {}
+    for fieldname, value in payload.items():
+        if not frappe.db.has_column(doctype, fieldname):
+            continue
+        # Customer.customer_name is set at insert time and intentionally
+        # NOT clobbered on updates — operators may have edited it to
+        # match a court-corrected PAN name etc.
+        if doctype == "Customer" and fieldname == "customer_name":
+            continue
+        updates[fieldname] = value
+    if updates:
+        frappe.db.set_value(doctype, name, updates, update_modified=True)
+
+
 # ── event handlers ──────────────────────────────────────────────────
 
 
