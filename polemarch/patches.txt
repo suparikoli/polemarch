@@ -174,3 +174,10 @@ polemarch.patches.v0_24_0.add_medusa_originated_flag
 # Re-import the Polemarch workspace to land the new Settings card +
 # Polemarch Settings shortcut. Drop-and-reimport pattern; idempotent.
 polemarch.patches.v0_24_0.reimport_workspace_with_settings
+# v0_25_0 — Customer Custom Fields for raw KYC data landing from Medusa.
+# Adds PII-sensitive Custom Fields (custom_aadhaar_full, custom_demat_number,
+# custom_cmr_file) so the Medusa→Frappe customer push has landing fields for
+# metadata.kyc_aadhaar_number, metadata.kyc_demat_number, and
+# metadata.kyc_cmr_file_url. Permissions follow the same pattern as the
+# existing custom_pan_card / custom_aadhaar_card fields. Idempotent.
+polemarch.patches.v0_25_0.add_kyc_customer_custom_fields
