@@ -94,10 +94,14 @@ def _create_custom_fields():
             # Mithtech-only escape hatch. Customers serviced through other
             # MISPL lines of business (e.g. consulting / staff augmentation)
             # never trade on Polemarch and shouldn't see the trading UI.
-            # When this is ticked: the validate hook forces
-            # `custom_is_polemarch_customer = 0`, the Polemarch dashboard
-            # tab is hidden, and the KYC fields + indicator + action
-            # buttons all collapse out of the form.
+            # When ticked: the Polemarch dashboard tab is hidden, the KYC
+            # fields + indicator + action buttons all collapse, and the
+            # Medusa-sync gates (Frappe Webhook condition + canonical
+            # mapping pull_filter) skip this customer. This is the SINGLE
+            # operator-facing flag controlling Polemarch sync behaviour;
+            # the redundant `custom_is_polemarch_customer` was retired
+            # in v0_26_0 (see patches/v0_26_0/drop_polemarch_customer_flag.py)
+            # in favour of "Polemarch unless explicitly Mithtech-only".
             {
                 "fieldname": "custom_is_mithtech_only",
                 "label": "Mithtech Only Customer",
@@ -108,17 +112,6 @@ def _create_custom_fields():
                 "description": "Tick if this customer is for Mithtech-only services and should NOT see the Polemarch / KYC tabs.",
             },
             {
-                "fieldname": "custom_is_polemarch_customer",
-                "label": "Is Polemarch Customer",
-                "fieldtype": "Check",
-                "read_only": 1,
-                "no_copy": 1,
-                "in_standard_filter": 1,
-                "insert_after": "custom_bank_details",
-                "depends_on": "eval:!doc.custom_is_mithtech_only",
-                "description": "Auto-set when a DP Details row is added or when the customer is in the Polemarch group.",
-            },
-            {
                 "fieldname": "custom_kyc_status",
                 "label": "KYC Status",
                 "fieldtype": "Select",
@@ -126,7 +119,7 @@ def _create_custom_fields():
                 "default": "Not Started",
                 "in_standard_filter": 1,
                 "no_copy": 1,
-                "insert_after": "custom_is_polemarch_customer",
+                "insert_after": "custom_bank_details",
                 "depends_on": "eval:!doc.custom_is_mithtech_only",
             },
             {
@@ -209,14 +202,14 @@ def _create_custom_fields():
                 "label": "Polemarch",
                 "fieldtype": "Tab Break",
                 "insert_after": "custom_vba_id",
-                "depends_on": "eval:!doc.custom_is_mithtech_only && doc.custom_is_polemarch_customer",
+                "depends_on": "eval:!doc.custom_is_mithtech_only",
             },
             {
                 "fieldname": "custom_polemarch_dashboard_html",
                 "label": "Polemarch Dashboard",
                 "fieldtype": "HTML",
                 "insert_after": "custom_polemarch_dashboard_tab",
-                "depends_on": "eval:!doc.custom_is_mithtech_only && doc.custom_is_polemarch_customer",
+                "depends_on": "eval:!doc.custom_is_mithtech_only",
             },
         ],
         "Sales Invoice": [

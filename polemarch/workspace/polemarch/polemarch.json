@@ -310,7 +310,7 @@
    "format": "{} Polemarch",
    "label": "Polemarch Customers",
    "link_to": "Customer",
-   "stats_filter": "{\"custom_is_polemarch_customer\":1}",
+   "stats_filter": "{\"custom_is_mithtech_only\":0}",
    "type": "DocType"
   },
   {

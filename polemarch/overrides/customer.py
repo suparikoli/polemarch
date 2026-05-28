@@ -6,63 +6,17 @@ from polemarch.install import POLEMARCH_CUSTOMER_GROUP
 def validate(doc, method=None):
     # Mithtech-only customers are explicitly OFF the Polemarch path —
     # operator-managed escape hatch for non-trading lines of business.
-    # Force the polemarch flag off (so the tab + dashboard collapse) and
-    # skip the primary-contact requirement (Mithtech-only customers
-    # don't need DP / KYC plumbing).
+    # Skip the primary-contact requirement (Mithtech-only customers
+    # don't need DP / KYC plumbing). Every other customer in this
+    # tenant is implicitly a Polemarch customer; the legacy
+    # `custom_is_polemarch_customer` auto-derived flag was retired
+    # in v0_26_0 since `not custom_is_mithtech_only` is the only
+    # gate the rest of the codebase actually needs.
     if doc.get("custom_is_mithtech_only"):
-        doc.custom_is_polemarch_customer = 0
         _sync_customer_name_from_primary_contact(doc)
         return
-    doc.custom_is_polemarch_customer = 1 if _is_polemarch_customer(doc) else 0
     _sync_customer_name_from_primary_contact(doc)
     _enforce_primary_contact_for_polemarch(doc)
-
-
-def _is_polemarch_customer(doc) -> bool:
-    """A Customer counts as a Polemarch customer if ANY of these is true:
-
-      - they have at least one DP Details row (legacy signal)
-      - they're in the Polemarch Customer Group (manual tag)
-      - they have a Wallet (was funded at some point)
-      - they have at least one Customer Holding (was sold shares by Polemarch)
-      - there's at least one submitted Polemarch invoice / order / Security Sale / Security Purchase
-        with this customer as the party
-
-    The original validate-time logic only checked the first two, which
-    left customers transacted via the Polemarch trading subsystem
-    invisible in the Polemarch tab. This expansion captures everyone
-    who's actually doing something Polemarch-related.
-
-    Note: callers should short-circuit this for `custom_is_mithtech_only`
-    customers — that's an explicit operator opt-out and overrides every
-    auto-signal below."""
-    if doc.get("custom_is_mithtech_only"):
-        return False
-    if doc.get("custom_dp_details"):
-        return True
-    if doc.customer_group == POLEMARCH_CUSTOMER_GROUP:
-        return True
-    # The signals below require an existing row in the DB, so guard
-    # against being called on an unsaved doc.
-    name = doc.name
-    if not name or doc.is_new():
-        return False
-
-    if frappe.db.exists("Wallet", {"customer": name}):
-        return True
-    if frappe.db.exists("Customer Holding", {"customer": name}):
-        return True
-    if frappe.db.exists(
-        "Sales Invoice",
-        {"customer": name, "custom_is_polemarch_invoice": 1, "docstatus": 1},
-    ):
-        return True
-    for dt in ("Security Sale", "Security Purchase"):
-        if frappe.db.table_exists(dt) and frappe.db.exists(
-            dt, {"party_type": "Customer", "party": name, "docstatus": 1}
-        ):
-            return True
-    return False
 
 
 def after_insert(doc, method=None):
@@ -138,10 +92,14 @@ def _enforce_primary_contact_for_polemarch(doc):
     """Polemarch customers MUST have a primary Contact. Skipped for brand-new
     docs — after_insert auto-creates the placeholder Contact, but that fires
     after validate. Catches the case where an operator clears the primary_
-    contact link or imports a Polemarch customer without one."""
+    contact link or imports a Polemarch customer without one.
+
+    A Polemarch customer is anyone NOT explicitly opted out via
+    `custom_is_mithtech_only` — the caller (validate) already short-
+    circuits for mithtech-only docs before reaching this helper."""
     if doc.is_new():
         return
-    if not doc.custom_is_polemarch_customer:
+    if doc.get("custom_is_mithtech_only"):
         return
     if doc.customer_primary_contact:
         return
@@ -192,7 +150,10 @@ def _sync_customer_name_from_primary_contact(doc):
 
 
 def on_update(doc, method=None):
-    if doc.custom_is_polemarch_customer:
+    # Every non-Mithtech-only customer is a Polemarch customer (the
+    # legacy `custom_is_polemarch_customer` flag was retired in
+    # v0_26_0). Wallet bootstrap fires for all of them.
+    if not doc.get("custom_is_mithtech_only"):
         _maybe_ensure_wallet(doc)
 
 

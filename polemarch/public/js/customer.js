@@ -36,8 +36,11 @@ function render_polemarch_indicators(frm) {
     if (frm.is_new()) return;
     // Mithtech-only customers opt out of the entire Polemarch path —
     // no KYC indicator, no KYC action buttons, no dashboard render.
+    // The legacy `custom_is_polemarch_customer` auto-derived flag was
+    // retired in v0_26_0; every non-Mithtech-only customer in this
+    // tenant is a Polemarch customer by default.
     if (frm.doc.custom_is_mithtech_only) return;
-    if (frm.doc.custom_is_polemarch_customer) {
+    {
         frm.dashboard.add_indicator(__("Polemarch"), "green");
         const kyc = frm.doc.custom_kyc_status || "Not Started";
         const kyc_color = { "Verified": "green", "Rejected": "red", "In Review": "orange", "Not Started": "grey" }[kyc] || "grey";

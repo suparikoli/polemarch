@@ -23,16 +23,34 @@ def execute():
     if not frappe.db.table_exists("Customer"):
         return
 
-    # Polemarch customers missing a primary Contact.
-    candidates = frappe.db.sql(
-        """
-        SELECT name, customer_name
-          FROM `tabCustomer`
-         WHERE custom_is_polemarch_customer = 1
-           AND (customer_primary_contact IS NULL OR customer_primary_contact = '')
-        """,
-        as_dict=True,
-    )
+    # Polemarch customers missing a primary Contact. Filter by
+    # `custom_is_mithtech_only=0` (the surviving sync-gate flag after
+    # v0_26_0 retired `custom_is_polemarch_customer`). Pre-v0_26_0 sites
+    # may still have the old column — `frappe.db.has_column` keeps the
+    # patch backwards-safe.
+    if frappe.db.has_column("Customer", "custom_is_mithtech_only"):
+        candidates = frappe.db.sql(
+            """
+            SELECT name, customer_name
+              FROM `tabCustomer`
+             WHERE COALESCE(custom_is_mithtech_only, 0) = 0
+               AND (customer_primary_contact IS NULL OR customer_primary_contact = '')
+            """,
+            as_dict=True,
+        )
+    elif frappe.db.has_column("Customer", "custom_is_polemarch_customer"):
+        candidates = frappe.db.sql(
+            """
+            SELECT name, customer_name
+              FROM `tabCustomer`
+             WHERE custom_is_polemarch_customer = 1
+               AND (customer_primary_contact IS NULL OR customer_primary_contact = '')
+            """,
+            as_dict=True,
+        )
+    else:
+        # Fresh install without either field — no candidates to fix.
+        candidates = []
 
     if not candidates:
         return

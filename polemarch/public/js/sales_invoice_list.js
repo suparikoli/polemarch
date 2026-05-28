@@ -22,7 +22,10 @@ window.polemarch_open_trade_dialog = function (on_done) {
 				label: __("Customer"),
 				options: "Customer",
 				reqd: 1,
-				get_query: () => ({ filters: { custom_is_polemarch_customer: 1 } }),
+				// Polemarch invoices apply to every customer EXCEPT the
+				// mithtech-only opt-outs. Legacy `custom_is_polemarch_
+				// customer` flag retired in v0_26_0.
+				get_query: () => ({ filters: { custom_is_mithtech_only: 0 } }),
 			},
 			{
 				fieldname: "posting_date",

@@ -181,3 +181,8 @@ polemarch.patches.v0_24_0.reimport_workspace_with_settings
 # metadata.kyc_cmr_file_url. Permissions follow the same pattern as the
 # existing custom_pan_card / custom_aadhaar_card fields. Idempotent.
 polemarch.patches.v0_25_0.add_kyc_customer_custom_fields
+# v0_26_0 — retire `custom_is_polemarch_customer` (the two-flag design was
+# redundant). Mithtech-only stays as the single operator-facing sync-gate;
+# every other customer is implicitly a Polemarch customer. Drops the Custom
+# Field, any Property Setters keyed on it, and the underlying column.
+polemarch.patches.v0_26_0.drop_polemarch_customer_flag

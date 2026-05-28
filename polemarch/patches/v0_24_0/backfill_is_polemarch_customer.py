@@ -78,6 +78,17 @@ def execute():
     if not candidates:
         return
 
+    # v0_26_0 retired `custom_is_polemarch_customer`. On post-v0_26_0 sites
+    # the column is gone; this patch becomes a no-op. (Patches.txt still
+    # references it because we don't rewrite history — Frappe's patch log
+    # just ticks it as run.)
+    if not frappe.db.has_column("Customer", "custom_is_polemarch_customer"):
+        print(
+            "Polemarch customer flag backfill: skipped — "
+            "custom_is_polemarch_customer retired in v0_26_0."
+        )
+        return
+
     flipped = 0
     for name in candidates:
         if not frappe.db.exists("Customer", name):
