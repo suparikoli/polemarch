@@ -113,10 +113,17 @@ def execute():
     #    deletion above should have done this, but be defensive — if
     #    someone manually `ALTER TABLE ADD COLUMN` ed it the row
     #    delete won't clean up the column.
+    #
+    #    ALTER TABLE triggers an implicit commit in MariaDB and Frappe
+    #    refuses to run such statements inside an open transaction
+    #    (frappe.db.check_implicit_commit). Flush the pending state
+    #    explicitly first.
     if frappe.db.has_column("Customer", "custom_is_polemarch_customer"):
+        frappe.db.commit()
         frappe.db.sql(
             "ALTER TABLE `tabCustomer` DROP COLUMN `custom_is_polemarch_customer`"
         )
+        frappe.db.commit()
 
     # 5. Clear meta cache so the next form render picks up the
     #    schema change without a `bench restart`.
