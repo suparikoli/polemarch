@@ -665,20 +665,31 @@ def _sync_demat_accounts(customer_name: str, rows: list) -> dict:
         if (row.get("verification_status") or "") != "verified":
             skipped += 1
             continue
-        # CDSL: boid is the 16-digit number. NSDL: derive from dp_id +
-        # client_id (Medusa exposes both columns).
         depository = (row.get("depository") or "").upper()
+        # CDSL: bo_id is the 16-digit BOID. The Medusa side typically
+        # stores it monolithically in `boid` with `dp_id` + `client_id`
+        # empty — but Frappe's DP Details child requires both fields.
+        # Convention: first 8 digits = DP ID, last 8 digits = Client
+        # ID. Split here so the child row passes mandatory validation.
+        # NSDL: dp_id + client_id arrive populated; combine for bo_id.
         if depository == "CDSL":
             bo_id = row.get("boid") or ""
+            dp_id = row.get("dp_id") or ""
+            client_id = row.get("client_id") or ""
+            if bo_id and len(bo_id) == 16 and not (dp_id and client_id):
+                dp_id = bo_id[:8]
+                client_id = bo_id[8:]
         else:
-            bo_id = f"{row.get('dp_id') or ''}{row.get('client_id') or ''}"
+            dp_id = row.get("dp_id") or ""
+            client_id = row.get("client_id") or ""
+            bo_id = f"{dp_id}{client_id}"
         if not bo_id:
             skipped += 1
             continue
         existing = existing_by_key.get(bo_id)
         payload = {
-            "dp_id": row.get("dp_id") or "",
-            "client_id": row.get("client_id") or "",
+            "dp_id": dp_id,
+            "client_id": client_id,
             "bo_id": bo_id,
             "depository": depository,
             "dp_name": row.get("dp_name") or "",
