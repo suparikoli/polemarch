@@ -283,11 +283,21 @@ def _find_fee_je_for_deposit(deposit_name: str) -> Optional[str]:
     """Locate the gateway-fee JE for a given Wallet Deposit, if any.
     Distinguishes it from the deposit's own JE by checking the
     expense_account debit — the deposit's own JE only touches
-    Wallet Liability + Bank, never the Fee Expense account."""
+    Wallet Liability + Bank, never the Fee Expense account.
+
+    Returns None when:
+      - The fee accounts aren't configured (no fees can ever be booked
+        on this tenant — common during early setup).
+      - The deposit exists but no fee JE was posted (source=manual or
+        cashfree fees disabled). Previously this branch hit
+        `[][0]` and IndexError'd; the empty-list guard added below
+        keeps the idempotent-skip path safe."""
     cfg = get_gateway_fee_config()
     if not cfg["accounts_configured"]:
         return None
-    return frappe.db.sql(
+    if not cfg["expense_account"]:
+        return None
+    rows = frappe.db.sql(
         """
         SELECT DISTINCT je.name
         FROM `tabJournal Entry` je
@@ -300,7 +310,8 @@ def _find_fee_je_for_deposit(deposit_name: str) -> Optional[str]:
         LIMIT 1
         """,
         (deposit_name, cfg["expense_account"]),
-    )[0][0] if cfg["expense_account"] else None
+    )
+    return rows[0][0] if rows else None
 
 
 def _company_for_customer_wallet(customer: str) -> str:
