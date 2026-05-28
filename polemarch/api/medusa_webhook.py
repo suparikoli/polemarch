@@ -340,9 +340,22 @@ def _set_doctype_fields(doctype: str, name: str, payload: dict) -> None:
     `customer_name` is always preserved on Customer (the field IS
     writeable, but blocking accidental overwrites of operator-edited
     legal names is more important — we only set it on first insert).
+
+    Datetime values arrive from Medusa as ISO 8601 ("2026-05-28T07:21:
+    04.555Z"); MariaDB's datetime columns want "YYYY-MM-DD HH:MM:SS"
+    and reject the ISO form with error 1292. We use Frappe's standard
+    `get_datetime` helper to coerce — it accepts ISO, Python datetime,
+    epoch, and the MariaDB form, then returns a datetime object that
+    set_value writes correctly.
     """
     if not payload:
         return
+    meta = frappe.get_meta(doctype)
+    datetime_fields: set[str] = {
+        f.fieldname
+        for f in meta.fields
+        if (f.fieldtype or "") in ("Date", "Datetime")
+    }
     updates: dict = {}
     for fieldname, value in payload.items():
         if not frappe.db.has_column(doctype, fieldname):
@@ -352,6 +365,20 @@ def _set_doctype_fields(doctype: str, name: str, payload: dict) -> None:
         # match a court-corrected PAN name etc.
         if doctype == "Customer" and fieldname == "customer_name":
             continue
+        # Datetime coercion — ISO 8601 strings (what Medusa emits) need
+        # to become Python datetime / Frappe's expected format. Pass
+        # None through untouched so `clear_value` semantics work.
+        if (
+            fieldname in datetime_fields
+            and value
+            and isinstance(value, str)
+        ):
+            try:
+                value = frappe.utils.get_datetime(value)
+            except Exception:
+                # If parsing fails, leave the original — Frappe will
+                # surface a clear error rather than silently dropping.
+                pass
         updates[fieldname] = value
     if updates:
         frappe.db.set_value(doctype, name, updates, update_modified=True)
