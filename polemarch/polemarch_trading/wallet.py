@@ -79,6 +79,30 @@ def apply_delta(
         )
 
     if idempotency_key:
+        # `Wallet Transaction.idempotency_key` is a `Data` field, max 64
+        # chars. Callers like the Medusa wallet-deposit forwarder pass
+        # composed keys ("wallet-deposit:" + Medusa UUID) that can run
+        # 67+ chars and trip Frappe's pre-insert length validator. Hash
+        # the overflow tail so the prefix stays human-readable for ops
+        # debugging while the result deterministically fits in 64 chars
+        # AND keeps the original key's idempotency properties (sha1 of
+        # the same input → same digest).
+        if len(idempotency_key) > 64:
+            import hashlib
+            prefix, _, suffix = idempotency_key.partition(":")
+            if not suffix:
+                # No prefix → just hash the whole thing.
+                idempotency_key = (
+                    "wt:" + hashlib.sha1(idempotency_key.encode()).hexdigest()
+                )
+            else:
+                # Keep the prefix (e.g. "wallet-deposit") so logs are
+                # still grep-friendly; replace the long suffix with a
+                # 40-char sha1 digest. Total length = prefix + ":" + 40,
+                # which fits 64 as long as the prefix is ≤ 23 chars
+                # (all current callers are well under that).
+                digest = hashlib.sha1(suffix.encode()).hexdigest()
+                idempotency_key = f"{prefix}:{digest}"[:64]
         existing = frappe.db.get_value(
             "Wallet Transaction",
             {"idempotency_key": idempotency_key, "docstatus": ["!=", 2]},
