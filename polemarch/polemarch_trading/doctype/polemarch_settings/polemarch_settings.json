@@ -17,8 +17,13 @@
   "wallet_gateway_fee_gst_rate",
   "column_break_gateway",
   "wallet_gateway_fee_expense_account",
-  "wallet_gateway_fee_gst_input_account",
   "wallet_gateway_fee_bank_account",
+  "section_wallet_gateway_gst",
+  "wallet_gateway_fee_cgst_account",
+  "wallet_gateway_fee_sgst_account",
+  "column_break_gateway_gst",
+  "wallet_gateway_fee_igst_account",
+  "wallet_gateway_fee_gst_input_account",
   "section_notes",
   "notes"
  ],
@@ -73,18 +78,49 @@
    "description": "Where the gateway fee net-of-GST hits. P&L expense — typically under Indirect Expenses. India Compliance picks this up in GSTR-1 / GSTR-3B."
   },
   {
-   "fieldname": "wallet_gateway_fee_gst_input_account",
-   "fieldtype": "Link",
-   "options": "Account",
-   "label": "GST Input Account",
-   "description": "Input GST credit on the fee. Asset (current) account. Usually 'Input Tax IGST' or similar from the standard India Compliance CoA."
-  },
-  {
    "fieldname": "wallet_gateway_fee_bank_account",
    "fieldtype": "Link",
    "options": "Account",
    "label": "Bank Account (Fee Outflow)",
    "description": "Where the fee + GST is deducted from. Usually the same operating bank account that receives the customer's deposit. Cashfree typically settles net-of-fee (deposit credit minus fee) into this account."
+  },
+  {
+   "fieldname": "section_wallet_gateway_gst",
+   "fieldtype": "Section Break",
+   "label": "GST routing on the fee",
+   "description": "Pick the account(s) the GST portion of the fee should be booked to. Resolution order at posting time: (1) if the payment processor is in the SAME state as this Company, CGST + SGST accounts are used (50/50 split); (2) else IGST (single line); (3) else the legacy 'GST Input Account' is used as a fallback. Set the accounts up via India Compliance — they appear under Tax Assets → Input Tax CGST/SGST/IGST."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_cgst_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Input Tax CGST Account",
+   "description": "Asset account, typically 'Input Tax CGST - <abbr>'. Used together with SGST when the processor's GSTIN state matches the Company state (intra-state). India Compliance reads this to populate GSTR-3B Table 4(A)(5) for ITC availed on inputs."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_sgst_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Input Tax SGST Account",
+   "description": "Asset account, typically 'Input Tax SGST - <abbr>'. Used together with CGST for intra-state fees. Split is 50/50 of the GST amount (e.g. ₹3.60 → ₹1.80 CGST + ₹1.80 SGST at 18%)."
+  },
+  {
+   "fieldname": "column_break_gateway_gst",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wallet_gateway_fee_igst_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Input Tax IGST Account",
+   "description": "Asset account, typically 'Input Tax IGST - <abbr>'. Used as the single GST line when the processor's GSTIN state differs from the Company state (inter-state)."
+  },
+  {
+   "fieldname": "wallet_gateway_fee_gst_input_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "GST Input (legacy fallback)",
+   "description": "DEPRECATED — kept for back-compat only. The new code paths use CGST+SGST or IGST per the rules above; this single-account fallback only fires when none of those three are set. Will be retired in a future release once all tenants have migrated."
   },
   {
    "fieldname": "section_notes",

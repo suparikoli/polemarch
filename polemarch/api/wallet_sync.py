@@ -240,6 +240,55 @@ def _post_gateway_fee_je(
 
     cost_center = frappe.db.get_value("Company", company, "cost_center")
 
+    # Build the GST-leg account lines per the configured strategy.
+    # intra_state → 50/50 CGST + SGST split (typical when the gateway's
+    #   GSTIN state == this Company's state, e.g. Cashfree Karnataka ↔
+    #   MISPL Karnataka → 9% CGST + 9% SGST).
+    # inter_state → single IGST line.
+    # legacy_single → fall back to the deprecated single GST Input
+    #   account so old tenants don't break before they migrate.
+    gst_amount = cfg["gst_amount"]
+    gst_lines: list[dict] = []
+    strategy = cfg.get("gst_strategy")
+    accts = cfg.get("gst_accounts", {}) or {}
+    if strategy == "intra_state":
+        half = round(gst_amount / 2.0, 2)
+        # Avoid a rounding penny drift on odd amounts — anchor the
+        # second leg as (gst - half) so the two sum exactly to
+        # gst_amount even for ₹3.61 / ₹0.01 edge cases.
+        gst_lines = [
+            {
+                "account": accts["cgst"],
+                "debit_in_account_currency": half,
+                "cost_center": cost_center,
+            },
+            {
+                "account": accts["sgst"],
+                "debit_in_account_currency": round(gst_amount - half, 2),
+                "cost_center": cost_center,
+            },
+        ]
+    elif strategy == "inter_state":
+        gst_lines = [
+            {
+                "account": accts["igst"],
+                "debit_in_account_currency": gst_amount,
+                "cost_center": cost_center,
+            },
+        ]
+    elif strategy == "legacy_single":
+        gst_lines = [
+            {
+                "account": accts["legacy"],
+                "debit_in_account_currency": gst_amount,
+                "cost_center": cost_center,
+            },
+        ]
+    else:
+        # Defensive: get_gateway_fee_config().accounts_configured should
+        # have already returned False, but belt-and-suspenders.
+        return None
+
     je = frappe.get_doc(
         {
             "doctype": "Journal Entry",
@@ -249,6 +298,7 @@ def _post_gateway_fee_je(
             "user_remark": (
                 f"Payment gateway fee for Wallet Deposit {deposit_name}"
                 + (f" (gateway_ref={gateway_ref})" if gateway_ref else "")
+                + f" [{strategy}]"
             ),
             "cheque_no": gateway_ref or f"FEE-{deposit_name}",
             "cheque_date": posting_date,
@@ -260,11 +310,7 @@ def _post_gateway_fee_je(
                     "debit_in_account_currency": cfg["fixed_fee"],
                     "cost_center": cost_center,
                 },
-                {
-                    "account": cfg["gst_input_account"],
-                    "debit_in_account_currency": cfg["gst_amount"],
-                    "cost_center": cost_center,
-                },
+                *gst_lines,
                 {
                     "account": cfg["bank_account"],
                     "credit_in_account_currency": cfg["total_fee_with_gst"],

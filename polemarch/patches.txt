@@ -186,3 +186,13 @@ polemarch.patches.v0_25_0.add_kyc_customer_custom_fields
 # every other customer is implicitly a Polemarch customer. Drops the Custom
 # Field, any Property Setters keyed on it, and the underlying column.
 polemarch.patches.v0_26_0.drop_polemarch_customer_flag
+# v0_27_0 — fix Cashfree gateway-fee GST routing. The old single
+# `wallet_gateway_fee_gst_input_account` was misconfigured to point at
+# a P&L Expense account (e.g. "Postal Expenses"), losing ITC. New code
+# supports CGST + SGST split (intra-state) / IGST (inter-state) /
+# legacy fallback. Patch auto-populates the new account fields from
+# India Compliance's per-Company Input GST triplet, then backfills
+# corrective JEs for every historical fee JE that booked GST to the
+# legacy account — moving ₹3.60 per deposit from Expense to the
+# proper Input Tax Asset account so the ITC is recoverable.
+polemarch.patches.v0_27_0.fix_cashfree_gst_routing
