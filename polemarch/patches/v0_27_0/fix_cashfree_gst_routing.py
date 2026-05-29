@@ -250,11 +250,16 @@ def _post_corrective_je(
     else:
         return None
 
+    # India Compliance requires `company_gstin` on any JE that touches
+    # a GST account. Pull the registered office GSTIN from the Company.
+    company_gstin = frappe.db.get_value("Company", company, "gstin")
+
     je = frappe.get_doc({
         "doctype": "Journal Entry",
         "voucher_type": "Journal Entry",
         "posting_date": posting_date,
         "company": company,
+        "company_gstin": company_gstin,
         "user_remark": (
             f"v0_27_0 GST reclassification for {deposit_name} "
             f"(original JE: {original_je}) — moved ₹{gst_amount} "

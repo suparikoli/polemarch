@@ -289,12 +289,17 @@ def _post_gateway_fee_je(
         # have already returned False, but belt-and-suspenders.
         return None
 
+    # India Compliance: any JE touching a GST account requires
+    # `company_gstin` set on the doc. Lift from the Company master.
+    company_gstin = frappe.db.get_value("Company", company, "gstin")
+
     je = frappe.get_doc(
         {
             "doctype": "Journal Entry",
             "voucher_type": "Bank Entry",
             "posting_date": posting_date,
             "company": company,
+            "company_gstin": company_gstin,
             "user_remark": (
                 f"Payment gateway fee for Wallet Deposit {deposit_name}"
                 + (f" (gateway_ref={gateway_ref})" if gateway_ref else "")
