@@ -248,6 +248,26 @@ def _upsert_via_mapping(
             key_value=str(key_value),
             payload=payload,
         )
+    # Security Sale is a SUBMITTABLE doctype whose financial effects
+    # (wallet debit, Investment Disposal, COGS/revenue JEs) ALL fire in
+    # `on_submit`. The generic upsert below only `.insert()`s — that
+    # would leave every storefront order as a draft (docstatus=0) Sale
+    # with no money moved and no holdings disposed. Route it through the
+    # rich `_handle_order_placed` / `_handle_order_canceled` handlers,
+    # which insert + submit (or cancel), are idempotent on
+    # `medusa_order_id`, and stamp source='Platform Purchase' so the
+    # bounce-back Webhook + pull cron skip it (no echo loop).
+    if doctype == "Security Sale":
+        order_data = dict(payload)
+        # The rich handlers key idempotency on `order_id`; the canonical
+        # Order↔Security Sale mapping writes the Medusa order id into the
+        # `medusa_order_id` column (== key_value here).
+        order_data.setdefault(
+            "order_id", payload.get("medusa_order_id") or key_value
+        )
+        if event in ("order.canceled", "order.cancelled"):
+            return _handle_order_canceled(order_data, event_id=event_id)
+        return _handle_order_placed(order_data, event_id=event_id)
     # Generic fallback — applies to Security, Wallet Deposit, etc. that
     # don't need custom child-doc wiring.
     existing_name = frappe.db.get_value(
