@@ -41,6 +41,12 @@ def execute():
     ):
         return
 
+    # The legacy `custom_portfolio` column only exists on sites that ran the
+    # pre-v0_8_0 schema. Sites created after v0_14_0 dropped it (or installed
+    # fresh) never had it, and there is nothing to backfill from.
+    if "custom_portfolio" not in frappe.db.get_table_columns("Investment Holding"):
+        return
+
     # Pull holdings whose classification is empty. `IS NULL OR = ''` handles
     # both pre-field-creation rows and any that ended up with an empty
     # string post-field-creation.
