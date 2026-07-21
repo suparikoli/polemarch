@@ -34,12 +34,10 @@ doc_events = {
         # so the Phase-16 Contact-first model isn't bypassed by API / scripts.
         "after_insert": "polemarch.overrides.customer.after_insert",
     },
-    "Item": {
-        # `validate` auto-links the `Polemarch - Non-GST` Item Tax
-        # Template to every brand=Polemarch item — see
-        # `polemarch.overrides.item.validate`.
-        "validate": "polemarch.overrides.item.validate",
-    },
+    # NOTE: the Item `validate` override (item_group forcing + Non-GST ITT
+    # auto-linking) was removed — shares are now modelled by the `Security`
+    # doctype, not brand=Polemarch ERPNext Items, and GST is mapped to Items
+    # + taxes natively in ERPNext rather than force-injected by this app.
     "Sales Invoice": {
         "validate": "polemarch.overrides.sales_invoice.validate",
         "on_submit": "polemarch.overrides.sales_invoice.on_submit",

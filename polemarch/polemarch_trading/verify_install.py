@@ -168,15 +168,11 @@ def execute(verbose: bool = False) -> dict:
                     f"Account MISSING: account_name='{fragment}' for company {company.abbr}"
                 )
 
-    # 6) Polemarch - Non-GST ITT per company.
-    for company in companies:
-        if not company.abbr:
-            continue
-        candidate = f"Polemarch - Non-GST - {company.abbr}"
-        if frappe.db.exists("Item Tax Template", candidate):
-            ok.append(f"ITT present: {candidate}")
-        else:
-            warnings.append(f"ITT MISSING: {candidate} (Polemarch share items will fail GST routing)")
+    # 6) (removed) Polemarch - Non-GST ITT check.
+    #    Shares are modelled by the `Security` doctype, not brand=Polemarch
+    #    ERPNext Items, so the app no longer creates or force-links a
+    #    `Polemarch - Non-GST` Item Tax Template. GST on any real billable
+    #    Item is mapped to Items + taxes natively in ERPNext.
 
     # 6b) Phase 21 — Holdings visibility (Report + Number Cards).
     if frappe.db.exists("Report", "Polemarch Holdings by Security"):

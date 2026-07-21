@@ -6,19 +6,16 @@ from polemarch.install import MITHTECH_SERVICES_BRAND, POLEMARCH_BRAND
 
 def validate(doc, method=None):
     """Polemarch-side Sales Invoice rules — purely classification +
-    cost-center concerns. The 0% GST treatment for share-transfer
-    invoices is handled at the **Item** level via the
-    `Polemarch - Non-GST` Item Tax Template (auto-linked to every
-    `brand=Polemarch` item by `polemarch.overrides.item.validate`).
-    India Compliance reads each line's effective ITT and stamps
-    `gst_treatment = "Non-GST"` on the row, which zeroes computed tax
-    automatically — no invoice-level template juggling needed.
+    cost-center concerns. GST treatment for any line is mapped to the
+    Item + its Item Tax natively in ERPNext / India Compliance; this
+    hook does not touch tax at all (the old Item `validate` override
+    that force-linked a `Polemarch - Non-GST` template was removed when
+    shares moved to the `Security` doctype).
 
     Earlier versions of this hook tried to swap the Sales Taxes and
     Charges Template per-brand (Polemarch / Mithtech Services); that
     fought IC's intra/inter-state suppression and produced 36% tax on
-    intra-state Mithtech invoices. The Item-Tax-Template approach is
-    IC's intended mechanism for non-GST goods/services.
+    intra-state Mithtech invoices — hence the hands-off approach here.
     """
     brands = _line_brands(doc)
     if POLEMARCH_BRAND in brands and MITHTECH_SERVICES_BRAND in brands:
