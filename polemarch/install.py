@@ -31,9 +31,12 @@ POLEMARCH_NAMING_SERIES = "POL-.YYYY.-.#####"
 def setup():
     _ensure_polemarch_trading_module()
     _create_customer_group()
+    _create_brand()
+    _create_item_group()
     _create_custom_fields()
     _make_hsn_optional_on_item()
     _add_polemarch_naming_series()
+    _create_polemarch_item_tax_template()
     _create_processing_fee_item()
     _create_low_order_fee_item()
 
@@ -83,6 +86,49 @@ def _create_customer_group():
             "doctype": "Customer Group",
             "customer_group_name": POLEMARCH_CUSTOMER_GROUP,
             "parent_customer_group": parent,
+            "is_group": 0,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def _create_brand():
+    """Create the `Polemarch` Brand.
+
+    `polemarch.overrides.item.validate` gates the entire share-item
+    pipeline (item_group forcing, HSN clearing, Non-GST ITT linking) on
+    `doc.brand == POLEMARCH_BRAND`. The constant was declared here but the
+    Brand record was never created, so on a fresh site no Item could be
+    saved with brand=Polemarch at all ("Could not find Brand: Polemarch")
+    and the whole GST-routing path was unreachable.
+
+    Idempotent."""
+    if frappe.db.exists("Brand", POLEMARCH_BRAND):
+        return
+    frappe.get_doc({"doctype": "Brand", "brand": POLEMARCH_BRAND}).insert(
+        ignore_permissions=True
+    )
+
+
+def _create_item_group():
+    """Create the `Polemarch Securities` Item Group that
+    `overrides.item.validate` forces every brand=Polemarch Item into.
+
+    That override is written defensively (`if frappe.db.exists(...)`), so a
+    missing group silently left share items in whatever group they were
+    created with rather than erroring — making the drift easy to miss.
+
+    Idempotent."""
+    if frappe.db.exists("Item Group", POLEMARCH_ITEM_GROUP):
+        return
+    parent = (
+        frappe.db.get_value("Item Group", {"is_group": 1, "parent_item_group": ""})
+        or "All Item Groups"
+    )
+    frappe.get_doc(
+        {
+            "doctype": "Item Group",
+            "item_group_name": POLEMARCH_ITEM_GROUP,
+            "parent_item_group": parent,
             "is_group": 0,
         }
     ).insert(ignore_permissions=True)
@@ -237,6 +283,56 @@ def _create_custom_fields():
         ],
     }
     create_custom_fields(fields, ignore_validate=True, update=True)
+
+
+def _create_polemarch_item_tax_template():
+    """Create the `Polemarch - Non-GST` Item Tax Template, one per Company.
+
+    `polemarch.overrides.item._ensure_non_gst_item_tax_template` appends
+    every ITT titled `Polemarch - Non-GST` to each brand=Polemarch Item's
+    `taxes` table, which is what stamps `gst_treatment = "Non-GST"` on the
+    resulting Sales Invoice / Sales Order lines. That lookup returned an
+    empty list on every site because this creator was referenced in the
+    docstrings but never actually written — so no share Item ever got the
+    ITT link and `verify_install` reported `ITT MISSING`.
+
+    Tax rows are cloned from India Compliance's stock per-company
+    `Non-GST` template so the zero-rate rows reference the accounts this
+    tenant actually has. If that template is absent (India Compliance not
+    installed), the ITT is created with no rows — `gst_treatment` alone
+    still drives the Non-GST classification.
+
+    Idempotent — existing templates are left untouched.
+    """
+    if not frappe.db.exists("DocType", "Item Tax Template"):
+        return
+
+    has_gst_treatment = frappe.get_meta("Item Tax Template").has_field("gst_treatment")
+
+    for company in frappe.get_all("Company", fields=["name", "abbr"]):
+        target = f"{POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE} - {company.abbr}"
+        if frappe.db.exists("Item Tax Template", target):
+            continue
+
+        doc = frappe.new_doc("Item Tax Template")
+        doc.title = POLEMARCH_NON_GST_ITEM_TAX_TEMPLATE
+        doc.company = company.name
+        if has_gst_treatment:
+            doc.gst_treatment = "Non-GST"
+            doc.gst_rate = 0
+
+        # Clone the zero-rate rows from India Compliance's own Non-GST
+        # template for this company, if it exists.
+        source = frappe.db.get_value(
+            "Item Tax Template", {"title": "Non-GST", "company": company.name}, "name"
+        )
+        if source:
+            for row in frappe.get_doc("Item Tax Template", source).taxes or []:
+                doc.append("taxes", {"tax_type": row.tax_type, "tax_rate": 0})
+
+        doc.flags.ignore_permissions = True
+        doc.insert(ignore_permissions=True)
+        print(f"polemarch: created Item Tax Template {doc.name}")
 
 
 def _make_hsn_optional_on_item():

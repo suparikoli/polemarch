@@ -355,7 +355,14 @@ def _upsert_mapped_customer(
                 if " " in customer_name
                 else ""
             ),
-            "email": payload.get("email_id") or email_lower,
+            # Only fall back to the mapping key when the mapping actually
+            # keys on email. For any other key_field (customer_name, a
+            # custom_* column, …) `email_lower` is just the lowercased key
+            # value, and pushing it into Contact.email_ids throws
+            # "<x> is not a valid Email Address" — 500ing the request AFTER
+            # the Customer row was already inserted.
+            "email": payload.get("email_id")
+            or (email_lower if key_field == "email_id" else None),
             "phone": payload.get("mobile_no"),
         },
     )
@@ -1024,6 +1031,15 @@ def _populate_contact(customer_name: str, data: dict):
         doc.last_name = data["last_name"]
     email = (data.get("email") or "").strip()
     phone = (data.get("phone") or "").strip()
+    # Defensive: Contact validates email_ids and throws on a malformed
+    # address. A bad value upstream should not abort the whole webhook
+    # (the Customer is already committed by this point) — drop it instead.
+    if email and "@" not in email:
+        frappe.log_error(
+            f"Dropping malformed email {email!r} for Contact {primary_contact}",
+            "polemarch: medusa webhook contact email",
+        )
+        email = ""
     if email and not any(e.email_id == email for e in (doc.email_ids or [])):
         doc.append("email_ids", {"email_id": email, "is_primary": 1})
     if phone and not any(p.phone == phone for p in (doc.phone_nos or [])):

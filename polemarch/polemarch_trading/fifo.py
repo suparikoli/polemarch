@@ -127,7 +127,10 @@ def consume(
             continue
         take = min(available, remaining)
         acq = getdate(row.acquisition_date) if row.acquisition_date else None
-        days = (sale_date - acq).days if acq else 0
+        # Clamp at 0: a backdated sale (sale_date < acquisition_date) would
+        # otherwise yield a negative holding period, which is meaningless and
+        # silently lands on the STCG side of the LTCG threshold comparison.
+        days = max(0, (sale_date - acq).days) if acq else 0
         plan.append(
             ConsumedHolding(
                 holding=row.name,

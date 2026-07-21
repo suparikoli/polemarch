@@ -40,7 +40,16 @@ class PolemarchSettings(Document):
             bool(self.wallet_gateway_fee_expense_account),
             bool(self.wallet_gateway_fee_bank_account),
         ]
-        any_set = any(non_gst_set) or gst_ok
+        # Only Expense/Bank being touched signals "operator is configuring
+        # the fee feature" — GST accounts alone are NOT a trigger. The
+        # v0_27_0 patch pre-seeds CGST/SGST/IGST from India Compliance with
+        # `ignore_validate`, which would otherwise leave this singleton
+        # permanently unsaveable: every later save (e.g. an operator typing
+        # in the Medusa webhook secret) would throw on a partial state the
+        # operator never created. GST-only is harmless because
+        # `get_gateway_fee_config().accounts_configured` still returns False,
+        # so the Wallet Deposit auto-JE poster skips.
+        any_set = any(non_gst_set)
         all_required = all(non_gst_set) and gst_ok
         if any_set and not all_required:
             frappe.throw(

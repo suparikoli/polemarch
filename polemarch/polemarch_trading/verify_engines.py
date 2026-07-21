@@ -137,7 +137,10 @@ def execute(verbose: bool = False) -> dict:
 
         plan = step("22_fifo_consume_120_by_security", lambda: fifo_engine.consume(
             security=security, company=company, classification="Stock in Trade",
-            qty_to_sell=120, sale_date="2026-05-20",
+            # Must be "today", not a hardcoded literal — the fixture holdings
+            # are acquired today, so a fixed past date drifts further into a
+            # negative holding period on every run.
+            qty_to_sell=120, sale_date=frappe.utils.today(),
         ))
         step("23_assert_fifo_oldest_first", lambda: _assert_fifo_plan(plan, holding_a, holding_b))
 
