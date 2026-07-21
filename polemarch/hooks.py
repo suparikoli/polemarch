@@ -17,13 +17,10 @@ website_context = {
 doctype_js = {
     "Customer": "public/js/customer.js",
     "Sales Invoice": "public/js/sales_invoice.js",
-    "Item": "public/js/item.js",
 }
 
 doctype_list_js = {
     "Customer": "public/js/customer_list.js",
-    "Item": "public/js/item_list.js",
-    "Sales Invoice": "public/js/sales_invoice_list.js",
 }
 
 doc_events = {

@@ -10,7 +10,7 @@ import json
 import frappe
 from frappe import _
 
-from polemarch.install import POLEMARCH_BRAND, POLEMARCH_CUSTOMER_GROUP, POLEMARCH_ITEM_GROUP
+from polemarch.install import POLEMARCH_CUSTOMER_GROUP
 
 
 @frappe.whitelist()
@@ -87,42 +87,8 @@ def _validate_bank(bank: dict):
         if not bank.get(field):
             frappe.throw(_("Bank Details: {0} is required.").format(field))
 
-
-@frappe.whitelist()
-def create_polemarch_item(payload):
-    frappe.only_for(["System Manager", "Item Manager", "Sales Manager"])
-
-    data = payload if isinstance(payload, dict) else json.loads(payload or "{}")
-    item_name = (data.get("item_name") or "").strip()
-    isin = (data.get("isin") or "").strip().upper()
-    if not item_name:
-        frappe.throw(_("Item name (company name) is required."))
-    if not isin:
-        frappe.throw(_("ISIN is required for Polemarch items."))
-
-    item_code = (data.get("item_code") or isin).strip().upper()
-    if frappe.db.exists("Item", item_code):
-        frappe.throw(_("Item {0} already exists.").format(item_code))
-
-    item = frappe.new_doc("Item")
-    item.item_code = item_code
-    item.item_name = item_name
-    item.item_group = POLEMARCH_ITEM_GROUP
-    item.brand = POLEMARCH_BRAND
-    item.stock_uom = data.get("stock_uom") or "Nos"
-    item.is_stock_item = 0
-    item.include_item_in_manufacturing = 0
-    item.description = data.get("description") or item_name
-    item.custom_isin = isin
-    if data.get("rta"):
-        item.custom_rta = data.get("rta")
-    if data.get("last_traded_price") is not None:
-        try:
-            item.custom_last_traded_price = float(data.get("last_traded_price"))
-        except (TypeError, ValueError):
-            pass
-    item.flags.ignore_permissions = True
-    item.insert(ignore_permissions=True)
-    frappe.db.commit()
-
-    return {"name": item.name, "route": f"/app/item/{item.name}"}
+# NOTE: `create_polemarch_item` (create a brand=Polemarch ERPNext Item in
+# the `Polemarch Securities` group) was removed — shares are modelled by
+# the `Security` doctype now, not ERPNext Items. Its list-view button
+# (public/js/item_list.js) and the Item form script (public/js/item.js)
+# were removed alongside it.
