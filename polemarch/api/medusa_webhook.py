@@ -237,6 +237,8 @@ def _upsert_via_mapping(
     payload: dict,
     event: str,
     event_id: str,
+    allow_create: bool = True,
+    allow_update: bool = True,
 ) -> dict:
     """Doctype-aware upsert for `receive_mapped`. Each branch handles
     the per-doctype quirks (Customer's Contact wiring, etc.) and then
@@ -247,6 +249,8 @@ def _upsert_via_mapping(
             key_field=key_field,
             key_value=str(key_value),
             payload=payload,
+            allow_create=allow_create,
+            allow_update=allow_update,
         )
     # Security Sale is a SUBMITTABLE doctype whose financial effects
     # (wallet debit, Investment Disposal, COGS/revenue JEs) ALL fire in
@@ -274,11 +278,25 @@ def _upsert_via_mapping(
         doctype, {key_field: key_value}, "name"
     )
     if existing_name:
+        if not allow_update:
+            return {
+                "doctype": doctype,
+                "name": existing_name,
+                "status": "skipped",
+                "reason": "update not permitted by the sending mapping",
+            }
         _set_doctype_fields(doctype, existing_name, payload)
         return {
             "doctype": doctype,
             "name": existing_name,
             "status": "updated",
+        }
+    if not allow_create:
+        return {
+            "doctype": doctype,
+            "name": None,
+            "status": "skipped",
+            "reason": "create not permitted by the sending mapping",
         }
     new_doc = frappe.get_doc({"doctype": doctype, **payload})
     new_doc.flags.ignore_permissions = True
@@ -292,7 +310,11 @@ def _upsert_via_mapping(
 
 
 def _upsert_mapped_customer(
-    key_field: str, key_value: str, payload: dict
+    key_field: str,
+    key_value: str,
+    payload: dict,
+    allow_create: bool = True,
+    allow_update: bool = True,
 ) -> dict:
     """Customer-specific upsert. Identity is by Contact email (Phase
     16+), so when `key_field == "email_id"` we route through the
@@ -313,11 +335,26 @@ def _upsert_mapped_customer(
     # syncs them from the primary Contact, but the column is writeable
     # too), so they live in the same set as the custom_* fields.
     if existing_name:
+        if not allow_update:
+            return {
+                "doctype": "Customer",
+                "name": existing_name,
+                "status": "skipped",
+                "reason": "update not permitted by the sending mapping",
+            }
         _set_doctype_fields("Customer", existing_name, payload)
         return {
             "doctype": "Customer",
             "name": existing_name,
             "status": "updated",
+        }
+
+    if not allow_create:
+        return {
+            "doctype": "Customer",
+            "name": None,
+            "status": "skipped",
+            "reason": "create not permitted by the sending mapping",
         }
 
     # New Customer — synthesise the mandatory fields the after_insert
