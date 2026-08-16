@@ -9,9 +9,6 @@
  "module": "Polemarch Trading",
  "name": "Polemarch Settings",
  "field_order": [
-  "section_sync",
-  "enable_medusa_sync",
-  "medusa_webhook_secret",
   "section_wallet_gateway",
   "wallet_gateway_fee_fixed",
   "wallet_gateway_fee_gst_rate",
@@ -28,24 +25,6 @@
   "notes"
  ],
  "fields": [
-  {
-   "fieldname": "section_sync",
-   "fieldtype": "Section Break",
-   "label": "Medusa Sync"
-  },
-  {
-   "fieldname": "enable_medusa_sync",
-   "fieldtype": "Check",
-   "label": "Enable Medusa Sync",
-   "default": "1",
-   "description": "Master toggle. When off, the webhook receiver returns 200 immediately without dispatching, and the wallet-sync endpoints throw a friendly 'sync disabled' error."
-  },
-  {
-   "fieldname": "medusa_webhook_secret",
-   "fieldtype": "Password",
-   "label": "Medusa Webhook Secret",
-   "description": "HMAC-SHA256 key. Inbound POSTs to /api/method/polemarch.api.medusa_webhook.receive must carry x-medusa-signature computed over the raw body. Must equal the same secret in Medusa's ErpnextSetting.webhook_secret."
-  },
   {
    "fieldname": "section_wallet_gateway",
    "fieldtype": "Section Break",

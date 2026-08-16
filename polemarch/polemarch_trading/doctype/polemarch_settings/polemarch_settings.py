@@ -2,13 +2,16 @@
 Polemarch trading subsystem.
 
 Currently houses:
-  - Medusa sync master toggle + HMAC webhook secret
   - Wallet payment-gateway fee config (company-borne, NOT deducted from
     customer's wallet credit)
 
-Read via `frappe.get_single("Polemarch Settings")` from controllers + the
-wallet-sync API. The Wallet Deposit controller reads the gateway-fee
-section when posting the auto side-JE on Cashfree-sourced deposits.
+Read via `frappe.get_single("Polemarch Settings")` from controllers +
+the medusync handler pack. The Wallet Deposit controller reads the
+gateway-fee section when posting the auto side-JE on Cashfree-sourced
+deposits.
+
+(Medusa sync master toggle + HMAC webhook secret used to live here
+before the v0_28_0 split — they now live in `Medusync Settings`.)
 """
 
 import frappe
@@ -128,22 +131,3 @@ def get_gateway_fee_config() -> dict:
             and gst_strategy is not None
         ),
     }
-
-
-def get_medusa_webhook_secret() -> str | None:
-    """Decrypt the stored Medusa webhook secret. Returns None if unset."""
-    s = frappe.get_single("Polemarch Settings")
-    # Password fieldtype decryption — frappe.utils.password.get_decrypted_password
-    if not s.medusa_webhook_secret:
-        return None
-    try:
-        from frappe.utils.password import get_decrypted_password
-        return get_decrypted_password(
-            "Polemarch Settings", "Polemarch Settings", "medusa_webhook_secret",
-        )
-    except Exception:
-        return None
-
-
-def is_medusa_sync_enabled() -> bool:
-    return bool(frappe.db.get_single_value("Polemarch Settings", "enable_medusa_sync"))
