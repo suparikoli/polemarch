@@ -58,7 +58,17 @@ def post_cost_recognition_je_for_disposal(disposal) -> Optional[str]:
         )
         return None
 
-    cogs_account = _resolve_account(disposal.company, "Trading COGS - Securities", abbr)
+    # A nil-consideration transfer (gift / remuneration in kind) is not a cost
+    # of goods SOLD -- nothing was sold. The cost still has to leave inventory,
+    # but it belongs in a promotion/gift expense head at the buying price for the
+    # quantity given away, so COGS stays a true trading figure and the gift is
+    # visible as its own line. Falls back to COGS if that account is absent.
+    is_gift = flt(getattr(disposal, "total_sale_value", 0) or 0) <= 0
+    cogs_account = None
+    if is_gift:
+        cogs_account = _resolve_account(disposal.company, "Securities Gifted - Business Promotion", abbr)
+    if not cogs_account:
+        cogs_account = _resolve_account(disposal.company, "Trading COGS - Securities", abbr)
     if not cogs_account:
         frappe.log_error(
             f"Investment Disposal {disposal.name}: Trading COGS account missing for "

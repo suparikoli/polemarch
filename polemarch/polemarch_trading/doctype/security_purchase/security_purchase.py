@@ -289,17 +289,23 @@ class SecurityPurchase(Document):
         if existing:
             return existing
 
-        # Investment Holding is proprietary-only post-Phase-15. When
-        # party_type=Customer (Polemarch buying from a customer), the new
-        # Holding still goes onto Polemarch's books, defaulting to Stock-
-        # in-Trade (we acquired inventory to resell). The classification
-        # picker on the form wins for Supplier-side purchases.
-        if self.party_type == "Customer":
-            classification = "Stock in Trade"
+        # Investment Holding is proprietary-only post-Phase-15.
+        #
+        # An EXPLICIT intended_classification always wins, whoever the party is.
+        # The old rule forced "Stock in Trade" for every party_type=Customer
+        # purchase on the assumption that a Customer-side purchase is stock
+        # bought to resell. That assumption breaks under Mithtech's one-party-
+        # list convention (2026-09-17), where dealers are Customers too: it
+        # silently overrode the operator's Investment ruling on the first
+        # 2,00,000 API and 20,000 MSEI, and FIFO then consumed the investment
+        # block as if it were trading stock.
+        intended = (getattr(self, "intended_classification", None) or "").strip()
+        if intended and intended != "Unallocated":
+            classification = intended
+        elif self.party_type == "Customer":
+            classification = "Stock in Trade"   # unstated Customer-side buy: inventory to resell
         else:
-            classification = (
-                getattr(self, "intended_classification", None) or "Unallocated"
-            )
+            classification = "Unallocated"
 
         holding_fields = {
             "doctype": "Investment Holding",
@@ -312,6 +318,13 @@ class SecurityPurchase(Document):
             "purchase_reference_link": self.name,
             "classification": classification,
         }
+        # Stamp the deadline whatever the choice, so an explicit Stock in Trade
+        # (now the default) can still be moved to Investment inside the window
+        # instead of being locked at submit. Previously only Unallocated lots
+        # carried a deadline, so choosing a class at create time silently gave
+        # up the right to change it.
+        from polemarch.polemarch_trading.classification import compute_deadline
+        holding_fields["classification_deadline"] = compute_deadline(now_datetime(), self.company)
         if classification != "Unallocated":
             holding_fields["classified_by"] = frappe.session.user
             holding_fields["classified_on"] = now_datetime()
@@ -385,6 +398,13 @@ class SecurityPurchase(Document):
         existing = _existing_je_for_source("Security Purchase", self.name)
         if existing:
             return existing
+
+        # Nil-consideration receipts (price not yet settled, or a genuinely
+        # free receipt) have amount = 0. The Investment Holding is still
+        # created -- at zero cost basis -- but there is nothing to post, and
+        # ERPNext rejects a JE with zero on both sides.
+        if flt(self.amount) <= 0:
+            return ""
 
         cost_center = self.cost_center or company_default_cost_center(self.company)
 

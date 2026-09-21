@@ -253,9 +253,19 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Polemarch Holdings",
+   "link_count": 0,
+   "link_to": "Polemarch Holdings",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-07-18 20:44:15.815855",
+ "modified": "2026-09-21 15:27:10.318956",
  "modified_by": "Administrator",
  "module": "Polemarch Customizations",
  "name": "Polemarch",
@@ -344,6 +354,7 @@
    "doc_view": "Report Builder",
    "label": "Holdings by Security",
    "link_to": "Polemarch Holdings by Security",
+   "report_ref_doctype": "Investment Holding",
    "type": "Report"
   },
   {

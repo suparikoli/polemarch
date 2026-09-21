@@ -42,6 +42,10 @@ def _rows(company: Optional[str] = None, security: Optional[str] = None) -> list
         params.append(security)
     where_sql = " AND ".join(where)
 
+    # a lot is "classified" once any per-class bucket carries quantity
+    CLASSIFIED = ("(COALESCE(ih.qty_classified_sit,0) + COALESCE(ih.qty_classified_investment,0)"
+                  " + COALESCE(ih.qty_unclassified,0)) > 0")
+
     return frappe.db.sql(
         f"""
         SELECT
@@ -51,12 +55,29 @@ def _rows(company: Optional[str] = None, security: Optional[str] = None) -> list
             s.security_type                                     AS security_type,
             s.last_traded_price                                 AS last_traded_price,
 
-            SUM(IF(ih.classification='Stock in Trade', ih.qty_remaining, 0))                       AS sit_units,
-            SUM(IF(ih.classification='Stock in Trade', ih.qty_remaining * ih.cost_basis_per_unit, 0)) AS sit_cost,
-            SUM(IF(ih.classification='Investment',     ih.qty_remaining, 0))                       AS inv_units,
-            SUM(IF(ih.classification='Investment',     ih.qty_remaining * ih.cost_basis_per_unit, 0)) AS inv_cost,
-            SUM(IF(ih.classification='Unallocated',    ih.qty_remaining, 0))                       AS unalloc_units,
-            SUM(IF(ih.classification='Unallocated',    ih.qty_remaining * ih.cost_basis_per_unit, 0)) AS unalloc_cost,
+            -- Read the PER-CLASS quantities, not the legacy single `classification`
+            -- Select. A lot can legitimately be split (e.g. 2,000 Stock in Trade +
+            -- 8,000 Investment out of one 10,000 purchase); the legacy field can only
+            -- carry one label and, per _compute_classification_rollup, a mixed lot keeps
+            -- whatever was set first -- so reading it reports the whole lot under one
+            -- class and silently understates the other. Legacy lots that predate the
+            -- child table have all three per-class fields at 0; those fall back to the
+            -- old behaviour.
+            SUM(CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_classified_sit, 0)
+                     ELSE IF(ih.classification='Stock in Trade', ih.qty_remaining, 0) END)          AS sit_units,
+            SUM((CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_classified_sit, 0)
+                      ELSE IF(ih.classification='Stock in Trade', ih.qty_remaining, 0) END)
+                * ih.cost_basis_per_unit)                                                           AS sit_cost,
+            SUM(CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_classified_investment, 0)
+                     ELSE IF(ih.classification='Investment', ih.qty_remaining, 0) END)              AS inv_units,
+            SUM((CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_classified_investment, 0)
+                      ELSE IF(ih.classification='Investment', ih.qty_remaining, 0) END)
+                * ih.cost_basis_per_unit)                                                           AS inv_cost,
+            SUM(CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_unclassified, 0)
+                     ELSE IF(ih.classification='Unallocated', ih.qty_remaining, 0) END)             AS unalloc_units,
+            SUM((CASE WHEN {CLASSIFIED} THEN COALESCE(ih.qty_unclassified, 0)
+                      ELSE IF(ih.classification='Unallocated', ih.qty_remaining, 0) END)
+                * ih.cost_basis_per_unit)                                                           AS unalloc_cost,
 
             SUM(ih.qty_remaining)                                AS total_units,
             SUM(ih.qty_remaining * ih.cost_basis_per_unit)       AS total_cost,

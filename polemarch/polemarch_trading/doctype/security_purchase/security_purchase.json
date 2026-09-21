@@ -60,7 +60,7 @@
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "description": "The instrument being purchased. Holdings are minted against this Security directly — no Item involved."
+   "description": "The instrument being purchased. Holdings are minted against this Security directly \u2014 no Item involved."
   },
   {
    "fieldname": "security_name",
@@ -78,7 +78,10 @@
    "reqd": 1,
    "in_standard_filter": 1
   },
-  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
   {
    "fieldname": "posting_date",
    "fieldtype": "Date",
@@ -123,12 +126,12 @@
    "fieldtype": "Select",
    "label": "Initial Classification",
    "options": "Unallocated\nStock in Trade\nInvestment",
-   "default": "Unallocated",
+   "default": "Stock in Trade",
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "depends_on": "eval:!doc.docstatus || doc.docstatus === 0",
-   "description": "Where the new Investment Holding lands at create time — a one-shot hint, not a live mirror. Leave on Unallocated to keep the 2-working-day classification window. Pick Stock in Trade or Investment to skip the window and lock the classification at submit. After submit, the actual classification lives on the linked Investment Holding (which can be reclassified independently); this field hides so it doesn't drift."
+   "description": "Where the new Investment Holding lands. Defaults to Stock in Trade \u2014 securities are bought to resell unless you say otherwise. You can change it here before submitting, or reclassify the resulting Holding within the 5-working-day classification window (Investment Holding.classification_deadline); after that the scheduler locks it. Post-submit this field hides, because the live classification lives on the Holding."
   },
   {
    "fieldname": "section_amounts",
@@ -151,7 +154,10 @@
    "reqd": 1,
    "non_negative": 1
   },
-  {"fieldname": "column_break_2", "fieldtype": "Column Break"},
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
   {
    "fieldname": "amount",
    "fieldtype": "Currency",
@@ -159,7 +165,7 @@
    "options": "INR",
    "read_only": 1,
    "in_list_view": 1,
-   "description": "qty × rate. Auto-computed on save."
+   "description": "qty \u00d7 rate. Auto-computed on save."
   },
   {
    "fieldname": "section_accounts",
@@ -188,7 +194,7 @@
    "fieldtype": "Link",
    "label": "Payment Account (CR)",
    "options": "Account",
-   "description": "Account that takes the credit leg of the JE. Auto-fills on save based on `Payment Method` + Company defaults:\n  - Default Payable → Company's default payable account (e.g. Creditors - <abbr>)\n  - Bank → Company's default bank account\n  - Cash → Company's default cash account\n  - Customer Wallet → the customer's Wallet Liability GL"
+   "description": "Account that takes the credit leg of the JE. Auto-fills on save based on `Payment Method` + Company defaults:\n  - Default Payable \u2192 Company's default payable account (e.g. Creditors - <abbr>)\n  - Bank \u2192 Company's default bank account\n  - Cash \u2192 Company's default cash account\n  - Customer Wallet \u2192 the customer's Wallet Liability GL"
   },
   {
    "fieldname": "paid_from_account",
@@ -200,7 +206,10 @@
    "read_only": 1,
    "description": "Back-compat field. Auto-synced from `payment_account`."
   },
-  {"fieldname": "column_break_3", "fieldtype": "Column Break"},
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
   {
    "fieldname": "cost_center",
    "fieldtype": "Link",
@@ -253,37 +262,75 @@
   }
  ],
  "links": [
-  {"link_doctype": "Investment Holding", "link_fieldname": "purchase_reference_link"},
-  {"link_doctype": "Journal Entry",      "link_fieldname": "custom_source_name"}
+  {
+   "link_doctype": "Investment Holding",
+   "link_fieldname": "purchase_reference_link"
+  },
+  {
+   "link_doctype": "Journal Entry",
+   "link_fieldname": "custom_source_name"
+  }
  ],
  "permissions": [
   {
    "role": "System Manager",
-   "read": 1, "write": 1, "create": 1, "delete": 1,
-   "submit": 1, "cancel": 1, "amend": 1,
-   "report": 1, "export": 1, "import": 1, "share": 1, "print": 1, "email": 1
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "import": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
   },
   {
    "role": "Accounts Manager",
-   "read": 1, "write": 1, "create": 1,
-   "submit": 1, "cancel": 1, "amend": 1,
-   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
   },
   {
    "role": "Polemarch Trader",
-   "read": 1, "write": 1, "create": 1,
+   "read": 1,
+   "write": 1,
+   "create": 1,
    "submit": 1,
-   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
   },
   {
    "role": "Polemarch Settlement Officer",
    "read": 1,
-   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
   },
   {
    "role": "Polemarch Compliance Officer",
    "read": 1,
-   "report": 1, "export": 1, "share": 1, "print": 1, "email": 1
+   "report": 1,
+   "export": 1,
+   "share": 1,
+   "print": 1,
+   "email": 1
   },
   {
    "role": "Accounts User",

@@ -69,8 +69,9 @@ class SecuritySale(Document):
         if not plan:
             frappe.throw(
                 _(
-                    "No open {0} Holdings available for Security {1} (Company {2}). "
-                    "Either no inventory exists or it's already reserved/disposed."
+                    "No open Holdings available for Security {1} (Company {2}) in "
+                    "Stock in Trade or Investment. Either no inventory exists or it "
+                    "is already reserved/disposed."
                 ).format(self.from_classification, self.security, self.company)
             )
 
@@ -80,8 +81,9 @@ class SecuritySale(Document):
         if covered + 0.0001 < flt(self.qty):
             frappe.throw(
                 _(
-                    "Insufficient {0} inventory for Security {1}: requested {2}, "
-                    "available {3}."
+                    "Insufficient inventory for Security {1}: requested {2}, "
+                    "available {3} across Stock in Trade + Investment "
+                    "(started from {0})."
                 ).format(self.from_classification, self.security, self.qty, covered)
             )
 
@@ -252,13 +254,21 @@ class SecuritySale(Document):
         on_submit is what actually bumps qty_disposed."""
         from polemarch.polemarch_trading import fifo as fifo_engine
 
-        return fifo_engine.consume(
+        # Operator ruling 2026-09-19: a sale consumes the TRADING book first and
+        # only spills into the long-term Investment block once Stock in Trade is
+        # exhausted. from_classification names where to START; consume_cascade
+        # continues into the other bucket rather than failing short.
+        order = (
+            fifo_engine.DEFAULT_CONSUMPTION_ORDER
+            if self.from_classification == "Stock in Trade"
+            else ("Investment", "Stock in Trade")
+        )
+        return fifo_engine.consume_cascade(
             security=self.security,
             company=self.company,
-            classification=self.from_classification,
             qty_to_sell=flt(self.qty),
             sale_date=getdate(self.posting_date),
-            customer_filter=None,  # always proprietary inventory
+            order=order,
         )
 
     def _create_investment_disposal(self, plan) -> str:
@@ -296,7 +306,14 @@ class SecuritySale(Document):
                     # JE to the right inventory bucket. Single-bucket Sales
                     # (enforced by from_classification) → all lots share
                     # the same source_classification.
-                    "source_classification": self.from_classification,
+                    # A cascaded sale can span both buckets, so each lot carries
+                    # the classification FIFO actually took it from; the COGS JE
+                    # groups credits by this field. Falls back to the sale's own
+                    # classification for plans built by the older single-bucket
+                    # consume(), which leaves it blank.
+                    "source_classification": (
+                        getattr(entry, "classification", "") or self.from_classification
+                    ),
                 }
                 for entry in plan
             ],
@@ -360,6 +377,15 @@ class SecuritySale(Document):
         existing = _existing_je_for_source("Security Sale", self.name)
         if existing:
             return existing
+
+        # Nil-consideration transfers (gifts, remuneration in kind) have
+        # amount = 0. There is no revenue to recognise, and a JE with zero on
+        # both sides is rejected by ERPNext. COGS still posts -- the cost has
+        # genuinely left inventory -- so the disposal lands as a straight loss,
+        # which is what a gift is. Mirrors post_cost_recognition_je_for_disposal,
+        # which already returns None when there is no cost to recognise.
+        if flt(self.amount) <= 0:
+            return ""
 
         cost_center = self.cost_center or company_default_cost_center(self.company)
 

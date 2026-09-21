@@ -113,9 +113,16 @@ def _transfer_holdings(pt) -> None:
         if qty <= 0:
             continue
 
-        # Always bump the legacy qty_disposed (used by FIFO + status logic).
-        source.qty_disposed = flt(source.qty_disposed or 0) + qty
-
+        # NB: do NOT bump the legacy qty_disposed on the in-place path.
+        # A reclassification does not dispose of anything -- the shares stay in
+        # this lot, they just change class. qty_remaining is derived as
+        # qty_acquired - qty_disposed, so bumping it here shrank the lot (e.g.
+        # 19,000 -> 4,000), which then made _validate_classification_rows reject
+        # this very write ("Net classified qty exceeds available") and would also
+        # have told FIFO the lot was depleted and flipped status to Fully
+        # Disposed. The legacy fallback below DOES bump it, correctly, because
+        # that path mints a separate Investment Holding and the source really
+        # does lose the shares.
         if has_child_table:
             # ── Phase 24B-2 in-place reclassification ───────────────────
             # Bump the per-class disposal counter for the source class.
@@ -154,6 +161,8 @@ def _transfer_holdings(pt) -> None:
             continue
 
         # ── Legacy fallback (pre-24B sites): mint a new IH ──────────────
+        # Here the shares genuinely leave this lot, so the legacy counter moves.
+        source.qty_disposed = flt(source.qty_disposed or 0) + qty
         source.flags.ignore_permissions = True
         source.save(ignore_permissions=True)
 
