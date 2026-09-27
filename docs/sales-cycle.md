@@ -275,7 +275,7 @@ Net change to Polemarch's net worth: +₹1,000  ✓
 
 | Scenario | What happens |
 |---|---|
-| Customer's wallet doesn't have enough | wallet.apply_delta's non-negativity invariant throws under row lock — Sale doesn't submit |
+| Customer's wallet doesn't have enough | `wallet_loc.wallet.apply_delta`'s non-negativity invariant throws under row lock — Sale doesn't submit |
 | FIFO can't cover qty (insufficient inventory) | Controller throws at on_submit before any side-effect lands |
 | Operator picks `from_classification=Investment` but Polemarch only has Stock-in-Trade | FIFO returns empty / partial → controller throws |
 | Customer already had Holdings (CRM snapshot) before this sale | snapshot increments — `qty += sold qty`, doesn't reset |

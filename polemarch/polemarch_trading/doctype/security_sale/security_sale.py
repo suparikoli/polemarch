@@ -39,6 +39,8 @@ from polemarch.polemarch_trading.controller_helpers import (
     company_default_cost_center,
     is_receivable_or_payable,
     resolve_account_by_name,
+)
+from wallet_loc.wallet import (
     reverse_wallet_transactions,
     sever_wallet_transaction_link,
     wallet_gl_account_for_customer,
@@ -435,7 +437,7 @@ class SecuritySale(Document):
         if self.party_type != "Customer":
             return None
 
-        from polemarch.polemarch_trading import wallet as wallet_engine
+        from wallet_loc import wallet as wallet_engine
 
         wallet_name = f"WAL-{self.party}"
         if not frappe.db.exists("Wallet", wallet_name):

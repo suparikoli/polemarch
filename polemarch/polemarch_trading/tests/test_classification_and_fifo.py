@@ -19,12 +19,47 @@ then tears everything down. Every test maps to a bug that reached production:
 import frappe
 from frappe.utils import flt
 
-CO = "MITHTECH INNOVATIVE SOLUTIONS PVT LTD"
+# Runs on any site: the company is the site's default company (MISPL on
+# production), the accounts follow its abbreviation.
+CO = frappe.defaults.get_global_default("company") if getattr(frappe.local, "site", None) else "MITHTECH INNOVATIVE SOLUTIONS PVT LTD"
+ABBR = frappe.db.get_value("Company", CO, "abbr") if getattr(frappe.local, "site", None) else "MISPL"
 ISIN = "ZZ9TEST00019"   # valid shape: 2 letters + 9 alnum + 1 digit
 CUST = "TEST Counterparty (polemarch tests)"
-CLEARING = "Securities Trade Clearing - MISPL"
-GIFT_ACC = "Securities Gifted - Business Promotion - MISPL"
-COGS_ACC = "Trading COGS - Securities - MISPL"
+
+
+def _acc(account_name):
+    """Account.name by account_name: sites that number their chart prefix
+    the number, so the name cannot be composed from the label."""
+    return frappe.db.get_value("Account", {"company": CO, "account_name": account_name, "is_group": 0}, "name") \
+        or f"{account_name} - {ABBR}"
+
+
+CLEARING = _acc("Securities Trade Clearing")
+GIFT_ACC = _acc("Securities Gifted - Business Promotion")
+COGS_ACC = _acc("Trading COGS - Securities")
+REVENUE_ACC = _acc("Trading Revenue - Securities")
+
+
+def _cust_name():
+    return frappe.db.get_value("Customer", {"customer_name": CUST}, "name") or CUST
+
+
+def _ensure_account(account_name, root_type, parent_fragment):
+    """The two MISPL-specific accounts the test posts to, created on demand."""
+    if frappe.db.exists("Account", {"company": CO, "account_name": account_name}):
+        return
+    parent = frappe.db.get_value("Account", {"company": CO, "is_group": 1, "root_type": root_type,
+                                             "account_name": ["like", f"%{parent_fragment}%"]}, "name", order_by="lft ASC")
+    frappe.get_doc({"doctype": "Account", "account_name": account_name, "company": CO, "parent_account": parent,
+                    "root_type": root_type, "is_group": 0}).insert(ignore_permissions=True)
+
+
+def _fill_mandatory_from_existing(doc):
+    for df in frappe.get_meta(doc.doctype).fields:
+        if df.reqd and not doc.get(df.fieldname) and df.fieldtype not in ("Table", "Table MultiSelect"):
+            value = frappe.db.get_value(doc.doctype, {df.fieldname: ["is", "set"]}, df.fieldname)
+            if value is not None:
+                doc.set(df.fieldname, value)
 
 _results = []
 
@@ -40,17 +75,20 @@ def _setup():
         frappe.get_doc({"doctype": "Security", "isin": ISIN, "security_name": "TEST Security",
                         "security_type": "Unlisted Shares", "tradable": 1, "active": 1}
                        ).insert(ignore_permissions=True)
-    if not frappe.db.exists("Customer", CUST):
-        frappe.get_doc({"doctype": "Customer", "customer_name": CUST,
+    _ensure_account("Securities Trade Clearing", "Asset", "Current Assets")
+    _ensure_account("Securities Gifted - Business Promotion", "Expense", "Indirect Expenses")
+    if not frappe.db.get_value("Customer", {"customer_name": CUST}, "name"):
+        d = frappe.get_doc({"doctype": "Customer", "customer_name": CUST,
                         "customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
-                        "territory": frappe.db.get_value("Territory", {"is_group": 0}, "name")}
-                       ).insert(ignore_permissions=True)
+                        "territory": frappe.db.get_value("Territory", {"is_group": 0}, "name")})
+        _fill_mandatory_from_existing(d)
+        d.insert(ignore_permissions=True)
 
 
 def _buy(qty, rate, cls, date="2025-04-01"):
     d = frappe.get_doc({
         "doctype": "Security Purchase", "company": CO, "security": ISIN, "posting_date": date,
-        "party_type": "Customer", "party": CUST, "qty": qty, "rate": rate,
+        "party_type": "Customer", "party": _cust_name(), "qty": qty, "rate": rate,
         "intended_classification": cls, "payment_method": "Bank", "payment_account": CLEARING,
     })
     d.insert(ignore_permissions=True); d.submit()
@@ -60,7 +98,7 @@ def _buy(qty, rate, cls, date="2025-04-01"):
 def _sell(qty, rate, from_cls, date="2026-01-01"):
     d = frappe.get_doc({
         "doctype": "Security Sale", "company": CO, "security": ISIN, "posting_date": date,
-        "party_type": "Customer", "party": CUST, "qty": qty, "rate": rate,
+        "party_type": "Customer", "party": _cust_name(), "qty": qty, "rate": rate,
         "from_classification": from_cls, "payment_method": "Bank", "payment_account": CLEARING,
     })
     d.insert(ignore_permissions=True); d.submit()
@@ -162,10 +200,10 @@ def run():
     _check("gift cost does NOT hit COGS", _bal(COGS_ACC) - cogs_before, 0.0)
 
     # ── a normal sale still books revenue + COGS ──
-    cogs_b, rev_b = _bal(COGS_ACC), _bal("Trading Revenue - Securities - MISPL")
+    cogs_b, rev_b = _bal(COGS_ACC), _bal(REVENUE_ACC)
     _sell(1000, 6.00, "Stock in Trade", "2026-02-02")
     _check("normal sale books COGS", _bal(COGS_ACC) - cogs_b, 4000.0, "1,000 @ 4.00")
-    _check("normal sale books revenue", _bal("Trading Revenue - Securities - MISPL") - rev_b, -6000.0)
+    _check("normal sale books revenue", _bal(REVENUE_ACC) - rev_b, -6000.0)
 
     # ── disposal bumps the per-class counter, not just the total ──
     h_sit.reload()
@@ -248,7 +286,7 @@ def _teardown(quiet=False):
     for dt in ("Security Sale", "Security Purchase"):
         for n in frappe.get_all(dt, filters={"security": ISIN}, pluck="name"):
             frappe.delete_doc(dt, n, force=True, ignore_permissions=True, delete_permanently=True)
-    for dt, n in (("Security", ISIN), ("Customer", CUST)):
+    for dt, n in (("Security", ISIN), ("Customer", _cust_name())):
         if frappe.db.exists(dt, n):
             try:
                 frappe.delete_doc(dt, n, force=True, ignore_permissions=True, delete_permanently=True)

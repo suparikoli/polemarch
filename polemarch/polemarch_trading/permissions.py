@@ -1,5 +1,8 @@
 """Customer-role scoping for trading doctypes.
 
+Wallet / Wallet Transaction scoping moved to `wallet_loc.permissions`
+(site_config `wallet_loc_customer_scoping`).
+
 Wired into `hooks.py` as `permission_query_conditions` + `has_permission`.
 
 The single primitive `_customer_filter_for_user(user)` returns either:
@@ -35,14 +38,6 @@ _UNRESTRICTED_ROLES = {
 # ── permission_query_conditions ──────────────────────────────────────────
 
 
-def wallet_perm_query(user=None):
-    return _perm_query("Wallet", "customer", user)
-
-
-def wallet_transaction_perm_query(user=None):
-    return _perm_query("Wallet Transaction", "customer", user)
-
-
 def investment_disposal_perm_query(user=None):
     return _perm_query("Investment Disposal", "customer", user)
 
@@ -59,14 +54,6 @@ def portfolio_transfer_perm_query(user=None):
 
 
 # ── has_permission ───────────────────────────────────────────────────────
-
-
-def wallet_has_permission(doc, user=None, permission_type=None):
-    return _has_permission(doc, user, "customer")
-
-
-def wallet_transaction_has_permission(doc, user=None, permission_type=None):
-    return _has_permission(doc, user, "customer")
 
 
 def investment_disposal_has_permission(doc, user=None, permission_type=None):

@@ -9,7 +9,7 @@ This app provides:
 - Auto-classification of new lots into Stock-in-Trade vs Investment after a 5-business-day operator window
 - A Sale Transfer Order print format for Polemarch sales invoices
 - A Polemarch desk workspace with charts, Number Cards (Total / SiT / Investment / Unclassified holdings value), and shortcuts
-- Daily reconciliation audit jobs (Investment Account ↔ Holdings, Wallet ledger ↔ balances, Holdings cache ↔ Investment Holdings)
+- Daily reconciliation audit jobs (Investment Account ↔ Holdings, Holdings cache ↔ Investment Holdings; the wallet audits run from `wallet_loc` and report into Polemarch Audit Log)
 
 The app is a **passive ERPNext customization** — it exposes Frappe's standard REST API. External integrations (storefront, mobile app, etc.) are the responsibility of whatever upstream system calls Frappe.
 
@@ -48,14 +48,14 @@ See [`docs/purchase-cycle.md`](docs/purchase-cycle.md) and [`docs/sales-cycle.md
 - **Investment Holding** — append-only child-table classifications (SiT / Investment). A new lot lands as Unclassified; operator has 5 business days to classify, then the auto-classifier flips remaining qty to SiT.
 - **Security Sale** — consumes from `Investment Holding` via classification-aware FIFO, books realised gain via Capital Gains Auto-JE.
 - **Portfolio Transfer** — reclassifies SiT ↔ Investment in-place on the source IH (no fragmentation).
-- **Wallet** — bank-passbook-style ledger; all writes go through `apply_delta` / `reverse` in the wallet engine. Form renders the last 100 rows with DR/CR + running balance and a "Load 100 more" pagination control.
+- **Wallet** — lives in the `wallet_loc` app (required app) together with Wallet Deposit / Withdrawal / Transaction and the line of credit on `lending`; all writes go through `wallet_loc.wallet.apply_delta` / `reverse`. Polemarch adds its roles, its liability account and the customer filter through the `wallet_loc_*` hooks. Form renders the last 100 rows with DR/CR + running balance and a "Load 100 more" pagination control.
 
 ## Daily audits
 
 Wired into `scheduler_events.daily`:
 
 - `polemarch.polemarch_trading.audit.verify_inventory_account_matches_holdings` — drift between `Securities Inventory` GL balance and sum of `Investment Holding.remaining_cost`
-- `polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger` — drift between Wallet doc balances and replayed Wallet Transactions
+- `wallet_loc.audit.verify_wallet_balance_matches_ledger` (wallet_loc) — drift between Wallet doc balances, replayed Wallet Transactions and the liability GL; lands in Polemarch Audit Log via `polemarch.polemarch_trading.audit.log_wallet_audit`
 - `polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache` — drift between `Security.qty_*` / `cost_total` cache and live IH aggregation
 
 Drift > ₹100 (or any qty mismatch) logs a row to `Polemarch Audit Log`.

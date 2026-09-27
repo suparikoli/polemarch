@@ -1,5 +1,9 @@
 """Daily reconciliation jobs.
 
+The two wallet audits (header vs ledger vs GL, and Σ wallets vs liability
+account) run from `wallet_loc.audit`; `log_wallet_audit` below is the
+`wallet_loc_audit_log` hook that lands their results in Polemarch Audit Log.
+
 These jobs DETECT mismatches; they do NOT auto-heal. Auto-syncing one source
 to another risks hiding real corruption. Each job:
 
@@ -16,113 +20,6 @@ from frappe.utils import flt, now_datetime
 
 
 _DELTA_TOLERANCE = 0.01
-
-
-def verify_wallet_balance_matches_ledger():
-    """Three-way check: Wallet header vs Wallet Transaction sum vs GL Liability sum."""
-    if not frappe.db.table_exists("Wallet"):
-        return
-
-    wallets = frappe.get_all(
-        "Wallet",
-        fields=["name", "customer", "company", "balance_total", "gl_liability_account"],
-    )
-
-    mismatches = []
-    for w in wallets:
-        ledger_sum = _wallet_transaction_signed_sum(w.name)
-        gl_balance = _gl_party_balance(w.gl_liability_account, "Customer", w.customer)
-
-        # GL liability accounts carry a credit balance for wallet credit;
-        # `_gl_party_balance` returns SUM(credit) - SUM(debit) which matches.
-        if (
-            abs(flt(w.balance_total) - flt(ledger_sum)) > _DELTA_TOLERANCE
-            or abs(flt(w.balance_total) - flt(gl_balance)) > _DELTA_TOLERANCE
-        ):
-            mismatches.append(
-                {
-                    "wallet": w.name,
-                    "customer": w.customer,
-                    "header_total": flt(w.balance_total),
-                    "ledger_sum": flt(ledger_sum),
-                    "gl_balance": flt(gl_balance),
-                }
-            )
-
-        _stamp_recon(w.name, flt(w.balance_total) - flt(ledger_sum))
-
-    _log_audit("verify_wallet_balance_matches_ledger", len(wallets), mismatches)
-
-
-def verify_wallet_liability_aggregate_matches_gl():
-    """Per-company aggregate check: ∑ Wallet.balance_total should equal
-    the CR balance of the Customer Wallet Liability GL account for that
-    company.
-
-    This catches drift that the per-wallet `verify_wallet_balance_matches_
-    ledger` audit can miss — specifically, manual GL postings (Payment
-    Entries, JEs) hitting Customer Wallet Liability WITHOUT a matching
-    Wallet Transaction. The per-wallet check uses `party_type=Customer,
-    party=<customer>` party-balance lookups; a JE that touches the account
-    without party tagging inflates the aggregate but stays invisible to
-    the per-wallet check.
-
-    Reports drift to Polemarch Audit Log; does NOT auto-heal.
-    """
-    if not frappe.db.table_exists("Wallet"):
-        return
-
-    # Group wallet totals by company.
-    rows = frappe.db.sql(
-        """
-        SELECT company, COALESCE(SUM(balance_total), 0) AS wallet_sum
-          FROM `tabWallet`
-         WHERE status = 'Active'
-         GROUP BY company
-        """,
-        as_dict=True,
-    )
-
-    mismatches = []
-    for row in rows:
-        # Find the company's Customer Wallet Liability account by account_name
-        # (composite Account.name carries an account_number prefix when set).
-        liability_account = frappe.db.get_value(
-            "Account",
-            {
-                "company": row.company,
-                "account_name": "Customer Wallet Liability",
-                "disabled": 0,
-            },
-            "name",
-        )
-        if not liability_account:
-            # No wallet liability account for this company — skip silently.
-            continue
-
-        # Net GL balance (CR is positive for a liability account).
-        gl = frappe.db.sql(
-            """
-            SELECT COALESCE(SUM(credit), 0) - COALESCE(SUM(debit), 0) AS net_credit
-              FROM `tabGL Entry`
-             WHERE account = %s
-               AND company = %s
-               AND is_cancelled = 0
-            """,
-            (liability_account, row.company),
-            as_dict=True,
-        )[0]
-
-        if abs(flt(row.wallet_sum) - flt(gl.net_credit)) > _DELTA_TOLERANCE:
-            mismatches.append({
-                "company": row.company,
-                "liability_account": liability_account,
-                "sum_of_wallet_balances": flt(row.wallet_sum),
-                "gl_net_credit": flt(gl.net_credit),
-                "drift": flt(row.wallet_sum) - flt(gl.net_credit),
-            })
-
-    _log_audit("verify_wallet_liability_aggregate_matches_gl", len(rows), mismatches)
 
 
 def verify_holding_disposal_chain():
@@ -158,63 +55,9 @@ def verify_holding_disposal_chain():
     _log_audit("verify_holding_disposal_chain", len(rows), mismatches)
 
 
-def _wallet_transaction_signed_sum(wallet: str) -> float:
-    """Net signed sum of every SUBMITTED Wallet Transaction on the wallet,
-    independent of is_cancelled.
-
-    Gap 7 fix: previously this filtered out is_cancelled=1 rows, but the
-    wallet engine's apply_delta updates balance_total for EVERY WT it
-    inserts — including the reversal it posts when an original is
-    cancelled. Both rows contribute to the running balance: the original
-    adds its delta on insert (later flagged is_cancelled=1 by reverse()),
-    and its reversal posts the inverse delta. Excluding cancelled rows
-    from this sum left every reversed pair contributing a phantom
-    ±amount (cancelled original excluded, reversal counted), causing
-    spurious daily-audit drift on any wallet that has ever had a
-    transaction cancelled.
-    """
-    row = frappe.db.sql(
-        """
-        SELECT COALESCE(
-                 SUM(CASE WHEN direction = 'Credit' THEN amount
-                          WHEN direction = 'Debit'  THEN -amount
-                          ELSE 0 END),
-                 0) AS signed_sum
-          FROM `tabWallet Transaction`
-         WHERE wallet = %s
-           AND docstatus = 1
-        """,
-        (wallet,),
-        as_dict=True,
-    )
-    return flt(row[0].signed_sum if row else 0)
-
-
-def _gl_party_balance(account: str, party_type: str, party: str) -> float:
-    if not account or not party:
-        return 0
-    row = frappe.db.sql(
-        """
-        SELECT COALESCE(SUM(credit) - SUM(debit), 0) AS balance
-          FROM `tabGL Entry`
-         WHERE account     = %s
-           AND party_type  = %s
-           AND party       = %s
-           AND is_cancelled = 0
-        """,
-        (account, party_type, party),
-        as_dict=True,
-    )
-    return flt(row[0].balance if row else 0)
-
-
-def _stamp_recon(wallet_name: str, delta: float):
-    frappe.db.set_value(
-        "Wallet",
-        wallet_name,
-        {"last_recon_at": now_datetime(), "last_recon_delta": delta},
-        update_modified=False,
-    )
+def log_wallet_audit(job: str, checked: int, mismatches: list):
+    """wallet_loc_audit_log hook — write wallet audit results to Polemarch Audit Log."""
+    _log_audit(job, checked, mismatches)
 
 
 def _log_audit(job: str, checked: int, mismatches: list):

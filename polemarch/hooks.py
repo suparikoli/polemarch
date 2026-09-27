@@ -5,6 +5,11 @@ app_description = "All customizations needed for polemarch"
 app_email = "manoj311093@gmail.com"
 app_license = "mit"
 
+# The customer wallet (Wallet, Wallet Deposit, Wallet Withdrawal, Wallet
+# Transaction) and the line of credit live in the generic `wallet_loc` app;
+# polemarch only adds its own rules through the wallet_loc_* hooks below.
+required_apps = ["wallet_loc"]
+
 after_install = "polemarch.install.after_install"
 after_migrate = "polemarch.install.after_migrate"
 
@@ -52,13 +57,6 @@ doc_events = {
         "on_submit": "polemarch.polemarch_trading.hooks.purchase_invoice_on_submit",
         "on_cancel": "polemarch.polemarch_trading.hooks.purchase_invoice_on_cancel",
     },
-    # Phase 2 stub; Phase 5 will wire wallet credit on bank-recon.
-    "Bank Transaction": {
-        "on_submit": "polemarch.polemarch_trading.hooks.bank_transaction_on_submit",
-    },
-    "Journal Entry": {
-        "validate": "polemarch.polemarch_trading.hooks.journal_entry_validate",
-    },
     # Phase 22 — keep the Security.qty_sit / qty_investment / qty_total /
     # cost_total cache fields fresh whenever an Investment Holding changes.
     # The cache backs the at-a-glance columns on the Security list view.
@@ -72,9 +70,8 @@ doc_events = {
 scheduler_events = {
     "daily": [
         # Reconciliation jobs — each detects mismatches and logs them;
-        # none of them auto-heal.
-        "polemarch.polemarch_trading.audit.verify_wallet_balance_matches_ledger",
-        "polemarch.polemarch_trading.audit.verify_wallet_liability_aggregate_matches_gl",
+        # none of them auto-heal. The two wallet audits run from wallet_loc
+        # and report into Polemarch Audit Log via the wallet_loc_audit_log hook.
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         # Phase 22 — recompute Security.qty_sit/qty_investment/cost_total
         # cache and log any drift. Self-healing (re-persists the truth).
@@ -94,15 +91,11 @@ scheduler_events = {
 # the standard role permissions take over. Flip the flag in site_config.json
 # once mappings between Users and Customers are verified.
 permission_query_conditions = {
-    "Wallet":                "polemarch.polemarch_trading.permissions.wallet_perm_query",
-    "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_perm_query",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_perm_query",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_perm_query",
 }
 
 has_permission = {
-    "Wallet":                "polemarch.polemarch_trading.permissions.wallet_has_permission",
-    "Wallet Transaction":    "polemarch.polemarch_trading.permissions.wallet_transaction_has_permission",
     "Investment Disposal":   "polemarch.polemarch_trading.permissions.investment_disposal_has_permission",
     "Portfolio Transfer":    "polemarch.polemarch_trading.permissions.portfolio_transfer_has_permission",
 }
@@ -110,3 +103,9 @@ has_permission = {
 fixtures = [
     {"doctype": "Customer Group", "filters": [["name", "=", "Polemarch"]]},
 ]
+
+# ── wallet_loc extension points ──────────────────────────────────────
+# Polemarch-specific wallet rules stay here; the wallet itself is generic.
+wallet_loc_operator_roles = ["Polemarch Trader", "Polemarch Settlement Officer"]
+wallet_loc_customer_filter = ["polemarch.overrides.customer.wallet_customer_filter"]
+wallet_loc_audit_log = ["polemarch.polemarch_trading.audit.log_wallet_audit"]

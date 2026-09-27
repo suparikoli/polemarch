@@ -64,7 +64,7 @@ def execute(verbose: bool = False) -> dict:
         wallet = step("05_resolve_or_create_wallet", lambda: _ensure_wallet(customer, company))
 
         # 2) Wallet engine smoke.
-        from polemarch.polemarch_trading import wallet as wallet_engine
+        from wallet_loc import wallet as wallet_engine
 
         step("06_wallet_deposit_100k", lambda: wallet_engine.apply_delta(
             wallet=wallet, txn_type="Deposit", direction="Credit", amount=100000,
@@ -343,8 +343,11 @@ def _ensure_supplier() -> str:
 
 
 def _ensure_customer(company: str) -> str:
-    if frappe.db.exists("Customer", _TEST_CUSTOMER):
-        return _TEST_CUSTOMER
+    # Sites may number customers by series, so look the fixture up by its
+    # customer_name and always work with the resolved `name`.
+    existing = frappe.db.get_value("Customer", {"customer_name": _TEST_CUSTOMER}, "name")
+    if existing:
+        return existing
     doc = frappe.get_doc({
         "doctype": "Customer",
         "customer_name": _TEST_CUSTOMER,
@@ -352,6 +355,7 @@ def _ensure_customer(company: str) -> str:
         "customer_group": frappe.db.exists("Customer Group", "Polemarch") and "Polemarch" or "All Customer Groups",
         "territory": frappe.db.get_value("Territory", {"is_group": 0}, "name", order_by="lft ASC"),
     })
+    _fill_mandatory_from_existing(doc)
     doc.flags.ignore_permissions = True
     doc.insert(ignore_permissions=True)
     return doc.name
@@ -673,7 +677,7 @@ def _cleanup():
     posted under a JE that touched a real company account reverse cleanly.
     Then deletes the fixture rows + the JEs / Disposals they spawned.
     """
-    test_customer = _TEST_CUSTOMER
+    test_customer = frappe.db.get_value("Customer", {"customer_name": _TEST_CUSTOMER}, "name") or _TEST_CUSTOMER
     test_supplier = f"{_FIXTURE_PREFIX}supplier-001"
 
     # --- Cancel + delete Security Sales (cancels Disposal + JEs via on_cancel)
@@ -769,3 +773,14 @@ def _cleanup():
 
     frappe.db.commit()
     return {"cleaned": True}
+
+
+def _fill_mandatory_from_existing(doc):
+    """Sites add their own mandatory Custom Fields to Customer (source,
+    industry, ...); copy a value from any existing row so the fixture
+    inserts on any site."""
+    for df in frappe.get_meta(doc.doctype).fields:
+        if df.reqd and not doc.get(df.fieldname) and df.fieldtype not in ("Table", "Table MultiSelect"):
+            value = frappe.db.get_value(doc.doctype, {df.fieldname: ["is", "set"]}, df.fieldname)
+            if value is not None:
+                doc.set(df.fieldname, value)

@@ -36,6 +36,68 @@ def setup():
     _add_polemarch_naming_series()
     _create_processing_fee_item()
     _create_low_order_fee_item()
+    _link_wallet_loc_company_settings()
+    _grant_wallet_roles()
+
+
+# ── wallet_loc integration ───────────────────────────────────────────
+
+WALLET_ROLE_PERMS = {
+    # Same rights the roles had while the doctypes lived in this app.
+    "Wallet Deposit": {
+        "Polemarch Trader": ("read", "write", "create", "submit", "report", "export", "share", "print", "email"),
+        "Polemarch Settlement Officer": ("read", "write", "create", "submit", "cancel", "report", "export", "share", "print", "email"),
+    },
+    "Wallet Withdrawal": {
+        "Polemarch Settlement Officer": ("read", "write", "create", "submit", "cancel", "report", "export", "share", "print", "email"),
+        "Polemarch Trader": ("read", "report", "export"),
+    },
+}
+
+
+def _link_wallet_loc_company_settings():
+    """Point wallet_loc at Polemarch's existing `Customer Wallet Liability`
+    account and keep the historical behaviour (every non-Mithtech-only
+    customer gets a wallet). Only touches companies that have the account
+    and have not been configured yet."""
+    if not frappe.db.has_column("Company", "wallet_liability_account"):
+        return
+    for company in frappe.get_all("Company", fields=["name", "abbr", "enable_customer_wallet"]):
+        if company.enable_customer_wallet:
+            continue
+        account = frappe.db.get_value(
+            "Account",
+            {"company": company.name, "account_name": "Customer Wallet Liability", "is_group": 0, "disabled": 0},
+            "name",
+        )
+        if not account:
+            continue
+        frappe.db.set_value(
+            "Company",
+            company.name,
+            {"enable_customer_wallet": 1, "auto_create_customer_wallet": 1, "wallet_liability_account": account},
+        )
+    frappe.clear_cache(doctype="Company")
+
+
+def _grant_wallet_roles():
+    """The wallet doctypes are generic now; Polemarch's back-office roles get
+    their rights back as Custom DocPerms (idempotent)."""
+    from frappe.permissions import add_permission, update_permission_property
+
+    for doctype, roles in WALLET_ROLE_PERMS.items():
+        if not frappe.db.exists("DocType", doctype):
+            continue
+        for role, ptypes in roles.items():
+            if not frappe.db.exists("Role", role):
+                frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1, "is_custom": 1}).insert(
+                    ignore_permissions=True
+                )
+            if not frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role, "permlevel": 0}):
+                add_permission(doctype, role, 0)
+            for ptype in ptypes:
+                update_permission_property(doctype, role, 0, ptype, 1, validate=False)
+    frappe.clear_cache()
 
 
 def _ensure_polemarch_trading_module():

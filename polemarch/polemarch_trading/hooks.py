@@ -76,27 +76,6 @@ def purchase_invoice_on_cancel(doc, method=None):
         frappe.delete_doc("Investment Holding", row.name, ignore_permissions=True)
 
 
-# ── Bank Transaction: deposit reconciliation (Phase 5 — wallet credit) ──
-
-
-def bank_transaction_on_submit(doc, method=None):
-    """Stub for Phase 5. Bank Transaction reconciliation will resolve to a
-    Customer by VBA ID and credit their wallet via `wallet.apply_delta`.
-    Today it's a no-op so submitting a Bank Transaction doesn't fail in
-    Phase 2 deployments that wire the hook eagerly."""
-    return
-
-
-# ── Journal Entry validate — audit hook ─────────────────────────────────
-
-
-def journal_entry_validate(doc, method=None):
-    """Light audit hook: stamp every Polemarch-tagged JE with normalised
-    fields. Phase 3 will add custom_source_doctype / custom_source_name
-    custom fields and check them here for idempotency."""
-    return
-
-
 # ── Internals ────────────────────────────────────────────────────────────
 
 
