@@ -4,7 +4,7 @@ The two controllers are deliberately separate (different ledger
 postings, different validate rules, different cancel-cascade ordering),
 but they share a thin layer of generic plumbing: company-default
 account lookups and name-based account resolution. Wallet Transaction
-severance + reversal on cancel live in `wallet_loc.wallet`.
+severance + reversal on cancel live in `customer_wallet.wallet`.
 
 Anything that's identical or trivially parametrized between the two
 controllers lives here. Anything that diverges (validate messages,

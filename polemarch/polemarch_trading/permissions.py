@@ -1,7 +1,7 @@
 """Customer-role scoping for trading doctypes.
 
-Wallet / Wallet Transaction scoping moved to `wallet_loc.permissions`
-(site_config `wallet_loc_customer_scoping`).
+Wallet / Wallet Transaction scoping moved to `customer_wallet.permissions`
+(site_config `customer_wallet_customer_scoping`).
 
 Wired into `hooks.py` as `permission_query_conditions` + `has_permission`.
 

@@ -36,11 +36,11 @@ def setup():
     _add_polemarch_naming_series()
     _create_processing_fee_item()
     _create_low_order_fee_item()
-    _link_wallet_loc_company_settings()
+    _link_customer_wallet_company_settings()
     _grant_wallet_roles()
 
 
-# ── wallet_loc integration ───────────────────────────────────────────
+# ── customer_wallet integration ───────────────────────────────────────────
 
 WALLET_ROLE_PERMS = {
     # Same rights the roles had while the doctypes lived in this app.
@@ -55,8 +55,8 @@ WALLET_ROLE_PERMS = {
 }
 
 
-def _link_wallet_loc_company_settings():
-    """Point wallet_loc at Polemarch's existing `Customer Wallet Liability`
+def _link_customer_wallet_company_settings():
+    """Point customer_wallet at Polemarch's existing `Customer Wallet Liability`
     account and keep the historical behaviour (every non-Mithtech-only
     customer gets a wallet). Only touches companies that have the account
     and have not been configured yet."""

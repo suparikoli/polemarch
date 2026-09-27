@@ -6,9 +6,9 @@ app_email = "manoj311093@gmail.com"
 app_license = "mit"
 
 # The customer wallet (Wallet, Wallet Deposit, Wallet Withdrawal, Wallet
-# Transaction) and the line of credit live in the generic `wallet_loc` app;
-# polemarch only adds its own rules through the wallet_loc_* hooks below.
-required_apps = ["wallet_loc"]
+# Transaction) and the line of credit live in the generic `customer_wallet` app;
+# polemarch only adds its own rules through the customer_wallet_* hooks below.
+required_apps = ["customer_wallet"]
 
 after_install = "polemarch.install.after_install"
 after_migrate = "polemarch.install.after_migrate"
@@ -70,8 +70,8 @@ doc_events = {
 scheduler_events = {
     "daily": [
         # Reconciliation jobs — each detects mismatches and logs them;
-        # none of them auto-heal. The two wallet audits run from wallet_loc
-        # and report into Polemarch Audit Log via the wallet_loc_audit_log hook.
+        # none of them auto-heal. The two wallet audits run from customer_wallet
+        # and report into Polemarch Audit Log via the customer_wallet_audit_log hook.
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         # Phase 22 — recompute Security.qty_sit/qty_investment/cost_total
         # cache and log any drift. Self-healing (re-persists the truth).
@@ -104,8 +104,8 @@ fixtures = [
     {"doctype": "Customer Group", "filters": [["name", "=", "Polemarch"]]},
 ]
 
-# ── wallet_loc extension points ──────────────────────────────────────
+# ── customer_wallet extension points ──────────────────────────────────────
 # Polemarch-specific wallet rules stay here; the wallet itself is generic.
-wallet_loc_operator_roles = ["Polemarch Trader", "Polemarch Settlement Officer"]
-wallet_loc_customer_filter = ["polemarch.overrides.customer.wallet_customer_filter"]
-wallet_loc_audit_log = ["polemarch.polemarch_trading.audit.log_wallet_audit"]
+customer_wallet_operator_roles = ["Polemarch Trader", "Polemarch Settlement Officer"]
+customer_wallet_customer_filter = ["polemarch.overrides.customer.wallet_customer_filter"]
+customer_wallet_audit_log = ["polemarch.polemarch_trading.audit.log_wallet_audit"]

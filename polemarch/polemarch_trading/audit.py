@@ -1,8 +1,8 @@
 """Daily reconciliation jobs.
 
 The two wallet audits (header vs ledger vs GL, and Σ wallets vs liability
-account) run from `wallet_loc.audit`; `log_wallet_audit` below is the
-`wallet_loc_audit_log` hook that lands their results in Polemarch Audit Log.
+account) run from `customer_wallet.audit`; `log_wallet_audit` below is the
+`customer_wallet_audit_log` hook that lands their results in Polemarch Audit Log.
 
 These jobs DETECT mismatches; they do NOT auto-heal. Auto-syncing one source
 to another risks hiding real corruption. Each job:
@@ -56,7 +56,7 @@ def verify_holding_disposal_chain():
 
 
 def log_wallet_audit(job: str, checked: int, mismatches: list):
-    """wallet_loc_audit_log hook — write wallet audit results to Polemarch Audit Log."""
+    """customer_wallet_audit_log hook — write wallet audit results to Polemarch Audit Log."""
     _log_audit(job, checked, mismatches)
 
 
