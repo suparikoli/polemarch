@@ -286,17 +286,6 @@ def _create_custom_fields():
                 "description": "Set automatically when all line items are Polemarch-branded.",
             },
         ],
-        "Sales Order": [
-            {
-                "fieldname": "custom_is_polemarch_order",
-                "label": "Is Polemarch Order",
-                "fieldtype": "Check",
-                "read_only": 1,
-                "no_copy": 1,
-                "in_standard_filter": 1,
-                "insert_after": "order_type",
-            },
-        ],
     }
     create_custom_fields(fields, ignore_validate=True, update=True)
 

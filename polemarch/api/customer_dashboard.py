@@ -46,16 +46,6 @@ def get_dashboard(customer: str) -> dict:
         limit=10,
     )
 
-    pending_orders = frappe.db.count(
-        "Sales Order",
-        filters={
-            "customer": customer,
-            "custom_is_polemarch_order": 1,
-            "docstatus": 1,
-            "status": ["in", ["To Bill", "To Deliver and Bill"]],
-        },
-    )
-
     kyc = _kyc_status(customer)
 
     return {
@@ -71,7 +61,6 @@ def get_dashboard(customer: str) -> dict:
             }
             for r in recent_trades
         ],
-        "pending_orders": pending_orders,
         "kyc": kyc,
         # Phase 5 — surface wallet / open orders / positions when the
         # trading subsystem has migrated. Each section is best-effort and

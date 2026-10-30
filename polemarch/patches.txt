@@ -212,3 +212,6 @@ polemarch.patches.v0_28_0.drop_medusa_settings_fields
 # medusync's handler code uses `frappe.db.has_column(...)` guards so
 # it degrades gracefully when the columns are absent. Idempotent.
 polemarch.patches.v0_29_0.drop_medusa_reference_columns
+# v0_30_0 — retire Sales Order.custom_is_polemarch_order. Polemarch share
+# orders go through Security Purchase / Sale, so the flag marks nothing.
+polemarch.patches.v0_30_0.drop_polemarch_order_flag
