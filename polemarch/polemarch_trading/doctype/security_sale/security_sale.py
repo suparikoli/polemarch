@@ -452,10 +452,23 @@ class SecuritySale(Document):
                 _("Customer {0} has no Wallet ({1}).").format(self.party, wallet_name),
                 title=_("Wallet Missing"),
             )
+        # Storefront orders reserved the funds when they were paid: release
+        # the reservation first. The release points at the Storefront Order,
+        # not this Sale, so cancelling the Sale reverses only the settlement.
+        if self.wallet_reservation:
+            wallet_engine.apply_delta(
+                wallet=wallet_name,
+                txn_type="Reservation Release",
+                direction="Credit",
+                amount=flt(frappe.db.get_value("Wallet Transaction", self.wallet_reservation, "amount")),
+                reference_doctype="Storefront Order" if self.storefront_order else None,
+                reference_name=self.storefront_order,
+                idempotency_key=f"sec-sale-release:{self.wallet_reservation}",
+                remarks=f"Reservation {self.wallet_reservation} released for Security Sale {self.name}",
+            )
         # Customer is buying from Polemarch — debit their wallet by net amount.
         # Buy Settlement direction=Debit is (-1, 0, -1) post-Phase-10 fix —
-        # decreases available and total directly (no Reservation Release pre-
-        # step because this is an instant flow, not the Trade Order lifecycle).
+        # decreases available and total directly.
         return wallet_engine.apply_delta(
             wallet=wallet_name,
             txn_type="Buy Settlement",

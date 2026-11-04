@@ -1,0 +1,218 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:medusa_order_id",
+ "creation": "2026-11-04 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "module": "Polemarch Trading",
+ "name": "Storefront Order",
+ "title_field": "display_id",
+ "search_fields": "customer,display_id,status",
+ "track_changes": 1,
+ "in_create": 1,
+ "description": "A storefront (Medusa) order as e16 sees it: the wallet reservation taken when it was funded and the Security Sales submitted when the shares were transferred. Written only by the storefront integration.",
+ "field_order": [
+  "medusa_order_id",
+  "display_id",
+  "customer",
+  "company",
+  "column_break_1",
+  "status",
+  "funded_on",
+  "transfer_date",
+  "cancelled_on",
+  "section_amounts",
+  "wallet_debit",
+  "lines_amount",
+  "column_break_2",
+  "fee_amount",
+  "fee_reservation",
+  "fee_settlement",
+  "section_lines",
+  "lines",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "medusa_order_id",
+   "fieldtype": "Data",
+   "label": "Medusa Order ID",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "display_id",
+   "fieldtype": "Data",
+   "label": "Order #",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Funded\nTransferred\nCancelled\nNeeds Review",
+   "default": "Funded",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "funded_on",
+   "fieldtype": "Datetime",
+   "label": "Funded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transfer_date",
+   "fieldtype": "Date",
+   "label": "Transfer Date",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cancelled_on",
+   "fieldtype": "Datetime",
+   "label": "Cancelled On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break",
+   "label": "Wallet"
+  },
+  {
+   "fieldname": "wallet_debit",
+   "fieldtype": "Currency",
+   "label": "Wallet Debit (Medusa)",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Total the storefront took from the wallet for this order (main + promo)."
+  },
+  {
+   "fieldname": "lines_amount",
+   "fieldtype": "Currency",
+   "label": "Shares (qty × rate)",
+   "options": "INR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fee_amount",
+   "fieldtype": "Currency",
+   "label": "Fees",
+   "options": "INR",
+   "read_only": 1,
+   "description": "Wallet debit less the share consideration: posted as a wallet Fee on transfer. Not in the GL: the books coordinator books it."
+  },
+  {
+   "fieldname": "fee_reservation",
+   "fieldtype": "Link",
+   "label": "Fee Reservation",
+   "options": "Wallet Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fee_settlement",
+   "fieldtype": "Link",
+   "label": "Fee Settlement",
+   "options": "Wallet Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_lines",
+   "fieldtype": "Section Break",
+   "label": "Lines"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Storefront Order Line",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Polemarch Trader",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Polemarch Settlement Officer",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "Polemarch Compliance Officer",
+   "read": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

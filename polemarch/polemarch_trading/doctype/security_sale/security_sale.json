@@ -39,6 +39,11 @@
   "investment_disposal_ref",
   "revenue_journal_entry_ref",
   "cogs_journal_entry_ref",
+  "section_storefront",
+  "storefront_order",
+  "medusa_line_id",
+  "column_break_storefront",
+  "wallet_reservation",
   "section_meta",
   "remarks",
   "customer",
@@ -247,6 +252,40 @@
    "read_only": 1,
    "no_copy": 1,
    "description": "DR Trading COGS, CR inventory bucket (Securities Inventory or Long-Term Investments based on classification)."
+  },
+  {
+   "fieldname": "section_storefront",
+   "fieldtype": "Section Break",
+   "label": "Storefront",
+   "collapsible": 1,
+   "depends_on": "eval:doc.storefront_order"
+  },
+  {
+   "fieldname": "storefront_order",
+   "fieldtype": "Link",
+   "label": "Storefront Order",
+   "options": "Storefront Order",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "medusa_line_id",
+   "fieldtype": "Data",
+   "label": "Medusa Line ID",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_storefront",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wallet_reservation",
+   "fieldtype": "Link",
+   "label": "Wallet Reservation",
+   "options": "Wallet Transaction",
+   "read_only": 1,
+   "description": "Storefront orders: the funds reserved when the order was paid. Released on submit, before the Buy Settlement."
   },
   {
    "fieldname": "section_meta",

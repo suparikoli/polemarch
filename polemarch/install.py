@@ -36,8 +36,8 @@ def setup():
     _add_polemarch_naming_series()
     _create_processing_fee_item()
     _create_low_order_fee_item()
-    _link_customer_wallet_company_settings()
     _grant_wallet_roles()
+    _create_storefront_role()
 
 
 # ── customer_wallet integration ───────────────────────────────────────────
@@ -55,29 +55,17 @@ WALLET_ROLE_PERMS = {
 }
 
 
-def _link_customer_wallet_company_settings():
-    """Point customer_wallet at Polemarch's existing `Customer Wallet Liability`
-    account and keep the historical behaviour (every non-Mithtech-only
-    customer gets a wallet). Only touches companies that have the account
-    and have not been configured yet."""
-    if not frappe.db.has_column("Company", "wallet_liability_account"):
-        return
-    for company in frappe.get_all("Company", fields=["name", "abbr", "enable_customer_wallet"]):
-        if company.enable_customer_wallet:
-            continue
-        account = frappe.db.get_value(
-            "Account",
-            {"company": company.name, "account_name": "Customer Wallet Liability", "is_group": 0, "disabled": 0},
-            "name",
+STOREFRONT_ROLE = "Polemarch Storefront Integration"
+
+
+def _create_storefront_role():
+    """API-only role of the storefront integration user. It grants no
+    doctype rights: the user reaches e16 only through
+    polemarch.api.storefront, which checks this role."""
+    if not frappe.db.exists("Role", STOREFRONT_ROLE):
+        frappe.get_doc({"doctype": "Role", "role_name": STOREFRONT_ROLE, "desk_access": 0, "is_custom": 1}).insert(
+            ignore_permissions=True
         )
-        if not account:
-            continue
-        frappe.db.set_value(
-            "Company",
-            company.name,
-            {"enable_customer_wallet": 1, "auto_create_customer_wallet": 1, "wallet_liability_account": account},
-        )
-    frappe.clear_cache(doctype="Company")
 
 
 def _grant_wallet_roles():
@@ -172,6 +160,18 @@ def _create_custom_fields():
                 "in_standard_filter": 1,
                 "insert_after": "customer_group",
                 "description": "Tick if this customer is for Mithtech-only services and should NOT see the Polemarch / KYC tabs.",
+            },
+            {
+                # The storefront (Medusa) customer id; set by
+                # polemarch.api.storefront. Not unique-indexed: the column
+                # pre-dates this field with empty values on some sites.
+                "fieldname": "medusa_customer_id",
+                "label": "Storefront Customer ID",
+                "fieldtype": "Data",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+                "insert_after": "custom_is_mithtech_only",
             },
             {
                 "fieldname": "custom_kyc_status",
