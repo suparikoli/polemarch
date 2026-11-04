@@ -108,11 +108,15 @@ def ensure_security(isin: str, title: Optional[str] = None) -> str:
 
 @frappe.whitelist(methods=["POST"])
 def upsert_security(payload):
-    """A storefront product: create the Security if the ISIN is new; update
-    the price and page link. The name of an existing Security is the books'
-    and is never overwritten."""
+    """A storefront product: refresh the price and page link of its Security.
+    A new ISIN gets a Security only with `create` (orders create the ones
+    they need), so the books' master list holds what was traded, not the
+    whole catalogue. The name of an existing Security is the books' and is
+    never overwritten."""
     _guard()
     p = _parse(payload)
+    if not frappe.db.exists("Security", p["isin"]) and not p.get("create"):
+        return {"skipped": "no Security for this ISIN"}
     name = ensure_security(p["isin"], p.get("title"))
     values = {}
     if p.get("price") is not None:
