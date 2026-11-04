@@ -20,6 +20,7 @@
   "company",
   "column_break_1",
   "posting_date",
+  "transfer_date",
   "party_type",
   "party",
   "intended_classification",
@@ -90,6 +91,16 @@
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "transfer_date",
+   "fieldtype": "Date",
+   "label": "Transfer Date",
+   "description": "Date the shares moved in the demat statement. Defaults to the Posting Date; can be corrected after submit (no GL effect).",
+   "allow_on_submit": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
   },
   {
    "fieldname": "party_type",
@@ -338,7 +349,7 @@
    "report": 1
   }
  ],
- "sort_field": "modified",
+ "sort_field": "transfer_date",
  "sort_order": "DESC",
  "states": []
 }

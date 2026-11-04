@@ -59,12 +59,19 @@ _VALID_PAYMENT_METHODS_FOR_SUPPLIER = {"Default Receivable", "Bank", "Cash"}
 class SecuritySale(Document):
     def validate(self):
         self._compute_amount()
+        self._default_transfer_date()
         self._validate_qty_rate()
         self._validate_security_tradable()
         self._validate_party_payment_combo()
         self._default_accounts()
         self._validate_accounts_resolved()
         self._sync_legacy_fields()
+
+    def _default_transfer_date(self):
+        # The demat transfer date; the books coordinator corrects it after
+        # submit when delivery happened on another day.
+        if not self.transfer_date:
+            self.transfer_date = self.posting_date
 
     def on_submit(self):
         plan = self._fifo_consume()

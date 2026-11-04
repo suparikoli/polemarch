@@ -215,3 +215,6 @@ polemarch.patches.v0_29_0.drop_medusa_reference_columns
 # v0_30_0 — retire Sales Order.custom_is_polemarch_order. Polemarch share
 # orders go through Security Purchase / Sale, so the flag marks nothing.
 polemarch.patches.v0_30_0.drop_polemarch_order_flag
+# v0_31_0 — Transfer Date on Security Purchase / Sale (lists sort by it);
+# backfill = posting_date, which matched the master ledger for every doc.
+polemarch.patches.v0_31_0.backfill_transfer_date
