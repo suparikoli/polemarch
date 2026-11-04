@@ -18,6 +18,7 @@ frappe.ui.form.on('Security', {
     refresh(frm) {
         if (frm.is_new()) return;
         render_holdings_panel(frm);
+        render_passbook_tabs(frm);
     },
 });
 
@@ -332,4 +333,167 @@ function build_panel_html(data, security) {
         </div>
       </div>
     `;
+}
+
+
+// Passbook + Counterparties tabs — every Purchase, Sale and Portfolio
+// Transfer of this security by transfer date, computed live by
+// polemarch_trading.passbook (nothing stored on the Security).
+function render_passbook_tabs(frm) {
+    const pb = frm.fields_dict.passbook_html;
+    const cp = frm.fields_dict.counterparties_html;
+    if (!pb || !cp) return;
+    const loading = `<div style="color: var(--text-muted); padding: 8px 0;">${__('Loading…')}</div>`;
+    pb.$wrapper.html(loading);
+    cp.$wrapper.html(loading);
+
+    frappe.call({
+        method: 'polemarch.polemarch_trading.api.passbook.get_security_passbook',
+        args: { security: frm.doc.name },
+    }).then((r) => pb.$wrapper.html(build_passbook_html(r.message || {}, frm.doc.name)));
+
+    frappe.call({
+        method: 'polemarch.polemarch_trading.api.passbook.get_security_counterparties',
+        args: { security: frm.doc.name },
+    }).then((r) => cp.$wrapper.html(build_counterparties_html(r.message || [], frm.doc.name)));
+}
+
+// Plain-string formatters: frappe.format wraps Float/Currency in a
+// right-aligned block div, which breaks inline text.
+const pb_fmt = {
+    n: (v) => (v ? format_number(v, null, 0) : ''),
+    c: (v) => format_currency(v || 0, 'INR'),
+    d: (v) => (v ? frappe.datetime.str_to_user(v) : ''),
+    esc: (v) => frappe.utils.escape_html(v || ''),
+    link: (dt, name) => (name ? `<a href="${frappe.utils.get_form_link(dt, name)}">${frappe.utils.escape_html(name)}</a>` : ''),
+};
+
+const pb_css = {
+    table: 'width: 100%; border-collapse: collapse; font-size: 12.5px;',
+    th: 'padding: 6px 8px; text-align: left; font-weight: 600; white-space: nowrap; background: var(--bg-color); border-bottom: 1px solid var(--border-color);',
+    th_r: 'padding: 6px 8px; text-align: right; font-weight: 600; white-space: nowrap; background: var(--bg-color); border-bottom: 1px solid var(--border-color);',
+    td: 'padding: 5px 8px; border-bottom: 1px solid var(--border-color); vertical-align: top;',
+    td_r: 'padding: 5px 8px; border-bottom: 1px solid var(--border-color); text-align: right; white-space: nowrap; vertical-align: top;',
+};
+
+function pb_report_link(security, view) {
+    const q = new URLSearchParams({ security, view }).toString();
+    return `/app/query-report/Securities Passbook?${q}`;
+}
+
+function build_passbook_html(data, security) {
+    const entries = data.entries || [];
+    if (!entries.length) {
+        return `<div style="color: var(--text-muted); padding: 8px 0;">${__('No submitted Security Purchase, Security Sale or Portfolio Transfer for this security.')}</div>`;
+    }
+    const ok = data.qty_ok && data.cost_ok;
+    const check = ok
+        ? `<div style="padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 12.5px;">
+             ✓ ${__('Closing balance')} <b>${pb_fmt.n(data.closing_qty) || 0}</b> = ${__('Total Units')} ·
+             ${__('closing cost')} <b>${pb_fmt.c(data.closing_cost)}</b> = ${__('Total Cost (book)')}
+             <a style="float: right;" href="${pb_report_link(security, 'Passbook')}">${__('open as report')} →</a>
+           </div>`
+        : `<div style="padding: 8px 12px; margin-bottom: 10px; border: 1px solid var(--red-500); color: var(--red-600); border-radius: 6px; font-size: 12.5px;">
+             ⚠ ${__('Passbook does not tie to the Security totals')}:
+             ${__('closing qty')} <b>${pb_fmt.n(data.closing_qty) || 0}</b> vs ${__('Total Units')} <b>${pb_fmt.n(data.qty_total) || 0}</b>;
+             ${__('closing cost')} <b>${pb_fmt.c(data.closing_cost)}</b> vs ${__('Total Cost (book)')} <b>${pb_fmt.c(data.cost_total)}</b>.
+           </div>`;
+
+    const rows = entries.map((e) => {
+        const reclass = e.direction === 'Reclass';
+        const party = e.party ? pb_fmt.link(e.party_type, e.party) : `<span style="color: var(--text-muted)">${__('own books')}</span>`;
+        const cls = reclass
+            ? `${pb_fmt.esc(e.classification)} · ${pb_fmt.n(e.reclass_qty)}${e.reversal_of ? ` <small>(${__('reverses')} ${pb_fmt.esc(e.reversal_of)})</small>` : ''}`
+            : pb_fmt.esc(e.classification);
+        return `<tr>
+            <td style="${pb_css.td} white-space: nowrap;">${pb_fmt.d(e.date)}</td>
+            <td style="${pb_css.td} white-space: nowrap;">${pb_fmt.link(e.voucher_type, e.voucher_no)}</td>
+            <td style="${pb_css.td}">${party}</td>
+            <td style="${pb_css.td}">${cls}</td>
+            <td style="${pb_css.td_r} color: var(--green-600);">${pb_fmt.n(e.qty_in)}</td>
+            <td style="${pb_css.td_r} color: var(--red-600);">${pb_fmt.n(e.qty_out)}</td>
+            <td style="${pb_css.td_r}">${reclass ? '' : pb_fmt.c(e.rate)}</td>
+            <td style="${pb_css.td_r}">${reclass ? '' : pb_fmt.c(e.amount)}</td>
+            <td style="${pb_css.td_r} font-weight: 600;">${pb_fmt.n(e.balance_qty) || 0}</td>
+            <td style="${pb_css.td_r}">${pb_fmt.c(e.balance_cost)}</td>
+        </tr>`;
+    }).join('');
+
+    return `${check}
+      <div style="overflow-x: auto;">
+        <table style="${pb_css.table}">
+          <thead><tr>
+            <th style="${pb_css.th}">${__('Transfer Date')}</th>
+            <th style="${pb_css.th}">${__('Document')}</th>
+            <th style="${pb_css.th}">${__('Party')}</th>
+            <th style="${pb_css.th}">${__('Classification')}</th>
+            <th style="${pb_css.th_r}">${__('In')}</th>
+            <th style="${pb_css.th_r}">${__('Out')}</th>
+            <th style="${pb_css.th_r}">${__('Rate')}</th>
+            <th style="${pb_css.th_r}">${__('Amount')}</th>
+            <th style="${pb_css.th_r}">${__('Balance Qty')}</th>
+            <th style="${pb_css.th_r}">${__('Balance Cost (FIFO)')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+}
+
+function build_counterparties_html(groups, security) {
+    if (!groups.length) {
+        return `<div style="color: var(--text-muted); padding: 8px 0;">${__('No counterparties yet.')}</div>`;
+    }
+    const head = `
+      <div style="display: grid; grid-template-columns: 2.4fr repeat(5, 1fr) 0.6fr; gap: 8px; padding: 6px 12px; font-weight: 600; font-size: 12px; background: var(--bg-color); border-bottom: 1px solid var(--border-color);">
+        <span>${__('Party')}</span>
+        <span style="text-align: right;">${__('Bought from')}</span>
+        <span style="text-align: right;">${__('Sold to')}</span>
+        <span style="text-align: right;">${__('Net Qty')}</span>
+        <span style="text-align: right;">${__('Paid')}</span>
+        <span style="text-align: right;">${__('Received')}</span>
+        <span style="text-align: right;">${__('Count')}</span>
+      </div>`;
+    const body = groups.map((g) => {
+        const lines = g.entries.map((e) => `<tr>
+            <td style="${pb_css.td} white-space: nowrap;">${pb_fmt.d(e.date)}</td>
+            <td style="${pb_css.td} white-space: nowrap;">${pb_fmt.link(e.voucher_type, e.voucher_no)}</td>
+            <td style="${pb_css.td}">${pb_fmt.esc(e.classification)}</td>
+            <td style="${pb_css.td_r} color: var(--green-600);">${pb_fmt.n(e.qty_in)}</td>
+            <td style="${pb_css.td_r} color: var(--red-600);">${pb_fmt.n(e.qty_out)}</td>
+            <td style="${pb_css.td_r}">${pb_fmt.c(e.rate)}</td>
+            <td style="${pb_css.td_r}">${pb_fmt.c(e.amount)}</td>
+        </tr>`).join('');
+        return `
+          <details style="border-bottom: 1px solid var(--border-color);">
+            <summary style="display: grid; grid-template-columns: 2.4fr repeat(5, 1fr) 0.6fr; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 12.5px;">
+              <span>${pb_fmt.link(g.party_type, g.party)} <small style="color: var(--text-muted)">${pb_fmt.esc(g.party_type)}</small></span>
+              <span style="text-align: right; color: var(--green-600);">${pb_fmt.n(g.qty_in)}</span>
+              <span style="text-align: right; color: var(--red-600);">${pb_fmt.n(g.qty_out)}</span>
+              <span style="text-align: right;">${pb_fmt.n(g.net_qty) || 0}</span>
+              <span style="text-align: right;">${g.amount_paid ? pb_fmt.c(g.amount_paid) : ''}</span>
+              <span style="text-align: right;">${g.amount_received ? pb_fmt.c(g.amount_received) : ''}</span>
+              <span style="text-align: right;">${g.count}</span>
+            </summary>
+            <div style="padding: 0 12px 10px 28px; overflow-x: auto;">
+              <table style="${pb_css.table}">
+                <thead><tr>
+                  <th style="${pb_css.th}">${__('Transfer Date')}</th>
+                  <th style="${pb_css.th}">${__('Document')}</th>
+                  <th style="${pb_css.th}">${__('Classification')}</th>
+                  <th style="${pb_css.th_r}">${__('In')}</th>
+                  <th style="${pb_css.th_r}">${__('Out')}</th>
+                  <th style="${pb_css.th_r}">${__('Rate')}</th>
+                  <th style="${pb_css.th_r}">${__('Amount')}</th>
+                </tr></thead>
+                <tbody>${lines}</tbody>
+              </table>
+            </div>
+          </details>`;
+    }).join('');
+    return `
+      <div style="margin-bottom: 8px; font-size: 12.5px; color: var(--text-muted);">
+        ${__('Bought from / sold to, by party. Click a row to see its movements.')}
+        <a style="float: right;" href="${pb_report_link(security, 'Counterparties')}">${__('open as report')} →</a>
+      </div>
+      <div style="border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;">${head}${body}</div>`;
 }

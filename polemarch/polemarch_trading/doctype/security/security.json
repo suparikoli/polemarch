@@ -37,7 +37,11 @@
   "tradable",
   "active",
   "section_meta",
-  "notes"
+  "notes",
+  "passbook_tab",
+  "passbook_html",
+  "counterparties_tab",
+  "counterparties_html"
  ],
  "fields": [
   {
@@ -223,6 +227,26 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "passbook_tab",
+   "fieldtype": "Tab Break",
+   "label": "Passbook"
+  },
+  {
+   "fieldname": "passbook_html",
+   "fieldtype": "HTML",
+   "label": "Passbook"
+  },
+  {
+   "fieldname": "counterparties_tab",
+   "fieldtype": "Tab Break",
+   "label": "Counterparties"
+  },
+  {
+   "fieldname": "counterparties_html",
+   "fieldtype": "HTML",
+   "label": "Counterparties"
   }
  ],
  "permissions": [
