@@ -35,6 +35,7 @@ def execute(filters: Optional[dict] = None):
 def _strip(e):
     e = dict(e)
     e.pop("creation", None)
+    e.pop("payments", None)
     e["indent"] = 0
     if e["direction"] == passbook.RECLASS:
         e["qty_reclass"] = e.pop("reclass_qty", 0)
@@ -57,6 +58,8 @@ def _passbook_columns():
         {"label": "Reclass Qty", "fieldname": "qty_reclass", "fieldtype": "Float", "precision": 0, "width": 95},
         {"label": "Rate", "fieldname": "rate", "fieldtype": "Currency", "width": 95},
         {"label": "Amount", "fieldname": "amount", "fieldtype": "Currency", "width": 120},
+        {"label": "Payment Type", "fieldname": "payment_type", "fieldtype": "Data", "width": 130},
+        {"label": "Payment Details", "fieldname": "payment_details", "fieldtype": "Data", "width": 300},
         {"label": "FIFO Cost Out", "fieldname": "cost_out", "fieldtype": "Currency", "width": 120},
         {"label": "Balance Qty", "fieldname": "balance_qty", "fieldtype": "Float", "precision": 0, "width": 105},
         {"label": "Balance Cost", "fieldname": "balance_cost", "fieldtype": "Currency", "width": 125},
@@ -78,6 +81,8 @@ def _counterparty_columns():
         {"label": "Qty Out", "fieldname": "qty_out", "fieldtype": "Float", "precision": 0, "width": 95},
         {"label": "Net Qty", "fieldname": "net_qty", "fieldtype": "Float", "precision": 0, "width": 95},
         {"label": "Rate", "fieldname": "rate", "fieldtype": "Currency", "width": 90},
+        {"label": "Payment Type", "fieldname": "payment_type", "fieldtype": "Data", "width": 130},
+        {"label": "Payment Details", "fieldname": "payment_details", "fieldtype": "Data", "width": 280},
         {"label": "Paid (bought)", "fieldname": "amount_paid", "fieldtype": "Currency", "width": 120},
         {"label": "Received (sold)", "fieldname": "amount_received", "fieldtype": "Currency", "width": 125},
         {"label": "Count", "fieldname": "count", "fieldtype": "Int", "width": 65},
@@ -105,5 +110,6 @@ def _counterparty_rows(entries):
                 "voucher_type": e["voucher_type"], "voucher_no": e["voucher_no"],
                 "qty_in": e["qty_in"], "qty_out": e["qty_out"], "net_qty": e["qty_in"] - e["qty_out"],
                 "rate": e["rate"], "amount_paid": paid, "amount_received": received,
+                "payment_type": e.get("payment_type"), "payment_details": e.get("payment_details"),
             })
     return rows

@@ -1,0 +1,100 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-06 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "istable": 1,
+ "module": "Polemarch Trading",
+ "name": "Security Payment",
+ "field_order": [
+  "payment_type",
+  "payment_date",
+  "amount",
+  "paid_through",
+  "reference",
+  "column_break_1",
+  "journal_entry",
+  "wallet_transaction",
+  "details"
+ ],
+ "fields": [
+  {
+   "fieldname": "payment_type",
+   "fieldtype": "Select",
+   "label": "Payment Type",
+   "options": "Wallet\nDirect Transfer",
+   "reqd": 1,
+   "in_list_view": 1,
+   "allow_on_submit": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "in_list_view": 1,
+   "allow_on_submit": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "INR",
+   "in_list_view": 1,
+   "allow_on_submit": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "paid_through",
+   "fieldtype": "Data",
+   "label": "Paid Through",
+   "in_list_view": 1,
+   "allow_on_submit": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Reference",
+   "in_list_view": 1,
+   "allow_on_submit": 1,
+   "columns": 2,
+   "description": "UTR, UPI or bank reference."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "allow_on_submit": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "wallet_transaction",
+   "fieldtype": "Link",
+   "label": "Wallet Transaction",
+   "options": "Wallet Transaction",
+   "allow_on_submit": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Small Text",
+   "label": "Details",
+   "allow_on_submit": 1
+  }
+ ],
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

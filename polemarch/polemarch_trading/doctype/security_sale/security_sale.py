@@ -40,6 +40,7 @@ from polemarch.polemarch_trading.controller_helpers import (
     is_receivable_or_payable,
     resolve_account_by_name,
 )
+from polemarch.polemarch_trading.payment_lines import header_for, record_on_submit
 from polemarch.polemarch_trading.wallet_links import describe_trade, tag
 from customer_wallet.wallet import (
     reverse_wallet_transactions,
@@ -108,6 +109,10 @@ class SecuritySale(Document):
         self.db_set("revenue_journal_entry_ref", revenue_je, update_modified=False)
         if wallet_txn:
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
+        record_on_submit(self, wallet_txn, revenue_je)
+
+    def before_update_after_submit(self):
+        self.payment_type = header_for(self.get("payments"), self.amount)
 
     def before_cancel(self):
         # See Security Purchase.before_cancel — Frappe's check_links runs

@@ -126,6 +126,22 @@ def run(keep=False):
     _check("Customer tab: balances", flt(ledger["wallet"].balance_available), 9404.6)
     _check("Customer tab: the settlement row links the Sale", [r.security_sale for r in ledger["rows"] if r.name == settle.name], [ss[0].name])
 
+    # ── payment type + details on the Sale ──
+    paid = frappe.get_doc("Security Sale", ss[0].name)
+    _check("wallet Sale says Wallet", paid.payment_type, "Wallet")
+    _check("payment row opens the wallet row", [(p.payment_type, flt(p.amount), p.wallet_transaction) for p in paid.payments], [("Wallet", 700.0, settle.name)])
+    from polemarch.polemarch_trading.passbook import get_entries
+    pb_row = [e for e in get_entries(security=base.ISIN) if e["voucher_no"] == ss[0].name][0]
+    _check("passbook shows the payment", (pb_row["payment_type"], settle.name in pb_row["payment_details"]), ("Wallet", True))
+    bank = base._buy(10, 5.0, "Stock in Trade", "2026-01-01")
+    bank.reload()
+    _check("bank purchase says Direct Transfer", (bank.payment_type, [p.payment_type for p in bank.payments], bank.payments[0].journal_entry), ("Direct Transfer", ["Direct Transfer"], bank.journal_entry_ref))
+    bank.append("payments", {"payment_type": "Wallet", "amount": 1, "paid_through": "test"})
+    bank.save(ignore_permissions=True)
+    _check("adding a row after submit updates the type", frappe.db.get_value("Security Purchase", bank.name, "payment_type"), "Wallet + Direct Transfer")
+    gift = base._sell(5, 0.0, "Stock in Trade", "2026-01-02")
+    _check("nil consideration says No Payment", frappe.db.get_value("Security Sale", gift.name, "payment_type"), "No Payment")
+
     # ── holdings read ──
     rows = [h for h in sf.customer_holdings()["holdings"] if h.medusa_customer_id == MID]
     _check("customer_holdings returns e16 qty", [(h.isin, flt(h.qty)) for h in rows], [(base.ISIN, 150.0)])

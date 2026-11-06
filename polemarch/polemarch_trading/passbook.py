@@ -21,6 +21,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate
 
+from polemarch.polemarch_trading.payment_lines import summarise
+
 IN, OUT, RECLASS = "In", "Out", "Reclass"
 # Same-day order: stock arrives before it leaves.
 _DAY_ORDER = {IN: 0, RECLASS: 1, OUT: 2}
@@ -112,6 +114,31 @@ def _transfers(securities):
     ]
 
 
+def _attach_payments(entries):
+    """payment_type and a one-line summary of each document's payment rows."""
+    for doctype in ("Security Purchase", "Security Sale"):
+        names = [e["voucher_no"] for e in entries if e["voucher_type"] == doctype]
+        if not names:
+            continue
+        rows = frappe.get_all(
+            "Security Payment",
+            filters={"parent": ["in", names], "parenttype": doctype},
+            fields=["parent", "payment_type", "payment_date", "amount", "paid_through", "reference",
+                    "journal_entry", "wallet_transaction"],
+            order_by="parent, idx",
+        )
+        summary = summarise(rows)
+        by_parent = {}
+        for r in rows:
+            by_parent.setdefault(r.parent, []).append(r)
+        types = dict(frappe.get_all(doctype, filters={"name": ["in", names]}, fields=["name", "payment_type"], as_list=True))
+        for e in entries:
+            if e["voucher_type"] == doctype:
+                e["payment_type"] = types.get(e["voucher_no"])
+                e["payment_details"] = summary.get(e["voucher_no"])
+                e["payments"] = by_parent.get(e["voucher_no"], [])
+
+
 def _sort_key(e):
     return (getdate(e["date"]), _DAY_ORDER[e["direction"]], getdate(e["posting_date"]), e["creation"], e["voucher_no"])
 
@@ -128,6 +155,7 @@ def get_entries(
     securities = [security] if security else None
     entries = _purchases(securities) + _sales(securities) + _transfers(securities)
     entries.sort(key=_sort_key)
+    _attach_payments(entries)
 
     names = frappe.get_all("Security", fields=["name", "security_name"], as_list=True)
     sec_name = dict(names)

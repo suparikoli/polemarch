@@ -376,6 +376,18 @@ const pb_css = {
     td_r: 'padding: 5px 8px; border-bottom: 1px solid var(--border-color); text-align: right; white-space: nowrap; vertical-align: top;',
 };
 
+// Payment type + one line per payment leg, each opening its document.
+function pb_payment_cell(e) {
+    if (!e.payment_type && !(e.payments || []).length) return '';
+    const lines = (e.payments || []).map((p) => {
+        const doc = p.wallet_transaction ? pb_fmt.link('Wallet Transaction', p.wallet_transaction)
+            : p.journal_entry ? pb_fmt.link('Journal Entry', p.journal_entry) : '';
+        const via = [pb_fmt.esc(p.paid_through), pb_fmt.esc(p.reference)].filter(Boolean).join(' · ');
+        return `<div class="small text-muted" style="white-space:nowrap">${pb_fmt.c(p.amount)} ${via} ${doc}</div>`;
+    }).join('');
+    return `<div>${pb_fmt.esc(e.payment_type)}</div>${lines}`;
+}
+
 function pb_report_link(security, view) {
     const q = new URLSearchParams({ security, view }).toString();
     return `/app/query-report/Securities Passbook?${q}`;
@@ -414,6 +426,7 @@ function build_passbook_html(data, security) {
             <td style="${pb_css.td_r} color: var(--red-600);">${pb_fmt.n(e.qty_out)}</td>
             <td style="${pb_css.td_r}">${reclass ? '' : pb_fmt.c(e.rate)}</td>
             <td style="${pb_css.td_r}">${reclass ? '' : pb_fmt.c(e.amount)}</td>
+            <td style="${pb_css.td}">${pb_payment_cell(e)}</td>
             <td style="${pb_css.td_r} font-weight: 600;">${pb_fmt.n(e.balance_qty) || 0}</td>
             <td style="${pb_css.td_r}">${pb_fmt.c(e.balance_cost)}</td>
         </tr>`;
@@ -431,6 +444,7 @@ function build_passbook_html(data, security) {
             <th style="${pb_css.th_r}">${__('Out')}</th>
             <th style="${pb_css.th_r}">${__('Rate')}</th>
             <th style="${pb_css.th_r}">${__('Amount')}</th>
+            <th style="${pb_css.th}">${__('Payment')}</th>
             <th style="${pb_css.th_r}">${__('Balance Qty')}</th>
             <th style="${pb_css.th_r}">${__('Balance Cost (FIFO)')}</th>
           </tr></thead>
@@ -462,6 +476,7 @@ function build_counterparties_html(groups, security) {
             <td style="${pb_css.td_r} color: var(--red-600);">${pb_fmt.n(e.qty_out)}</td>
             <td style="${pb_css.td_r}">${pb_fmt.c(e.rate)}</td>
             <td style="${pb_css.td_r}">${pb_fmt.c(e.amount)}</td>
+            <td style="${pb_css.td}">${pb_payment_cell(e)}</td>
         </tr>`).join('');
         return `
           <details style="border-bottom: 1px solid var(--border-color);">
@@ -484,6 +499,7 @@ function build_counterparties_html(groups, security) {
                   <th style="${pb_css.th_r}">${__('Out')}</th>
                   <th style="${pb_css.th_r}">${__('Rate')}</th>
                   <th style="${pb_css.th_r}">${__('Amount')}</th>
+                  <th style="${pb_css.th}">${__('Payment')}</th>
                 </tr></thead>
                 <tbody>${lines}</tbody>
               </table>
