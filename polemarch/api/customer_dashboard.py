@@ -70,6 +70,33 @@ def get_dashboard(customer: str) -> dict:
     }
 
 
+@frappe.whitelist()
+def get_wallet_ledger(customer: str, limit: int = 200) -> dict:
+    """The Customer form's Wallet tab: balances and the ledger, newest first,
+    with what each row paid for and the documents it links to."""
+    frappe.has_permission("Customer", "read", customer, throw=True)
+    frappe.has_permission("Wallet Transaction", "read", throw=True)
+    wallet = f"WAL-{customer}"
+    if not frappe.db.exists("Wallet", wallet):
+        return {"wallet": None, "rows": []}
+    summary = frappe.db.get_value(
+        "Wallet", wallet,
+        ["name", "status", "balance_available", "balance_reserved", "balance_total", "gl_liability_account"],
+        as_dict=True,
+    )
+    rows = frappe.get_all(
+        "Wallet Transaction",
+        filters={"wallet": wallet, "docstatus": 1},
+        fields=["name", "posting_datetime", "txn_type", "direction", "amount", "balance_available_after",
+                "balance_total_after", "particulars", "remarks", "security", "qty", "rate", "security_sale",
+                "storefront_order", "reference_doctype", "reference_name", "linked_transaction", "reverses",
+                "reversed_by", "is_cancelled", "origin"],
+        order_by="posting_datetime desc, creation desc",
+        limit_page_length=min(int(limit), 500),
+    )
+    return {"wallet": summary, "rows": rows}
+
+
 def _wallet_section(customer: str) -> dict | None:
     if not frappe.db.table_exists("Wallet"):
         return None

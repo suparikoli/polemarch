@@ -2,6 +2,7 @@ frappe.ui.form.on('Customer', {
     refresh(frm) {
         update_primary_details(frm);
         render_polemarch_indicators(frm);
+        render_wallet_tab(frm);
     },
     after_save(frm) {
         update_primary_details(frm);
@@ -317,4 +318,73 @@ function render_primary_bank(frm) {
     } else {
         frappe.model.set_value(frm.doctype, frm.docname, 'custom_bank_primary', 'No primary bank selected.');
     }
+}
+
+
+// --- Wallet tab: balances and the ledger, each row linked to what it paid for ---
+function render_wallet_tab(frm) {
+    const field = frm.fields_dict.custom_wallet_html;
+    if (!field || frm.is_new()) return;
+    field.$wrapper.html(`<div class="text-muted" style="padding:12px">${__("Loading…")}</div>`);
+    frappe.call({
+        method: "polemarch.api.customer_dashboard.get_wallet_ledger",
+        args: { customer: frm.doc.name },
+        callback: ({ message }) => field.$wrapper.html(_wallet_tab_html(message || {})),
+        error: () => field.$wrapper.html(`<div class="text-muted" style="padding:12px">${__("You don't have access to wallets.")}</div>`),
+    });
+}
+
+function _wallet_tab_html({ wallet, rows }) {
+    if (!wallet) {
+        return `<div class="text-muted" style="padding:12px">${__("This customer has no wallet. One is created when they first use the storefront wallet.")}</div>`;
+    }
+    const inr = (v) => format_currency(v || 0, "INR");
+    const esc = (v) => frappe.utils.escape_html(v || "");
+    const link = (dt, name, text) => name
+        ? `<a href="${frappe.utils.get_form_link(dt, name)}">${esc(text || name)}</a>` : "";
+    const card = (label, value, color) => `
+        <div style="flex:1;min-width:150px;padding:12px 14px;border:1px solid var(--border-color);border-radius:6px">
+            <div class="text-muted small">${label}</div>
+            <div style="font-size:20px;font-weight:600;${color ? `color:${color}` : ""}">${inr(value)}</div>
+        </div>`;
+    const th = "padding:6px 8px;background:var(--bg-color);border-bottom:1px solid var(--border-color);white-space:nowrap;font-weight:600;";
+    const td = "padding:6px 8px;border-bottom:1px solid var(--border-color);vertical-align:top;";
+    const num = `${td}text-align:right;white-space:nowrap;`;
+    // Reservation moves stay inside the customer's total, so they are shown muted.
+    const body = (rows || []).map((r) => {
+        const internal = ["Reservation", "Reservation Release"].includes(r.txn_type);
+        const credit = r.direction === "Credit";
+        const doc = r.security_sale ? link("Security Sale", r.security_sale)
+            : r.storefront_order ? link("Storefront Order", r.storefront_order)
+            : r.reference_doctype ? link(r.reference_doctype, r.reference_name) : "";
+        const related = r.linked_transaction || r.reverses;
+        const flags = r.is_cancelled ? `<div class="small" style="color:var(--red-600)">${__("Reversed by")} ${link("Wallet Transaction", r.reversed_by)}</div>` : "";
+        return `<tr style="${internal ? "color:var(--text-muted);" : ""}">
+            <td style="${td}white-space:nowrap">${frappe.datetime.str_to_user(r.posting_datetime).split(" ")[0]}</td>
+            <td style="${td}white-space:nowrap">${link("Wallet Transaction", r.name)}<div class="small text-muted">${esc(r.txn_type)}</div></td>
+            <td style="${td}">${esc(r.particulars || r.remarks)}${flags}</td>
+            <td style="${td}white-space:nowrap">${doc}${related ? `<div class="small text-muted">${__("with")} ${link("Wallet Transaction", related)}</div>` : ""}</td>
+            <td style="${num}color:${internal ? "inherit" : "var(--green-600)"}">${credit ? inr(r.amount) : ""}</td>
+            <td style="${num}color:${internal ? "inherit" : "var(--red-600)"}">${credit ? "" : inr(r.amount)}</td>
+            <td style="${num}font-weight:600">${inr(r.balance_available_after)}</td>
+        </tr>`;
+    }).join("");
+    return `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            ${card(__("Available"), wallet.balance_available, "var(--green-600)")}
+            ${card(__("Reserved for orders"), wallet.balance_reserved, "var(--orange-600)")}
+            ${card(__("Total"), wallet.balance_total)}
+        </div>
+        <div class="small text-muted" style="margin-bottom:8px">
+            ${link("Wallet", wallet.name)} · ${esc(wallet.status)} · ${esc(wallet.gl_liability_account)} ·
+            <a href="/app/wallet-transaction/view/list?wallet=${encodeURIComponent(wallet.name)}">${__("Open as list")}</a>
+        </div>
+        ${body ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+            <thead><tr>
+                <th style="${th}">${__("Date")}</th><th style="${th}">${__("Transaction")}</th>
+                <th style="${th}">${__("Particulars")}</th><th style="${th}">${__("Document")}</th>
+                <th style="${th}text-align:right">${__("In")}</th><th style="${th}text-align:right">${__("Out")}</th>
+                <th style="${th}text-align:right">${__("Available After")}</th>
+            </tr></thead><tbody>${body}</tbody></table></div>`
+        : `<div class="text-muted">${__("No wallet movements yet.")}</div>`}`;
 }

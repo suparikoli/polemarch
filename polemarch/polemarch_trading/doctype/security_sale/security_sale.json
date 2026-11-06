@@ -44,6 +44,7 @@
   "medusa_line_id",
   "column_break_storefront",
   "wallet_reservation",
+  "wallet_transaction_ref",
   "section_meta",
   "remarks",
   "customer",
@@ -256,9 +257,9 @@
   {
    "fieldname": "section_storefront",
    "fieldtype": "Section Break",
-   "label": "Storefront",
+   "label": "Storefront / Wallet",
    "collapsible": 1,
-   "depends_on": "eval:doc.storefront_order"
+   "depends_on": "eval:doc.storefront_order || doc.wallet_transaction_ref"
   },
   {
    "fieldname": "storefront_order",
@@ -286,6 +287,14 @@
    "options": "Wallet Transaction",
    "read_only": 1,
    "description": "Storefront orders: the funds reserved when the order was paid. Released on submit, before the Buy Settlement."
+  },
+  {
+   "fieldname": "wallet_transaction_ref",
+   "fieldtype": "Link",
+   "label": "Wallet Transaction",
+   "options": "Wallet Transaction",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "section_meta",

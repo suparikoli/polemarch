@@ -32,6 +32,7 @@ from frappe.utils import convert_utc_to_system_timezone, flt, get_datetime, getd
 from customer_wallet import wallet as wallet_engine
 from customer_wallet.utils import default_company, wallet_settings
 from customer_wallet.wallet import ensure_wallet, wallet_name
+from polemarch.polemarch_trading.wallet_links import describe_trade, tag
 
 STOREFRONT_ROLE = "Polemarch Storefront Integration"
 
@@ -205,8 +206,11 @@ def order_funded(payload):
         ss.flags.ignore_permissions = True
         ss.insert(ignore_permissions=True)
         row.security_sale = ss.name
+        tag(row.wallet_reservation, particulars=f"Reserved: {describe_trade('Bought', row.security, row.qty, row.rate)}",
+            security=row.security, qty=row.qty, rate=row.rate, security_sale=ss.name, storefront_order=so.name)
     if so.fee_amount > 0.005:
         so.fee_reservation = _reserve(wallet, so.fee_amount, f"sf-res-fee:{so.name}", so.name, so.name)
+        tag(so.fee_reservation, particulars=f"Reserved: fees on order #{so.display_id}", storefront_order=so.name)
     so.save(ignore_permissions=True)
     return _summary(so)
 
@@ -234,12 +238,14 @@ def order_transferred(payload):
             ss.submit()
     wallet = wallet_name(so.customer)
     if so.fee_reservation:
-        _release(wallet, so.fee_reservation, f"sf-fee-release:{so.name}", so.name, f"Fee reservation released for {so.name}")
+        release = _release(wallet, so.fee_reservation, f"sf-fee-release:{so.name}", so.name, f"Fee reservation released for {so.name}")
+        tag(release, particulars=f"Released: fees on order #{so.display_id}", storefront_order=so.name, linked_transaction=so.fee_reservation)
         so.fee_settlement = wallet_engine.apply_delta(
             wallet=wallet, txn_type="Fee", direction="Debit", amount=so.fee_amount,
             reference_doctype="Storefront Order", reference_name=so.name, idempotency_key=f"sf-fee:{so.name}",
             remarks=f"Storefront order fees for {so.name}", origin="Medusa", medusa_id=so.name,
         )
+        tag(so.fee_settlement, particulars=f"Fees on order #{so.display_id}", storefront_order=so.name, linked_transaction=so.fee_reservation)
     so.status = "Transferred"
     so.transfer_date = transfer_date
     so.save(ignore_permissions=True)
@@ -268,9 +274,14 @@ def order_cancelled(payload):
             drafts.append(row.security_sale)
             row.security_sale = None
         if row.wallet_reservation:
-            _release(wallet, row.wallet_reservation, f"sf-cancel:{row.wallet_reservation}", so.name, f"Order {so.name} cancelled")
+            # The draft goes, so its rows stop pointing at it.
+            tag(row.wallet_reservation, security_sale=None)
+            release = _release(wallet, row.wallet_reservation, f"sf-cancel:{row.wallet_reservation}", so.name, f"Order {so.name} cancelled")
+            tag(release, particulars=f"Released: order #{so.display_id} cancelled", security=row.security, qty=row.qty, rate=row.rate,
+                storefront_order=so.name, linked_transaction=row.wallet_reservation)
     if so.fee_reservation:
-        _release(wallet, so.fee_reservation, f"sf-cancel:{so.fee_reservation}", so.name, f"Order {so.name} cancelled")
+        release = _release(wallet, so.fee_reservation, f"sf-cancel:{so.fee_reservation}", so.name, f"Order {so.name} cancelled")
+        tag(release, particulars=f"Released: fees on cancelled order #{so.display_id}", storefront_order=so.name, linked_transaction=so.fee_reservation)
     so.status = "Cancelled"
     so.cancelled_on = now_datetime()
     so.save(ignore_permissions=True)
@@ -299,6 +310,34 @@ def _txn_type(t, historic):
     return "Adjustment"
 
 
+_KIND_LABELS = {
+    "vba_credit": "Top-up via bank transfer",
+    "payin_fee_debit": "Pay-in fee on top-up",
+    "payout_fee_debit": "Payout fee",
+    "withdrawal_debit": "Payout to bank",
+    "referral_credit": "Referral credit (promo)",
+    "points_conversion": "Points converted (promo)",
+    "commission_credit": "Commission credit",
+    "commission_reversal": "Commission reversed",
+    "order_debit": "Storefront order payment",
+    "refund": "Storefront order refund",
+    "manual_adjust": "Manual adjustment",
+}
+
+
+def _particulars(t):
+    label = _KIND_LABELS.get(t["kind"], t["kind"])
+    if t.get("note") and t["kind"] == "manual_adjust":
+        return f"{label}: {t['note']}"[:140]
+    refs = []
+    if t.get("cashfree_event_id"):
+        label = label.replace("bank transfer", "Cashfree")
+        refs.append(f"Cashfree ref {t['cashfree_event_id']}")
+    if t["kind"] in ("vba_credit", "payin_fee_debit") and t.get("reference_id"):
+        refs.append(f"UTR {t['reference_id']}")
+    return f"{label} ({', '.join(refs)})" if refs else label
+
+
 @frappe.whitelist(methods=["POST"])
 def wallet_movement(payload, historic=0):
     """Mirror one Medusa wallet_transaction (amount in rupees). Order
@@ -318,6 +357,12 @@ def wallet_movement(payload, historic=0):
         remarks=f"Storefront {t['kind']} ({t.get('bucket') or 'main'})"
         + (f" ref {t.get('reference_type')} {t.get('reference_id')}" if t.get("reference_id") else ""),
     )
+    ref = t.get("reference_id")
+    linked = None
+    if ref and t["kind"] != "vba_credit":   # a fee or its refund belongs with the top-up on the same UTR
+        linked = frappe.db.get_value("Wallet Transaction", {
+            "wallet": wallet_name(customer), "external_reference": ref, "txn_type": "Deposit", "name": ["!=", wt]}, "name")
+    tag(wt, particulars=_particulars(t), external_reference=ref, cashfree_reference=t.get("cashfree_event_id"), linked_transaction=linked)
     return {"wallet_transaction": wt, "balance": frappe.db.get_value(
         "Wallet", wallet_name(customer), ["balance_available", "balance_reserved", "balance_total"], as_dict=True)}
 

@@ -40,7 +40,7 @@ def _txn(tid, direction, kind, amount, **kw):
                  "amount": amount, "created_at": "2026-02-01T05:00:00Z"}, **kw)
 
 
-def run():
+def run(keep=False):
     if frappe.local.site == "e16.mith.tech":
         frappe.throw("test_storefront submits and cancels accounting documents: never run it on e16.")
     _teardown()
@@ -97,6 +97,35 @@ def run():
     _check("transferred is idempotent", sf.order_transferred({"id": "order_TEST_1"})["status"], "Transferred")
     _check("passbook sees the sales", sum(1 for e in __import__("polemarch.polemarch_trading.passbook", fromlist=["x"]).get_entries(security=base.ISIN, party=cust)), 2)
 
+    # ── wallet rows say what they paid for and link to the Sale ──
+    settle = frappe.db.get_value("Wallet Transaction", {"reference_doctype": "Security Sale", "reference_name": ss[0].name, "txn_type": "Buy Settlement"},
+                                 ["name", "particulars", "security", "qty", "rate", "security_sale", "storefront_order", "linked_transaction"], as_dict=True)
+    _check("settlement names the purchase", settle.particulars, "Bought 100 TEST Security @ ₹7.00")
+    _check("settlement links the Sale + order", (settle.security_sale, settle.storefront_order, settle.security, flt(settle.qty)), (ss[0].name, "order_TEST_1", base.ISIN, 100.0))
+    _check("settlement links its reservation", settle.linked_transaction, ss[0].wallet_reservation)
+    _check("Sale links the settlement", frappe.db.get_value("Security Sale", ss[0].name, "wallet_transaction_ref"), settle.name)
+    res = frappe.db.get_value("Wallet Transaction", ss[0].wallet_reservation, ["particulars", "security_sale"], as_dict=True)
+    _check("reservation names the purchase", (res.particulars, res.security_sale), ("Reserved: Bought 100 TEST Security @ ₹7.00", ss[0].name))
+    so_after = frappe.get_doc("Storefront Order", "order_TEST_1")
+    fee = frappe.db.get_value("Wallet Transaction", so_after.fee_settlement, ["particulars", "storefront_order", "linked_transaction"], as_dict=True)
+    _check("fee row linked", (fee.storefront_order, fee.linked_transaction), ("order_TEST_1", so_after.fee_reservation))
+    sf.wallet_movement(_txn("wt_T7", "credit", "vba_credit", 100, reference_type="vba_event", reference_id="UTRTEST7"))
+    sf.wallet_movement(_txn("wt_T8", "debit", "payin_fee_debit", 10, reference_type="vba_event", reference_id="UTRTEST7"))
+    top_up = frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T7"}, ["name", "particulars"], as_dict=True)
+    _check("top-up shows its UTR", top_up.particulars, "Top-up via bank transfer (UTR UTRTEST7)")
+    _check("fee links its top-up", frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T8"}, "linked_transaction"), top_up.name)
+    sf.wallet_movement(_txn("wt_T10", "credit", "vba_credit", 90, reference_type="vba_event", reference_id="UTRTEST10", cashfree_event_id="5920225152"))
+    cf_row = frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T10"}, ["particulars", "cashfree_reference", "external_reference"], as_dict=True)
+    _check("Cashfree top-up carries its reference", (cf_row.cashfree_reference, cf_row.external_reference), ("5920225152", "UTRTEST10"))
+    _check("Cashfree top-up names it", cf_row.particulars, "Top-up via Cashfree (Cashfree ref 5920225152, UTR UTRTEST10)")
+    _check("non-Cashfree row has no reference", frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T7"}, "cashfree_reference"), None)
+    sf.wallet_movement(_txn("wt_T9", "debit", "manual_adjust", 180, note="Change in the order"))
+    _check("manual row keeps its note", frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T9"}, "particulars"), "Manual adjustment: Change in the order")
+    from polemarch.api.customer_dashboard import get_wallet_ledger
+    ledger = get_wallet_ledger(cust)
+    _check("Customer tab: balances", flt(ledger["wallet"].balance_available), 9404.6)
+    _check("Customer tab: the settlement row links the Sale", [r.security_sale for r in ledger["rows"] if r.name == settle.name], [ss[0].name])
+
     # ── holdings read ──
     rows = [h for h in sf.customer_holdings()["holdings"] if h.medusa_customer_id == MID]
     _check("customer_holdings returns e16 qty", [(h.isin, flt(h.qty)) for h in rows], [(base.ISIN, 150.0)])
@@ -125,6 +154,15 @@ def run():
     _check("historic order debit applied as Buy Settlement", (frappe.db.get_value("Wallet Transaction", {"medusa_id": "wt_T6"}, "txn_type"), _bal(cust)[0]),
            ("Buy Settlement", 9000.0))
 
+    # ── cancelling a Sale keeps the link and reverses the settlement ──
+    before = _bal(cust)[0]
+    frappe.get_doc("Security Sale", ss[0].name).cancel()
+    _check("Sale with linked wallet rows can cancel", frappe.db.get_value("Security Sale", ss[0].name, "docstatus"), 2)
+    rev = frappe.db.get_value("Wallet Transaction", {"reverses": settle.name}, ["particulars", "security_sale", "linked_transaction"], as_dict=True)
+    _check("reversal keeps the link", (rev.security_sale, rev.linked_transaction), (ss[0].name, settle.name))
+    _check("reversal names the purchase", rev.particulars, "Reversed: Bought 100 TEST Security @ ₹7.00")
+    _check("funds back on cancel", flt(_bal(cust)[0] - before, 2), 700.0)
+
     # ── guard ──
     frappe.set_user("Guest")
     try:
@@ -135,6 +173,8 @@ def run():
     frappe.set_user("Administrator")
 
     out = _report()
+    if keep:    # leave the TEST- documents for a look at the forms; re-run to clear
+        return out
     try:
         _teardown()
         base._teardown()

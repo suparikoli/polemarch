@@ -40,6 +40,7 @@ from polemarch.polemarch_trading.controller_helpers import (
     is_receivable_or_payable,
     resolve_account_by_name,
 )
+from polemarch.polemarch_trading.wallet_links import describe_trade, tag
 from customer_wallet.wallet import (
     reverse_wallet_transactions,
     sever_wallet_transaction_link,
@@ -105,7 +106,7 @@ class SecuritySale(Document):
         self.db_set("investment_disposal_ref", disposal_name, update_modified=False)
         self.db_set("cogs_journal_entry_ref", cogs_je, update_modified=False)
         self.db_set("revenue_journal_entry_ref", revenue_je, update_modified=False)
-        if wallet_txn and hasattr(self, "wallet_transaction_ref"):
+        if wallet_txn:
             self.db_set("wallet_transaction_ref", wallet_txn, update_modified=False)
 
     def before_cancel(self):
@@ -114,6 +115,8 @@ class SecuritySale(Document):
         # Transaction has reference_name pointing here. Sever the link
         # pre-emptively; reversal still happens in on_cancel below.
         self._sever_wallet_transaction_link_if_any()
+        # Wallet rows keep their `security_sale` link as history.
+        self.ignore_linked_doctypes = ("Wallet Transaction",)
 
     def on_cancel(self):
         # Mirrors Purchase.on_cancel ordering for consistency. Wallet
@@ -455,8 +458,11 @@ class SecuritySale(Document):
         # Storefront orders reserved the funds when they were paid: release
         # the reservation first. The release points at the Storefront Order,
         # not this Sale, so cancelling the Sale reverses only the settlement.
+        particulars = describe_trade("Bought", self.security, self.qty, self.rate)
+        links = dict(security=self.security, qty=self.qty, rate=self.rate, security_sale=self.name,
+                     storefront_order=self.storefront_order, linked_transaction=self.wallet_reservation)
         if self.wallet_reservation:
-            wallet_engine.apply_delta(
+            release = wallet_engine.apply_delta(
                 wallet=wallet_name,
                 txn_type="Reservation Release",
                 direction="Credit",
@@ -466,10 +472,11 @@ class SecuritySale(Document):
                 idempotency_key=f"sec-sale-release:{self.wallet_reservation}",
                 remarks=f"Reservation {self.wallet_reservation} released for Security Sale {self.name}",
             )
+            tag(release, particulars=f"Released: {particulars}", **links)
         # Customer is buying from Polemarch — debit their wallet by net amount.
         # Buy Settlement direction=Debit is (-1, 0, -1) post-Phase-10 fix —
         # decreases available and total directly.
-        return wallet_engine.apply_delta(
+        settlement = wallet_engine.apply_delta(
             wallet=wallet_name,
             txn_type="Buy Settlement",
             direction="Debit",
@@ -479,14 +486,19 @@ class SecuritySale(Document):
             idempotency_key=f"sec-sale-settle:{self.name}",
             remarks=f"Buy Settlement for Security Sale {self.name}",
         )
+        tag(settlement, particulars=particulars, **links)
+        return settlement
 
     def _reverse_wallet_transaction_if_any(self):
         """Reverse Wallet Transaction(s) created on submit. Uses the WT
         names that `before_cancel` stashed on `self.flags`."""
-        reverse_wallet_transactions(
-            getattr(self.flags, "_pending_wt_reversal", None) or [],
-            remarks=f"Reversed on Security Sale {self.name} cancel",
-        )
+        originals = getattr(self.flags, "_pending_wt_reversal", None) or []
+        reverse_wallet_transactions(originals, remarks=f"Reversed on Security Sale {self.name} cancel")
+        for original in originals:
+            reversal = frappe.db.get_value("Wallet Transaction", original, "reversed_by")
+            tag(reversal, particulars=f"Reversed: {describe_trade('Bought', self.security, self.qty, self.rate)}",
+                security=self.security, qty=self.qty, rate=self.rate, security_sale=self.name,
+                storefront_order=self.storefront_order, linked_transaction=original)
 
     # ── on_cancel ────────────────────────────────────────────────────
 

@@ -46,6 +46,7 @@ from polemarch.polemarch_trading.controller_helpers import (
     is_receivable_or_payable,
     resolve_account_by_name,
 )
+from polemarch.polemarch_trading.wallet_links import describe_trade, tag
 from customer_wallet.wallet import (
     reverse_wallet_transactions,
     sever_wallet_transaction_link,
@@ -380,7 +381,7 @@ class SecurityPurchase(Document):
         # credited (we now owe them this much, increasing balance_total +
         # balance_available). Sell Payout already maps to (+1, 0, +1) in the
         # wallet's delta map.
-        return wallet_engine.apply_delta(
+        payout = wallet_engine.apply_delta(
             wallet=wallet_name,
             txn_type="Sell Payout",
             direction="Credit",
@@ -390,6 +391,9 @@ class SecurityPurchase(Document):
             idempotency_key=f"sec-purchase-payout:{self.name}",
             remarks=f"Sell Payout for Security Purchase {self.name}",
         )
+        tag(payout, particulars=describe_trade("Sold", self.security, self.qty, self.rate),
+            security=self.security, qty=self.qty, rate=self.rate)
+        return payout
 
     def _reverse_wallet_transaction_if_any(self):
         """Reverse Wallet Transaction(s) created on submit. Uses the WT
