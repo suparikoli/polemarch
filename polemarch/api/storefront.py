@@ -29,9 +29,9 @@ import frappe
 from frappe import _
 from frappe.utils import convert_utc_to_system_timezone, flt, get_datetime, getdate, now_datetime
 
-from customer_wallet import wallet as wallet_engine
-from customer_wallet.utils import default_company, wallet_settings
-from customer_wallet.wallet import ensure_wallet, wallet_name
+from framith_wallet import wallet as wallet_engine
+from framith_wallet.utils import default_company, wallet_settings
+from framith_wallet.wallet import ensure_wallet, wallet_name
 from polemarch.polemarch_trading.wallet_links import describe_trade, tag
 
 STOREFRONT_ROLE = "Polemarch Storefront Integration"

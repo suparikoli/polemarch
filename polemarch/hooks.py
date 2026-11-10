@@ -6,9 +6,9 @@ app_email = "manoj311093@gmail.com"
 app_license = "mit"
 
 # The customer wallet (Wallet, Wallet Deposit, Wallet Withdrawal, Wallet
-# Transaction) and the line of credit live in the generic `customer_wallet` app;
+# Transaction) and the line of credit live in the generic `framith_wallet` app;
 # polemarch only adds its own rules through the customer_wallet_* hooks below.
-required_apps = ["customer_wallet"]
+required_apps = ["framith_wallet"]
 
 after_install = "polemarch.install.after_install"
 after_migrate = "polemarch.install.after_migrate"
@@ -70,7 +70,7 @@ doc_events = {
 scheduler_events = {
     "daily": [
         # Reconciliation jobs — each detects mismatches and logs them;
-        # none of them auto-heal. The two wallet audits run from customer_wallet
+        # none of them auto-heal. The two wallet audits run from framith_wallet
         # and report into Polemarch Audit Log via the customer_wallet_audit_log hook.
         "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
         # Phase 22 — recompute Security.qty_sit/qty_investment/cost_total
@@ -104,7 +104,7 @@ fixtures = [
     {"doctype": "Customer Group", "filters": [["name", "=", "Polemarch"]]},
 ]
 
-# ── customer_wallet extension points ──────────────────────────────────────
+# ── framith_wallet extension points ──────────────────────────────────────
 # Polemarch-specific wallet rules stay here; the wallet itself is generic.
 customer_wallet_operator_roles = ["Polemarch Trader", "Polemarch Settlement Officer"]
 customer_wallet_customer_filter = ["polemarch.overrides.customer.wallet_customer_filter"]

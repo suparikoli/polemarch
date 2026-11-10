@@ -64,7 +64,7 @@ def execute(verbose: bool = False) -> dict:
         wallet = step("05_resolve_or_create_wallet", lambda: _ensure_wallet(customer, company))
 
         # 2) Wallet engine smoke.
-        from customer_wallet import wallet as wallet_engine
+        from framith_wallet import wallet as wallet_engine
 
         step("06_wallet_deposit_100k", lambda: wallet_engine.apply_delta(
             wallet=wallet, txn_type="Deposit", direction="Credit", amount=100000,

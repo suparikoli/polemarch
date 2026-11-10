@@ -150,7 +150,7 @@ def _sync_customer_name_from_primary_contact(doc):
 
 
 def on_update(doc, method=None):
-    # Wallet creation itself happens in customer_wallet (Customer on_update hook,
+    # Wallet creation itself happens in framith_wallet (Customer on_update hook,
     # gated by Company.auto_create_customer_wallet). Polemarch only decides
     # WHICH customers get one — see `wallet_customer_filter`.
     return

@@ -42,7 +42,7 @@ from polemarch.polemarch_trading.controller_helpers import (
 )
 from polemarch.polemarch_trading.payment_lines import header_for, record_on_submit
 from polemarch.polemarch_trading.wallet_links import describe_trade, tag
-from customer_wallet.wallet import (
+from framith_wallet.wallet import (
     reverse_wallet_transactions,
     sever_wallet_transaction_link,
     wallet_gl_account_for_customer,
@@ -452,7 +452,7 @@ class SecuritySale(Document):
         if self.party_type != "Customer":
             return None
 
-        from customer_wallet import wallet as wallet_engine
+        from framith_wallet import wallet as wallet_engine
 
         wallet_name = f"WAL-{self.party}"
         if not frappe.db.exists("Wallet", wallet_name):

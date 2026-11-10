@@ -40,7 +40,7 @@ def setup():
     _create_storefront_role()
 
 
-# ── customer_wallet integration ───────────────────────────────────────────
+# ── framith_wallet integration ───────────────────────────────────────────
 
 WALLET_ROLE_PERMS = {
     # Same rights the roles had while the doctypes lived in this app.

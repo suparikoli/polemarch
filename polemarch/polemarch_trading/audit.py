@@ -1,7 +1,7 @@
 """Daily reconciliation jobs.
 
 The two wallet audits (header vs ledger vs GL, and Σ wallets vs liability
-account) run from `customer_wallet.audit`; `log_wallet_audit` below is the
+account) run from `framith_wallet.audit`; `log_wallet_audit` below is the
 `customer_wallet_audit_log` hook that lands their results in Polemarch Audit Log.
 
 These jobs DETECT mismatches; they do NOT auto-heal. Auto-syncing one source

@@ -204,13 +204,13 @@ def execute(verbose: bool = False) -> dict:
     try:
         from polemarch import hooks as polemarch_hooks  # noqa: F401
         required_daily = [
-            "customer_wallet.audit.verify_wallet_balance_matches_ledger",
-            "customer_wallet.audit.verify_wallet_liability_aggregate_matches_gl",
+            "framith_wallet.audit.verify_wallet_balance_matches_ledger",
+            "framith_wallet.audit.verify_wallet_liability_aggregate_matches_gl",
             "polemarch.polemarch_trading.audit.verify_holding_disposal_chain",
             "polemarch.polemarch_trading.holdings_cache.audit_security_holdings_cache",
             "polemarch.polemarch_trading.audit.verify_inventory_account_matches_holdings",
         ]
-        # Merged across installed apps: the two wallet audits are customer_wallet's.
+        # Merged across installed apps: the two wallet audits are framith_wallet's.
         daily = frappe.get_hooks("scheduler_events").get("daily", [])
         for entry in required_daily:
             (ok if entry in daily else errors).append(f"scheduler.daily {'present' if entry in daily else 'MISSING'}: {entry}")

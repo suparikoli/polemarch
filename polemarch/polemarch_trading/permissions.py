@@ -1,6 +1,6 @@
 """Customer-role scoping for trading doctypes.
 
-Wallet / Wallet Transaction scoping moved to `customer_wallet.permissions`
+Wallet / Wallet Transaction scoping moved to `framith_wallet.permissions`
 (site_config `customer_wallet_customer_scoping`).
 
 Wired into `hooks.py` as `permission_query_conditions` + `has_permission`.
