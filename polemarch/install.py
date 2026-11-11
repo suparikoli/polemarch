@@ -32,6 +32,7 @@ def setup():
     _ensure_polemarch_trading_module()
     _create_customer_group()
     _create_custom_fields()
+    _create_crm_mithtech_fields()
     _make_hsn_optional_on_item()
     _add_polemarch_naming_series()
     _create_processing_fee_item()
@@ -394,6 +395,37 @@ def _create_custom_fields():
         ],
     }
     create_custom_fields(fields, ignore_validate=True, update=True)
+
+
+# Lead / Opportunity / Prospect carry the same Mithtech-only tick as
+# Customer, so the whole CRM funnel splits Mithtech from Polemarch with
+# one flag ("Polemarch unless ticked"). Not no_copy: ERPNext's mappers
+# copy it Lead -> Opportunity / Prospect. Customer's own field is
+# no_copy, so polemarch.overrides.crm copies it on Customer insert.
+CRM_MITHTECH_FIELD_ANCHORS = {
+    "Lead": "company",
+    "Opportunity": "party_name",
+    "Prospect": "customer_group",
+}
+
+
+def _create_crm_mithtech_fields():
+    create_custom_fields(
+        {
+            dt: [
+                {
+                    "fieldname": "custom_is_mithtech_only",
+                    "label": "Mithtech Only",
+                    "fieldtype": "Check",
+                    "in_standard_filter": 1,
+                    "insert_after": anchor,
+                    "description": "Tick for Mithtech services business. Leave blank for Polemarch.",
+                }
+            ]
+            for dt, anchor in CRM_MITHTECH_FIELD_ANCHORS.items()
+        },
+        update=True,
+    )
 
 
 def _make_hsn_optional_on_item():

@@ -30,6 +30,7 @@ doctype_list_js = {
 
 doc_events = {
     "Customer": {
+        "before_insert": "polemarch.overrides.crm.customer_before_insert",
         "validate": "polemarch.overrides.customer.validate",
         "on_update": "polemarch.overrides.customer.on_update",
         # Phase 18 — auto-create a placeholder Contact for every new Customer
@@ -48,6 +49,9 @@ doc_events = {
     "Sales Order": {
         "validate": "polemarch.overrides.sales_order.validate",
     },
+    # Mithtech-only tick follows the CRM funnel (see overrides/crm.py).
+    "Opportunity": {"before_insert": "polemarch.overrides.crm.opportunity_before_insert"},
+    "Prospect": {"before_insert": "polemarch.overrides.crm.prospect_before_insert"},
     # Phase 2 — proprietary share purchases route cost to Securities
     # Inventory / Long-Term Investments and mint Investment Holdings (one
     # per PI line) in `Unallocated` classification. Validates the expense
