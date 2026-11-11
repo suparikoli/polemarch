@@ -37,6 +37,7 @@ The `after_install` / `after_migrate` hooks idempotently create:
 
 - A Customer is auto-tagged `custom_is_polemarch_customer = 1` if **any** of these is true: a DP Details row, member of the `Polemarch` Customer Group, has a Wallet, has a Customer Holding, is the party on a submitted Security Sale / Purchase, or has any submitted Polemarch invoice.
 - A Customer can be opted out with `custom_is_mithtech_only` — the Polemarch + KYC tabs collapse and the auto-flag is forced off.
+- Lead, Opportunity and Prospect carry the same `custom_is_mithtech_only` tick (blank = Polemarch). It follows the funnel: Lead → Opportunity / Prospect / Customer (`overrides/crm.py`).
 - A Sales Invoice / Sales Order is auto-tagged `custom_is_polemarch_invoice` (or `_order`) if **all** line items have `brand = Polemarch`. Mixed-brand documents are rejected.
 - The Sales Invoice print dialog defaults to **Polemarch Sale Transfer Order** for Polemarch invoices.
 
