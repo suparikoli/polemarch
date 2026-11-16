@@ -32,6 +32,7 @@ class TestGrowthbookSmoke(IntegrationTestCase):
 			self.assertFalse(smoke.smoke_flag_on())
 			self.assertEqual(smoke.ping_flags(), {"flag": "pm-erp.gb-smoke", "on": False})
 
+	@skipUnless(configured, "framith_growthbook is not installed")
 	def test_helper_error_returns_off(self):
 		with patch("framith_growthbook.api.is_on", side_effect=RuntimeError("boom")):
 			self.assertFalse(smoke.smoke_flag_on())
