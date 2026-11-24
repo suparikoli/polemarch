@@ -252,7 +252,7 @@ def _cancel_source_jes():
             names |= set(frappe.get_all("Journal Entry",
                          filters={"custom_source_doctype": dt, "custom_source_name": n},
                          pluck="name"))
-    for n in frappe.get_all("Investment Disposal", filters={"security": ISIN}, pluck="name"):
+    for n in _by_security("Investment Disposal"):
         names |= set(frappe.get_all("Journal Entry",
                      filters={"custom_source_doctype": "Investment Disposal",
                               "custom_source_name": n}, pluck="name"))
@@ -265,6 +265,14 @@ def _cancel_source_jes():
     frappe.db.commit()
 
 
+def _by_security(dt):
+    """Names of `dt` rows for the test security. Investment Disposal / Holding are keyed on
+    `item`, not `security`, so they match nothing here (test scaffolding only)."""
+    if not frappe.get_meta(dt).has_field("security"):
+        return []
+    return frappe.get_all(dt, filters={"security": ISIN}, pluck="name")
+
+
 def _teardown(quiet=False):
     _cancel_source_jes()
     for dt in ("Security Sale", "Security Purchase"):
@@ -274,14 +282,14 @@ def _teardown(quiet=False):
                 try: d.cancel()
                 except Exception: pass
             frappe.db.set_value(dt, n, "docstatus", 0, update_modified=False)
-    for n in frappe.get_all("Investment Disposal", filters={"security": ISIN}, pluck="name"):
+    for n in _by_security("Investment Disposal"):
         frappe.delete_doc("Investment Disposal", n, force=True, ignore_permissions=True, delete_permanently=True)
     for n in frappe.get_all("Portfolio Transfer", filters={"security": ISIN}, pluck="name"):
         # a Posted/Approved transfer refuses both cancel and delete, so drop the
         # docstatus first -- this is test scaffolding, not a business path.
         frappe.db.set_value("Portfolio Transfer", n, "docstatus", 0, update_modified=False)
         frappe.delete_doc("Portfolio Transfer", n, force=True, ignore_permissions=True, delete_permanently=True)
-    for n in frappe.get_all("Investment Holding", filters={"security": ISIN}, pluck="name"):
+    for n in _by_security("Investment Holding"):
         frappe.delete_doc("Investment Holding", n, force=True, ignore_permissions=True, delete_permanently=True)
     for dt in ("Security Sale", "Security Purchase"):
         for n in frappe.get_all(dt, filters={"security": ISIN}, pluck="name"):
